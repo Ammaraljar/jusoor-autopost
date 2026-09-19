@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="{lang}" dir="{dir}">
+<head>
+<meta charset="utf-8">
+<style>
+{font_faces}
+:root {{
+  --navy: {navy}; --gold: {gold}; --gold-light: {gold_light};
+  --card-bg: {card_bg}; --card-title: {card_title}; --card-text: {card_text};
+}}
+* {{ box-sizing: border-box; margin: 0; padding: 0; }}
+html, body {{ width: 1080px; height: 1350px; overflow: hidden; }}
+body {{ font-family: '{font}', 'Cairo', sans-serif; background: var(--navy); color: #fff; position: relative; }}
+.bg {{ position: absolute; inset: 0; background-size: cover; background-position: {bg_pos}; {bg_filter} }}
+.shade {{ position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(10,16,40,.55) 0%, rgba(10,16,40,0) 22%, rgba(10,16,40,0) 45%, rgba(10,16,40,.78) 100%); }}
+.top {{ position: absolute; top: 56px; left: 64px; right: 64px; display: flex; align-items: center;
+  justify-content: space-between; flex-direction: {top_dir}; }}
+.logo img {{ height: 84px; width: auto; display: block; filter: drop-shadow(0 2px 8px rgba(0,0,0,.35)); }}
+.logo .wordmark {{ font-weight: 900; font-size: 44px; color: #fff; letter-spacing: 0; text-shadow: 0 2px 10px rgba(0,0,0,.4); }}
+.logo .wordmark span {{ color: var(--gold); }}
+.badge {{ background: var(--gold); color: var(--navy); font-weight: 800; font-size: 30px; padding: 10px 30px;
+  border-radius: 999px; box-shadow: 0 6px 18px rgba(0,0,0,.25); }}
+.card {{ position: absolute; left: 64px; right: 64px; bottom: 150px; padding: 56px 60px; border-radius: 40px; }}
+.card.frosted {{ background: var(--card-bg); backdrop-filter: blur(18px); color: var(--card-text); box-shadow: 0 20px 60px rgba(0,0,0,.28); }}
+.card.solid {{ background: var(--navy); color: #fff; border-top: 10px solid var(--gold); }}
+.card.minimal {{ background: transparent; padding: 0; color: #fff; text-shadow: 0 3px 16px rgba(0,0,0,.55); }}
+.accent {{ width: 96px; height: 10px; border-radius: 10px; background: var(--gold); margin-bottom: 30px; }}
+h1 {{ font-weight: 900; line-height: 1.35; }}
+.card.frosted h1 {{ color: var(--card-title); }}
+.card.solid h1, .card.minimal h1 {{ color: #fff; }}
+h2 {{ font-weight: 800; line-height: 1.4; color: var(--gold); margin-bottom: 22px; }}
+.card.frosted h2 {{ color: var(--gold); }}
+p {{ line-height: 1.85; font-weight: 600; }}
+.subtitle {{ margin-top: 24px; font-weight: 600; opacity: .9; }}
+.footer {{ position: absolute; left: 64px; right: 64px; bottom: 56px; display: flex; justify-content: space-between;
+  align-items: center; font-size: 28px; font-weight: 700; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,.5); }}
+.footer .handle {{ color: var(--gold-light); direction: ltr; unicode-bidi: isolate; }}
+.footer .credit {{ opacity: .85; font-weight: 600; font-size: 24px; }}
+.dots {{ display: flex; gap: 10px; }}
+.dots i {{ width: 14px; height: 14px; border-radius: 50%; background: rgba(255,255,255,.45); display: block; }}
+.dots i.on {{ background: var(--gold); width: 38px; border-radius: 10px; }}
+/* CTA */
+.cta-wrap {{ position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; text-align: center; padding: 120px 100px; }}
+.cta-wrap .ring {{ width: 140px; height: 140px; border-radius: 50%; border: 6px solid var(--gold);
+  display: flex; align-items: center; justify-content: center; margin-bottom: 56px; font-size: 70px; color: var(--gold); }}
+.cta-wrap h1 {{ color: #fff; margin-bottom: 40px; }}
+.cta-wrap .button {{ margin-top: 30px; background: var(--gold); color: var(--navy); font-weight: 900; font-size: 42px;
+  padding: 22px 64px; border-radius: 999px; direction: ltr; unicode-bidi: isolate; }}
+.cta-wrap .site {{ margin-top: 36px; font-size: 34px; color: var(--gold-light); direction: ltr; font-weight: 700; }}
+.cta-overlay {{ position: absolute; inset: 0; background: linear-gradient(160deg, rgba(22,36,79,.93), rgba(10,16,40,.97)); }}
+</style>
+</head>
+<body>
+{content}
+<script>
+// Shrink text until the card fits in the available space.
+function fit(el, maxH, minSize) {{
+  if (!el) return;
+  let size = parseFloat(getComputedStyle(el).fontSize);
+  while (el.scrollHeight > maxH && size > minSize) {{ size -= 2; el.style.fontSize = size + 'px'; }}
+}}
+document.querySelectorAll('[data-fit]').forEach(el => {{
+  const [maxH, minSize] = el.dataset.fit.split(',').map(Number);
+  fit(el, maxH, minSize);
+}});
+document.body.dataset.ready = '1';
+</script>
+</body>
+</html>
