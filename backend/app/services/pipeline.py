@@ -218,6 +218,14 @@ def _fail(draft_id: int, message: str) -> None:
             d.status, d.error = "failed", message[:2000]
 
 
+def _recent_variants(draft_id: int, limit: int = 3) -> list[str]:
+    """Colour sets of the latest other posts, newest first — so the next post looks different."""
+    with session_scope() as db:
+        rows = db.scalars(select(Draft.palette).where(Draft.id != draft_id, Draft.palette.is_not(None))
+                          .order_by(Draft.id.desc()).limit(limit * 3)).all()
+    return [p.get("variant") for p in rows if isinstance(p, dict) and p.get("variant")][:limit]
+
+
 async def render_draft(draft_id: int, positions: list[int] | None = None, refresh_backgrounds: bool = False) -> None:
     """(Re)render slide images. positions=None renders all slides."""
     with session_scope() as db:
@@ -236,6 +244,8 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
         prev_status = draft.status
         color_mode = brand.color_mode or "auto"
         stored_palette = draft.palette
+        brand_navy = (brand.colors or {}).get("navy") or colours.BRAND_NAVY
+        brand_gold = (brand.colors or {}).get("gold") or colours.BRAND_GOLD
         logo_placement = brand.logo_placement or "top-left"
         rtl = draft.language == "ar"
 
@@ -246,18 +256,18 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
         if not backgrounds and mode != "source" and article_image:
             backgrounds = images.collect_backgrounds(article_image, keywords, "source", 1)
 
-    # Colours from the photo: computed once per post (from the cover) so all slides match,
-    # and recomputed only when the backgrounds change.
+    # Colours: always a JUSOOR identity set (navy + gold shades), chosen once per post so all
+    # slides match — it suits the cover photo and differs from the previous posts.
     palette_to_store = stored_palette
     if color_mode == "auto":
-        if needs_bg or not stored_palette:
+        if needs_bg or not stored_palette or not stored_palette.get("variant"):
             cover_bytes = backgrounds[0]["bytes"] if backgrounds else None
             if cover_bytes is None:
                 cover_url = next((s[5] for s in slides if s[1] == "cover" and s[5]), None)
                 cover_bytes = images.download_image(cover_url) if cover_url else None
-            found = colours.extract_palette(cover_bytes)
-            palette_to_store = found or {"source": "brand"}
-        style.palette = None if palette_to_store.get("source") == "brand" else palette_to_store
+            palette_to_store = colours.pick_variant(cover_bytes, _recent_variants(draft_id),
+                                                    brand_navy, brand_gold, seed=draft_id)
+        style.palette = palette_to_store
     else:
         style.palette = None
         palette_to_store = None

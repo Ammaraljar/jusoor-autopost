@@ -137,11 +137,14 @@ async def preview(bid: int, body: PreviewIn, db: Session = Depends(get_db)):
         "cta": (b.cta_text or "خطّط رحلتك القادمة معنا", "فريقنا جاهز لمساعدتك"),
     }
     heading, text = samples.get(body.kind, samples["cover"])
-    # Each preview uses a different sample photo: a bright sky (shows the logo plate),
-    # a turquoise sea and a warm sunset (show how colours follow the photo).
+    # Each preview uses a different sample photo (bright sky → logo plate, sea, sunset) and a
+    # different JUSOOR colour set, to show how posts vary while staying inside the identity.
     background = colours.sample_background(body.kind)
     if (b.color_mode or "auto") == "auto":
-        style.palette = colours.extract_palette(background)
+        others = {"cover": [], "content": ["classic", "royal"], "cta": ["classic", "ocean"]}
+        style.palette = colours.pick_variant(background, others.get(body.kind, []),
+                                             (b.colors or {}).get("navy") or colours.BRAND_NAVY,
+                                             (b.colors or {}).get("gold") or colours.BRAND_GOLD)
     plate = body.kind != "cta" and colours.logo_needs_plate(background, b.logo_placement or "top-left",
                                                             body.language == "ar")
     jpeg = await renderer.render(SlideSpec(kind=body.kind, heading=heading, body=text, position=0, total=6,

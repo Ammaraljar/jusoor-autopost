@@ -1,7 +1,10 @@
-"""Colours derived from the photo, so every post matches its own image.
+"""Post colours — always inside the JUSOOR identity (navy + gold), varied from post to post.
 
-* ``extract_palette``   — builds card / heading / accent colours from the dominant hue of a
-  photo, with WCAG contrast guarantees so text always stays readable.
+* ``brand_variants``    — six colour sets derived from the brand's own navy and gold (deeper,
+  brighter, warmer, cooler shades of the same two colours), with WCAG contrast guarantees.
+* ``pick_variant``      — chooses one set per post: it suits the photo (warm/cool) and is never
+  the same as the last posts, so the feed varies without leaving the identity.
+* ``extract_palette``   — (legacy) colours taken from the photo's own hue; no longer used for posts.
 * ``logo_needs_plate``  — measures how bright the photo is behind the logo; a white logo on
   a light sky gets a navy plate behind it.
 """
@@ -109,6 +112,99 @@ def extract_palette(image_bytes: bytes | None, fallback: dict[str, str] | None =
         "cardTitle": dark, "cardHeading": card_heading, "cardText": card_text,
         "hue": round(h * 360),
     }
+
+
+# ------------------------------------------------------------------ brand variants
+BRAND_NAVY = "#16244F"
+BRAND_GOLD = "#C6A23C"
+
+# (id, name, warmth, navy: (hue shift°, sat ×, lightness), gold: (hue shift°, sat, lightness), card)
+# card = ("ivory" | "cool" | "gold", lightness)
+_VARIANTS = [
+    ("classic",  "كلاسيكي",        0.5, (0, 1.00, None), (0, None, None),  ("ivory", 0.965)),
+    ("midnight", "كحلي ليلي",      0.6, (0, 1.05, 0.11), (3, 0.58, 0.62),  ("ivory", 0.970)),
+    ("royal",    "أزرق ملكي",      0.2, (-3, 1.25, 0.24), (-4, 0.66, 0.50), ("cool", 0.970)),
+    ("ocean",    "كحلي بحري",      0.1, (-10, 1.10, 0.19), (0, 0.50, 0.56), ("cool", 0.965)),
+    ("sand",     "ذهبي رملي",      0.9, (0, 0.95, 0.15), (2, 0.60, 0.47),  ("gold", 0.935)),
+    ("amber",    "ذهبي كهرماني",   0.8, (6, 1.00, 0.17), (-6, 0.72, 0.50), ("ivory", 0.960)),
+]
+VARIANT_IDS = [v[0] for v in _VARIANTS]
+_SOLID = {"midnight", "ocean", "amber"}     # navy card with a gold edge; the others use a light card
+
+
+def _hls_of(hex_colour: str) -> tuple[float, float, float]:
+    r, g, b = (c / 255 for c in hex_to_rgb(hex_colour))
+    return colorsys.rgb_to_hls(r, g, b)
+
+
+def brand_variants(navy: str = BRAND_NAVY, gold: str = BRAND_GOLD) -> list[dict[str, Any]]:
+    """Colour sets for posts, all derived from the brand's navy and gold — no foreign colours."""
+    nh, nl, ns = _hls_of(navy)
+    gh, gl, gs = _hls_of(gold)
+    out = []
+    for vid, name, warmth, (dh, dsm, dl), (gdh, gsat, gli), (card_kind, card_l) in _VARIANTS:
+        dark_h = nh + dh / 360
+        dark = navy if (dh == 0 and dsm == 1.0 and dl is None) else _hex(_hsl(dark_h, ns * dsm, dl if dl else nl))
+        acc_h = gh + gdh / 360
+        base_gold = gold if (gdh == 0 and gsat is None and gli is None) else _hex(_hsl(acc_h, gsat or gs, gli or gl))
+        dh_, dl_, ds_ = _hls_of(dark)
+        ah, al, as_ = _hls_of(base_gold)
+        accent = _shift_until(ah, as_, al, dark, MIN_TEXT_CONTRAST, +0.02)      # gold readable on navy
+        accent_light = _shift_until(ah, as_ * 0.85, max(al, 0.66), dark, 7.0, +0.02)
+        if card_kind == "cool":
+            card_bg_hex = _hex(_hsl(dh_, 0.40, card_l))                          # blue-white, from the navy
+        elif card_kind == "gold":
+            card_bg_hex = _hex(_hsl(ah, 0.55, card_l))                           # pale gold
+        else:
+            card_bg_hex = _hex(_hsl(ah, 0.45, card_l))                           # warm ivory, from the gold
+        card_heading = _shift_until(ah, max(as_, 0.55), 0.38, card_bg_hex, MIN_TEXT_CONTRAST, -0.02)
+        card_text = _shift_until(dh_, max(ds_, 0.35), 0.26, card_bg_hex, 7.0, -0.02)   # navy-tinted, never grey
+        r, g, b = hex_to_rgb(card_bg_hex)
+        out.append({
+            "variant": vid, "variant_name": name, "warmth": warmth,
+            "navy": dark, "gold": accent, "goldLight": accent_light,
+            "cardBg": f"rgba({r},{g},{b},0.94)", "cardBgHex": card_bg_hex,
+            "cardTitle": dark, "cardHeading": card_heading, "cardText": card_text,
+            "cardStyle": "solid" if vid in _SOLID else "frosted",
+        })
+    return out
+
+
+def photo_warmth(image_bytes: bytes | None) -> float | None:
+    """0 = cool photo (sea, sky), 1 = warm photo (sunset, desert, food); None when unclear."""
+    if not image_bytes:
+        return None
+    try:
+        found = dominant_hue(image_bytes)
+    except Exception:  # noqa: BLE001
+        return None
+    if not found:
+        return None
+    deg = found[0] * 360
+    if deg < 70 or deg > 320:
+        return 1.0 - min(abs(((deg + 40) % 360) - 40) / 70, 1.0) * 0.4
+    if 160 <= deg <= 260:
+        return 0.0
+    return 0.5
+
+
+def pick_variant(image_bytes: bytes | None, recent: list[str] | None = None,
+                 navy: str = BRAND_NAVY, gold: str = BRAND_GOLD, seed: int = 0) -> dict[str, Any]:
+    """One brand colour set for a post: suits the photo, and differs from the last posts."""
+    variants = brand_variants(navy, gold)
+    recent = [r for r in (recent or []) if r]
+    avoid = set(recent[:2])                          # never repeat the last two posts
+    pool = [v for v in variants if v["variant"] not in avoid] or variants
+    warmth = photo_warmth(image_bytes)
+    if warmth is None:
+        # No clear photo mood: rotate through the set, least recently used first
+        order = sorted(pool, key=lambda v: (recent.index(v["variant"]) if v["variant"] in recent else -1,
+                                            (VARIANT_IDS.index(v["variant"]) + seed) % len(VARIANT_IDS)),
+                       reverse=False)
+        unused = [v for v in pool if v["variant"] not in recent]
+        return (unused or order)[seed % len(unused or order)]
+    ranked = sorted(pool, key=lambda v: (abs(v["warmth"] - warmth), v["variant"] in recent))
+    return ranked[0]
 
 
 def logo_needs_plate(image_bytes: bytes | None, placement: str = "top-left", rtl: bool = True) -> bool:

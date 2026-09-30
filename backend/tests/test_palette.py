@@ -76,7 +76,7 @@ def test_pipeline_stores_one_palette_per_post(client, fake_network, monkeypatch)
         d = db.query(Draft).order_by(Draft.id.desc()).first()
         did, pal = d.id, d.palette
     try:
-        assert pal and pal.get("hue") is not None and 10 <= pal["hue"] <= 40     # orange
+        assert pal and pal["variant"] in ("sand", "amber", "midnight")           # warm photo → warm brand set
         asyncio.run(pipeline.render_draft(did, [1]))
         with session_scope() as db:
             assert db.get(Draft, did).palette == pal
@@ -91,3 +91,38 @@ def test_brand_colour_mode_and_logo_backdrop_are_saved(client):
     assert r.json()["color_mode"] == "brand" and r.json()["logo_backdrop"] == "always"
     assert client.patch(f"/api/brands/{brand['id']}", json={"color_mode": "rainbow"}).status_code == 422
     client.patch(f"/api/brands/{brand['id']}", json={"color_mode": "auto", "logo_backdrop": "auto"})
+
+
+def test_every_variant_stays_inside_the_brand_identity():
+    """Only navy and gold families: no pink, no grey, readable text everywhere."""
+    import colorsys
+
+    from app.services.palette import brand_variants, contrast, hex_to_rgb
+
+    def hue_sat(hx):
+        r, g, b = (c / 255 for c in hex_to_rgb(hx))
+        h, l, s = colorsys.rgb_to_hls(r, g, b)
+        return h * 360, s
+
+    variants = brand_variants()
+    assert len({v["variant"] for v in variants}) == 6
+    for v in variants:
+        for key in ("navy", "cardTitle", "cardText"):
+            h, s = hue_sat(v[key])
+            assert 205 <= h <= 245 and s >= 0.25, (v["variant"], key, v[key])      # navy family, not grey
+        for key in ("gold", "goldLight", "cardHeading"):
+            h, s = hue_sat(v[key])
+            assert 32 <= h <= 52 and s >= 0.3, (v["variant"], key, v[key])        # gold family
+        assert contrast(v["gold"], v["navy"]) >= 4.5
+        assert contrast(v["cardText"], v["cardBgHex"]) >= 7
+        assert contrast(v["cardHeading"], v["cardBgHex"]) >= 4.5
+
+
+def test_consecutive_posts_get_different_brand_sets():
+    from app.services.palette import pick_variant
+    recent: list[str] = []
+    for i in range(6):
+        v = pick_variant(None, recent, seed=i)
+        assert v["variant"] not in recent[:2]
+        recent.insert(0, v["variant"])
+    assert len(set(recent)) >= 4

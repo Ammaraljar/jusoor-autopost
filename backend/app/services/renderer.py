@@ -28,7 +28,7 @@ BADGE_LABELS = {
 CREDIT_LABEL = {"ar": "المصدر", "en": "Source", "fr": "Source"}
 
 DEFAULT_COLORS = {"navy": "#16244F", "gold": "#C6A23C", "goldLight": "#D9B96A",
-                  "cardBg": "rgba(247,245,240,0.94)", "cardTitle": "#16244F", "cardText": "#3A4058",
+                  "cardBg": "rgba(251,248,240,0.94)", "cardTitle": "#16244F", "cardText": "#1F2B55",
                   "cardHeading": "#8A6D16"}
 
 
@@ -129,6 +129,8 @@ def build_html(spec: SlideSpec, brand: BrandStyle) -> str:
     handle = f'<span class="handle">{_esc(brand.handle)}</span>' if brand.handle else ""
     footer = f'<div class="footer">{handle}{credit}<div class="dots">{dots}</div></div>'
     card_style = brand.card_style if brand.card_style in ("frosted", "solid", "minimal") else "frosted"
+    if card_style != "minimal" and (brand.palette or {}).get("cardStyle") in ("frosted", "solid"):
+        card_style = brand.palette["cardStyle"]          # the post's brand colour set decides the card
 
     if spec.kind == "cover":
         content = (f'{bg}<div class="shade"></div>{top}'
