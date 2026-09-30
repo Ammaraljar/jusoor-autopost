@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 from ..config import get_settings
+from ..services import credentials
 from .base import PlatformResult, PublishError, Publisher, PublishRequest
 
 ORGS_QUERY = "query { account { organizations { id name } } }"
@@ -25,13 +26,14 @@ class BufferPublisher(Publisher):
     platforms = ("instagram", "facebook", "linkedin", "tiktok", "x", "threads", "pinterest")
 
     def configured(self) -> bool:
-        return bool(get_settings().buffer_api_key)
+        return bool(credentials.current()["buffer_api_key"])
 
     async def _gql(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
         s = get_settings()
+        key = credentials.current()["buffer_api_key"]
         async with httpx.AsyncClient(timeout=60) as client:
             resp = await client.post(s.buffer_api_url, json={"query": query, "variables": variables or {}},
-                                     headers={"Authorization": f"Bearer {s.buffer_api_key}"})
+                                     headers={"Authorization": f"Bearer {key}"})
         if resp.status_code >= 400:
             raise PublishError(f"Buffer HTTP {resp.status_code}: {resp.text[:300]}")
         body = resp.json()

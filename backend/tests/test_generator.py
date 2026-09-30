@@ -140,7 +140,8 @@ def test_claude_provider_uses_tool_use(client, monkeypatch):
     assert post.hook == "بينانغ تسرق القلب"
     assert captured["tool_choice"] == {"type": "tool", "name": "create_post"}
     assert captured["model"] == "claude-sonnet-5"
-    assert gen_mod.ai_info() == {"configured": True, "provider": "anthropic", "model": "claude-sonnet-5", "base_url": ""}
+    assert gen_mod.ai_info() == {"configured": True, "provider": "anthropic", "model": "claude-sonnet-5",
+                                 "base_url": "", "source": "environment"}
 
 
 def test_ai_info_for_anythingllm(client, anythingllm):
@@ -184,3 +185,59 @@ def test_protected_route_explains_server_misconfiguration(client, monkeypatch):
     monkeypatch.setattr(s, "supabase_anon_key", "")
     r = client.get("/api/drafts/counts")
     assert r.status_code == 500 and "SUPABASE_ANON_KEY" in r.json()["detail"]
+
+
+def test_credentials_saved_from_the_dashboard_are_used(client, monkeypatch):
+    """Keys entered in the dashboard override the environment and are never echoed back."""
+    from app.config import get_settings
+    from app.services import credentials
+    s = get_settings()
+    monkeypatch.setattr(s, "ai_provider", "anthropic")
+    monkeypatch.setattr(s, "ai_api_key", "")
+    monkeypatch.setattr(s, "anthropic_api_key", "")
+    credentials.refresh()
+    assert client.get("/api/status").json()["ai"]["configured"] is False
+
+    saved = client.put("/api/settings/credentials", json={
+        "ai_provider": "openai_compatible",
+        "ai_base_url": "https://llm.example.com/api/v1/openai",
+        "ai_model": "jusoor",
+        "ai_api_key": "AK-secret-value",
+        "pexels_api_key": "PX-secret",
+    }).json()["values"]
+    assert saved["ai_api_key"] == {"set": True, "source": "dashboard", "hint": "…alue"}
+    assert saved["ai_base_url"] == "https://llm.example.com/api/v1/openai"
+    assert "AK-secret-value" not in str(saved)
+
+    status = client.get("/api/status").json()
+    assert status["ai"] == {"configured": True, "provider": "openai_compatible", "model": "jusoor",
+                            "base_url": "https://llm.example.com/api/v1/openai", "source": "dashboard"}
+    assert status["images"]["pexels"] is True
+    assert credentials.current()["ai_api_key"] == "AK-secret-value"
+
+    # Empty string keeps the stored secret, null clears it
+    client.put("/api/settings/credentials", json={"ai_api_key": "", "ai_model": "jusoor-2"})
+    assert credentials.current()["ai_api_key"] == "AK-secret-value"
+    client.put("/api/settings/credentials", json={"ai_api_key": None})
+    assert credentials.current()["ai_api_key"] == ""
+    assert client.get("/api/settings/credentials").json()["values"]["ai_api_key"]["set"] is False
+
+    assert client.put("/api/settings/credentials", json={"nope": "x"}).status_code == 400
+    client.put("/api/settings/credentials", json={f: None for f in credentials.FIELDS})
+    credentials.refresh()
+
+
+def test_publishers_read_keys_from_the_dashboard(client, monkeypatch):
+    from app.config import get_settings
+    from app.publishers import get_publisher
+    from app.services import credentials
+    s = get_settings()
+    for env_field in ("buffer_api_key", "meta_access_token", "uploadpost_api_key"):
+        monkeypatch.setattr(s, env_field, "")
+    credentials.refresh()
+    assert not any(get_publisher(n).configured() for n in ("buffer", "meta", "uploadpost"))
+    client.put("/api/settings/credentials", json={"buffer_api_key": "B-1", "meta_access_token": "M-1",
+                                                  "uploadpost_api_key": "U-1"})
+    assert all(get_publisher(n).configured() for n in ("buffer", "meta", "uploadpost"))
+    client.put("/api/settings/credentials", json={f: None for f in credentials.FIELDS})
+    credentials.refresh()

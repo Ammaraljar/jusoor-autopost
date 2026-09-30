@@ -11,7 +11,7 @@ from ..auth import RequireUser, check_supabase_key, current_user
 from ..config import get_settings
 from ..db import Article, Draft, PublishLog, Source, get_db, utcnow
 from ..publishers import REGISTRY, get_publisher
-from ..services import app_settings, generator, storage
+from ..services import app_settings, credentials, generator, storage
 from ..services.jobs import jobs
 
 router = APIRouter(prefix="/api", tags=["system"])
@@ -39,7 +39,7 @@ async def health(check: bool = True):
     if not storage.is_publicly_reachable():
         problems.append("روابط الصور غير عامة — النشر على Meta أو Buffer سيفشل")
     if not generator.ai_available():
-        problems.append("لا يوجد محرّك ذكاء اصطناعي مضبوط — سيولّد النظام نصوصًا تجريبية")
+        problems.append("لا يوجد محرّك ذكاء اصطناعي مضبوط — أضف المفتاح من الإعدادات، وإلا فسيولّد النظام نصوصًا تجريبية")
     return {
         "ok": not problems,
         "environment": s.environment,
@@ -70,7 +70,7 @@ def status():
     s = get_settings()
     return {
         "ai": generator.ai_info(),
-        "images": {"pexels": bool(s.pexels_api_key)},
+        "images": {"pexels": bool(credentials.current()["pexels_api_key"])},
         "storage": {"backend": s.storage_backend, "public": storage.is_publicly_reachable()},
         "providers": {name: {"configured": cls().configured(), "platforms": list(cls.platforms)}
                       for name, cls in REGISTRY.items()},
@@ -89,6 +89,22 @@ async def provider_status(name: str):
 def all_settings(db: Session = Depends(get_db)):
     return {"values": {k: app_settings.get_section(db, k) for k in app_settings.DEFAULTS},
             "options": app_settings.options()}
+
+
+@router.get("/settings/credentials", dependencies=[RequireUser])
+def read_credentials():
+    """Keys and AI provider settings. Secrets come back as a status, never as a value."""
+    return {"values": credentials.public_view(),
+            "providers": {"ai": ["anthropic", "openai_compatible"]}}
+
+
+@router.put("/settings/credentials", dependencies=[RequireUser])
+def write_credentials(body: dict, db: Session = Depends(get_db)):
+    """Save keys. An empty secret keeps the current one; null removes it."""
+    unknown = [k for k in body if k not in credentials.FIELDS]
+    if unknown:
+        raise HTTPException(400, f"حقول غير معروفة: {', '.join(unknown)}")
+    return {"values": credentials.save(db, body)}
 
 
 @router.put("/settings/{section}", dependencies=[RequireUser])

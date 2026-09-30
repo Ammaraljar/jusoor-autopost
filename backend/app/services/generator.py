@@ -18,6 +18,7 @@ from typing import Any
 import httpx
 
 from ..config import get_settings
+from . import credentials
 
 log = logging.getLogger(__name__)
 
@@ -167,9 +168,10 @@ async def _call_claude(system: str, user: str, tool: dict[str, Any], max_tokens:
     from anthropic import AsyncAnthropic
 
     s = get_settings()
-    client = AsyncAnthropic(api_key=s.ai_key, timeout=s.ai_timeout_seconds)
+    cfg = credentials.current()
+    client = AsyncAnthropic(api_key=cfg["ai_api_key"], timeout=s.ai_timeout_seconds)
     msg = await client.messages.create(
-        model=s.ai_model_name,
+        model=cfg["ai_model"] or "claude-sonnet-5",
         max_tokens=max_tokens,
         system=system,
         tools=[tool],
@@ -225,17 +227,18 @@ async def _call_openai_compatible(system: str, user: str, tool: dict[str, Any],
                                   max_tokens: int = 3000) -> dict[str, Any]:
     """AnythingLLM and friends: ask for JSON in the prompt, then parse it defensively."""
     s = get_settings()
-    if not s.ai_base_url:
-        raise RuntimeError("AI_BASE_URL غير مضبوط")
-    url = s.ai_base_url.rstrip("/") + "/chat/completions"
-    headers = {"Authorization": f"Bearer {s.ai_key}", "Content-Type": "application/json"}
+    cfg = credentials.current()
+    if not cfg["ai_base_url"]:
+        raise RuntimeError("رابط خادم الذكاء الاصطناعي غير مضبوط")
+    url = cfg["ai_base_url"].rstrip("/") + "/chat/completions"
+    headers = {"Authorization": f"Bearer {cfg['ai_api_key']}", "Content-Type": "application/json"}
     messages = [{"role": "system", "content": system}, {"role": "user", "content": _schema_prompt(user, tool)}]
     json_mode = s.ai_json_mode
     last_error = ""
 
     async with httpx.AsyncClient(timeout=s.ai_timeout_seconds) as client:
         for attempt in range(3):
-            payload: dict[str, Any] = {"model": s.ai_model_name, "messages": messages,
+            payload: dict[str, Any] = {"model": cfg["ai_model"], "messages": messages,
                                        "max_tokens": max_tokens, "temperature": 0.6, "stream": False}
             if json_mode:
                 payload["response_format"] = {"type": "json_object"}
@@ -272,24 +275,30 @@ async def _call_openai_compatible(system: str, user: str, tool: dict[str, Any],
     raise RuntimeError(f"AI did not return valid JSON after 3 attempts: {last_error}")
 
 
+def _openai_compatible() -> bool:
+    return credentials.current()["ai_provider"].lower() in ("openai_compatible", "openai", "anythingllm")
+
+
 async def _call_model(system: str, user: str, tool: dict[str, Any], max_tokens: int = 3000) -> dict[str, Any]:
-    s = get_settings()
-    if s.is_openai_compatible:
+    if _openai_compatible():
         return await _call_openai_compatible(system, user, tool, max_tokens)
     return await _call_claude(system, user, tool, max_tokens)
 
 
 def ai_available() -> bool:
-    s = get_settings()
-    if s.is_openai_compatible:
-        return bool(s.ai_base_url and s.ai_model_name)
-    return bool(s.ai_key)
+    cfg = credentials.current()
+    if _openai_compatible():
+        return bool(cfg["ai_base_url"] and cfg["ai_model"])
+    return bool(cfg["ai_api_key"])
 
 
 def ai_info() -> dict[str, Any]:
-    s = get_settings()
-    return {"configured": ai_available(), "provider": "openai_compatible" if s.is_openai_compatible else "anthropic",
-            "model": s.ai_model_name, "base_url": s.ai_base_url if s.is_openai_compatible else ""}
+    cfg = credentials.current()
+    openai_compatible = _openai_compatible()
+    return {"configured": ai_available(), "provider": "openai_compatible" if openai_compatible else "anthropic",
+            "model": cfg["ai_model"] or ("" if openai_compatible else "claude-sonnet-5"),
+            "base_url": cfg["ai_base_url"] if openai_compatible else "",
+            "source": credentials.source_of("ai_api_key")}
 
 
 async def generate_from_article(brand: BrandContext, gen: dict[str, Any], title: str, body: str,

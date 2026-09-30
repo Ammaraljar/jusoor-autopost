@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, Bot, CheckCircle2, HardDrive, PlugZap, Save } from 'lucide-react';
+import KeysCard from '../components/KeysCard';
 import { Button, ErrorBox, Field, Loading, PageHead, useAction, useLoad } from '../components/ui';
 import { api } from '../lib/api';
 import { fmtDateTime } from '../lib/format';
@@ -140,6 +141,8 @@ export default function SettingsPage() {
         </div>
 
         <div className="stack">
+          <KeysCard onSaved={() => status.reload(true)} />
+
           <div className="card card-pad stack">
             <h3>{t('system')}</h3>
             <StatusLine icon={Bot} ok={st.ai.configured}
@@ -170,7 +173,7 @@ export default function SettingsPage() {
                       {t('check')}
                     </Button>
                   </div>
-                  {!info.configured && <div className="xs muted code" style={{ marginTop: 6 }}>{ENV_HINT[name]}</div>}
+                  {!info.configured && <div className="xs muted" style={{ marginTop: 6 }}>{t('keys_title')} ↑</div>}
                   {c && (
                     <div className="small" style={{ marginTop: 8 }}>
                       {c.connected ? <span className="pill ok">{t('connected')}</span> : c.connected === false ? <span className="pill danger">{t('disconnected')}</span> : null}

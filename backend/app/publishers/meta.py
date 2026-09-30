@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 
 from ..config import get_settings
+from ..services import credentials
 from .base import PlatformResult, PublishError, Publisher, PublishRequest
 
 
@@ -15,7 +16,7 @@ class MetaPublisher(Publisher):
     platforms = ("facebook", "instagram")
 
     def configured(self) -> bool:
-        return bool(get_settings().meta_access_token)
+        return bool(credentials.current()["meta_access_token"])
 
     @property
     def base(self) -> str:
@@ -31,7 +32,7 @@ class MetaPublisher(Publisher):
         return body
 
     async def _page_token(self, client: httpx.AsyncClient, page_id: str) -> str:
-        token = get_settings().meta_access_token
+        token = credentials.current()["meta_access_token"]
         try:
             data = await self._call(client, "GET", page_id, fields="access_token", access_token=token)
             return data.get("access_token") or token
@@ -44,7 +45,7 @@ class MetaPublisher(Publisher):
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 me = await self._call(client, "GET", "me", fields="id,name",
-                                      access_token=get_settings().meta_access_token)
+                                      access_token=credentials.current()["meta_access_token"])
             return {"configured": True, "connected": True, "account": me.get("name")}
         except Exception as exc:  # noqa: BLE001
             return {"configured": True, "connected": False, "error": str(exc)[:300]}
@@ -101,7 +102,7 @@ class MetaPublisher(Publisher):
 
     async def _instagram(self, client: httpx.AsyncClient, cfg: dict, req: PublishRequest) -> PlatformResult:
         ig = cfg["ig_user_id"]
-        token = await self._page_token(client, cfg["page_id"]) if cfg.get("page_id") else get_settings().meta_access_token
+        token = await self._page_token(client, cfg["page_id"]) if cfg.get("page_id") else credentials.current()["meta_access_token"]
         urls = req.image_urls[:10]
         if len(urls) == 1:
             container = await self._call(client, "POST", f"{ig}/media", image_url=urls[0], caption=req.caption,

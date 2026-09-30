@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 from ..config import get_settings
+from ..services import credentials
 from ..services import storage
 from .base import PlatformResult, PublishError, Publisher, PublishRequest
 
@@ -15,10 +16,11 @@ class UploadPostPublisher(Publisher):
     platforms = ("instagram", "facebook", "linkedin", "tiktok", "x", "threads", "pinterest", "bluesky")
 
     def configured(self) -> bool:
-        return bool(get_settings().uploadpost_api_key)
+        return bool(credentials.current()["uploadpost_api_key"])
 
     def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"Apikey {get_settings().uploadpost_api_key}"}
+        key = credentials.current()["uploadpost_api_key"]
+        return {"Authorization": f"Apikey {key}"}
 
     async def status(self) -> dict[str, Any]:
         return {"configured": self.configured()}

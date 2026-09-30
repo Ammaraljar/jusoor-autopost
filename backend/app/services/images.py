@@ -8,7 +8,7 @@ import logging
 import httpx
 from PIL import Image
 
-from ..config import get_settings
+from . import credentials
 from .scraper import HEADERS
 
 log = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ def download_image(url: str) -> bytes | None:
 
 
 def search_pexels(query: str, count: int = 6) -> list[dict]:
-    key = get_settings().pexels_api_key
+    key = credentials.current()["pexels_api_key"]
     if not key or not query:
         return []
     try:
