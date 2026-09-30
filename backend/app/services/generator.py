@@ -212,6 +212,106 @@ def _schema_prompt(user: str, tool: dict[str, Any]) -> str:
             f"{json.dumps(tool['input_schema'], ensure_ascii=False)}")
 
 
+# ============================================================ live model lists
+_MODEL_CACHE: dict[str, tuple[float, list[str]]] = {}
+_SKIP_WORDS = ("embed", "ocr", "moderation", "voxtral", "whisper", "tts", "guard", "safeguard", "orpheus",
+               "playai", "transcribe", "codestral", "devstral", "pixtral", "audio", "image")
+
+
+def _is_invalid_model(resp: httpx.Response) -> bool:
+    text = resp.text.lower()
+    return "model" in text and any(w in text for w in ("invalid", "not found", "does not exist", "not exist",
+                                                       "no endpoints", "unknown", "decommissioned"))
+
+
+def _chat_models(name: str, payload: dict[str, Any]) -> list[str]:
+    ids: list[str] = []
+    for item in payload.get("data") or []:
+        mid = str(item.get("id") or "")
+        if not mid:
+            continue
+        caps = item.get("capabilities") or {}
+        if name == "mistral" and caps and not caps.get("completion_chat", True):
+            continue
+        if name == "openrouter":
+            if not mid.endswith(":free"):
+                continue
+        elif any(w in mid.lower() for w in _SKIP_WORDS):
+            continue
+        if item.get("active") is False:
+            continue
+        ids.append(mid)
+    if name == "openrouter":
+        ids.insert(0, "openrouter/free")
+    return list(dict.fromkeys(ids))
+
+
+async def list_models(name: str, client: httpx.AsyncClient | None = None, fresh: bool = False) -> list[str]:
+    """Chat models the account can use right now, straight from the provider (cached 10 minutes)."""
+    import time
+    cached = _MODEL_CACHE.get(name)
+    if cached and not fresh and time.time() - cached[0] < 600:
+        return cached[1]
+    cfg = credentials.engine(name)
+    if not cfg["api_key"]:
+        raise AIError(f"أضف مفتاح {cfg['label']} أولًا ثم احفظ")
+    own = client is None
+    client = client or httpx.AsyncClient(timeout=30)
+    try:
+        resp = await client.get(cfg["base_url"].rstrip("/") + "/models",
+                                headers={"Authorization": f"Bearer {cfg['api_key']}"})
+    except httpx.HTTPError as exc:
+        raise AIError(f"{cfg['label']}: تعذّر جلب قائمة النماذج ({exc})") from exc
+    finally:
+        if own:
+            await client.aclose()
+    if resp.status_code in (401, 403):
+        raise AIError(f"{cfg['label']} رفض المفتاح — تأكد من المفتاح")
+    if resp.status_code >= 400:
+        raise AIError(f"{cfg['label']}: تعذّر جلب قائمة النماذج (خطأ {resp.status_code})")
+    ids = _chat_models(name, resp.json())
+    _MODEL_CACHE[name] = (time.time(), ids)
+    return ids
+
+
+def pick_model(name: str, wanted: str, available: list[str]) -> str:
+    """Closest available model: same family (small/medium/large…) first, then the engine's defaults."""
+    if not available:
+        return ""
+    if wanted in available:
+        return wanted
+    low = [a.lower() for a in available]
+    family = next((f for f in ("small", "medium", "large", "120b", "20b", "70b", "8b", "mini")
+                   if f in wanted.lower()), "")
+    if family:
+        same = [a for a, l in zip(available, low) if family in l]
+        latest = [a for a in same if "latest" in a]
+        if latest or same:
+            return (latest or sorted(same, reverse=True))[0]
+    for m in credentials.ENGINES[name]["models"]:
+        if m["id"] in available:
+            return m["id"]
+    return available[0]
+
+
+async def resolve_model(cfg: dict[str, str], client: httpx.AsyncClient) -> str:
+    try:
+        return pick_model(cfg["name"], cfg["model"], await list_models(cfg["name"], client, fresh=True))
+    except Exception as exc:  # noqa: BLE001 - fall back to the plain error
+        log.warning("could not list %s models: %s", cfg["name"], exc)
+        return ""
+
+
+def _remember_model(name: str, model: str) -> None:
+    """Save the working model so the dashboard shows it and the next call uses it directly."""
+    try:
+        from ..db import session_scope
+        with session_scope() as db:
+            credentials.save(db, {f"{name}_model": model})
+    except Exception as exc:  # noqa: BLE001 - never fail a generation over this
+        log.warning("could not save model %s for %s: %s", model, name, exc)
+
+
 def _tune_payload(cfg: dict[str, str], payload: dict[str, Any]) -> None:
     """Per-engine adjustments so each provider gets a request it handles well."""
     name, model = cfg["name"], (cfg["model"] or "").lower()
@@ -247,6 +347,7 @@ async def _call_openai_compatible(cfg: dict[str, str], system: str, user: str, t
     last_error = ""
     json_retries = 0
     transient = 0
+    model_swapped = False
 
     async with httpx.AsyncClient(timeout=s.ai_timeout_seconds) as client:
         while True:
@@ -275,6 +376,17 @@ async def _call_openai_compatible(cfg: dict[str, str], system: str, user: str, t
                     raise AIError(f"{label}: تجاوزت حد الطلبات أو الحصة المجانية — انتظر قليلًا ثم أعد المحاولة")
                 raise AIError(f"{label} مشغول حاليًا بسبب ضغط الطلبات عنده (خطأ {resp.status_code}) — "
                               "المفتاح صالح، والمشكلة مؤقتة من جهة المزوّد؛ أعد المحاولة بعد دقائق")
+            if resp.status_code in (400, 404) and _is_invalid_model(resp) and not model_swapped:
+                # The provider renamed or retired the model: pick one the account really has.
+                replacement = await resolve_model(cfg, client)
+                if replacement and replacement != cfg["model"]:
+                    log.warning("%s: model %s is invalid, switching to %s", label, cfg["model"], replacement)
+                    cfg = {**cfg, "model": replacement}
+                    model_swapped = True
+                    _remember_model(cfg["name"], replacement)
+                    continue
+                raise AIError(f"{label}: النموذج «{cfg['model']}» غير متاح لحسابك — اضغط «جلب النماذج» "
+                              "في الإعدادات واختر واحدًا من القائمة")
             if resp.status_code in (401, 403):
                 raise AIError(f"{label} رفض المفتاح — تأكد من المفتاح أو أنشئ مفتاحًا جديدًا")
             if resp.status_code == 402:

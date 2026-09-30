@@ -75,7 +75,7 @@ def test_both_engines_write_and_the_judge_picks(client, two_engines, monkeypatch
     assert auth["api.groq.com"] == "Bearer gsk_test-groq"
     models = {h: m for h, m, _a in seen}
     assert models["api.groq.com"] == "openai/gpt-oss-120b"
-    assert models["api.mistral.ai"] == "mistral-small-4-0-26-03"
+    assert models["api.mistral.ai"] == "mistral-small-latest"
 
 
 def test_one_engine_failing_does_not_stop_the_post(client, two_engines, monkeypatch):
@@ -304,7 +304,7 @@ def test_new_engines_route_to_their_hosts(client, monkeypatch):
             cfg = credentials.engine(name)
             asyncio.run(generator._call_openai_compatible(cfg, "sys", "user", generator.POST_TOOL))
         hosts = {h: (p, m, hd) for h, p, m, hd in seen}
-        assert hosts["api.mistral.ai"][:2] == ("/v1/chat/completions", "mistral-small-4-0-26-03")
+        assert hosts["api.mistral.ai"][:2] == ("/v1/chat/completions", "mistral-small-latest")
         assert hosts["openrouter.ai"][:2] == ("/api/v1/chat/completions", "openrouter/free")
         assert hosts["openrouter.ai"][2]["x-title"] == "JUSOOR AutoPost"
         assert hosts["api.groq.com"][:2] == ("/openai/v1/chat/completions", "openai/gpt-oss-120b")
@@ -351,7 +351,7 @@ def test_each_engine_gets_a_request_suited_to_it():
     gen_mod._tune_payload({"name": "groq", "model": "openai/gpt-oss-120b"}, groq)
     assert groq["reasoning_effort"] == "low" and groq["max_tokens"] >= 8000
     mistral = dict(base)
-    gen_mod._tune_payload({"name": "mistral", "model": "mistral-small-4-0-26-03"}, mistral)
+    gen_mod._tune_payload({"name": "mistral", "model": "mistral-small-latest"}, mistral)
     assert mistral["temperature"] <= 0.5 and "reasoning_effort" not in mistral
     orr = dict(base)
     gen_mod._tune_payload({"name": "openrouter", "model": "openrouter/free"}, orr)
@@ -371,3 +371,39 @@ def test_only_engines_with_keys_take_part(client, monkeypatch):
     view = client.get("/api/settings/credentials").json()["values"]
     assert view["ready"] == ["mistral", "openrouter"] and view["version"].startswith("3.")
     assert view["engines"]["groq"]["models"][0]["id"] == "openai/gpt-oss-120b"
+
+
+def test_invalid_model_is_replaced_by_one_the_account_has(client, monkeypatch):
+    """The production error: Mistral answers 400 "Invalid model" — pick a real model and carry on."""
+    from app.config import get_settings
+    s = get_settings()
+    for attr, value in {"mistral_api_key": "mk", "groq_api_key": "", "openrouter_api_key": "",
+                        "ai_mode": "single", "ai_primary": "mistral"}.items():
+        monkeypatch.setattr(s, attr, value)
+    client.put("/api/settings/credentials", json={"mistral_model": "mistral-medium-3-5-26-04"})
+    gen_mod._MODEL_CACHE.clear()
+    used = []
+
+    def handler(request):
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [
+                {"id": "mistral-ocr-latest", "capabilities": {"completion_chat": False}},
+                {"id": "mistral-small-2603", "capabilities": {"completion_chat": True}},
+                {"id": "mistral-medium-2604", "capabilities": {"completion_chat": True}},
+                {"id": "mistral-medium-latest", "capabilities": {"completion_chat": True}}]})
+        model = json.loads(request.content)["model"]
+        used.append(model)
+        if model == "mistral-medium-3-5-26-04":
+            return httpx.Response(400, json={"object": "error", "message": f"Invalid model: {model}",
+                                             "type": "invalid_model", "code": "1500"})
+        return chat(json.dumps(post("نجح"), ensure_ascii=False))
+
+    install(monkeypatch, handler)
+    try:
+        result = asyncio.run(gen_mod.generate_from_topic(BRAND, GEN, "موضوع"))
+        assert result.hook == "نجح" and used == ["mistral-medium-3-5-26-04", "mistral-medium-latest"]
+        assert credentials.current()["mistral_model"] == "mistral-medium-latest"   # remembered
+        r = client.get("/api/settings/credentials/models/mistral").json()
+        assert r["models"] == ["mistral-small-2603", "mistral-medium-2604", "mistral-medium-latest"]
+    finally:
+        client.put("/api/settings/credentials", json={"mistral_model": None})

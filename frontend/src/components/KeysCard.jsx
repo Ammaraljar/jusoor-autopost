@@ -40,6 +40,8 @@ export default function KeysCard({ onSaved }) {
   const [form, setForm] = useState(null);
   const [test, setTest] = useState(null);
   const [customModel, setCustomModel] = useState({});
+  const [liveModels, setLiveModels] = useState({});
+  const [modelsError, setModelsError] = useState({});
   const [busy, run] = useAction();
 
   useEffect(() => { if (creds.data) setForm(initialForm(creds.data.values)); }, [creds.data]);
@@ -79,6 +81,16 @@ export default function KeysCard({ onSaved }) {
     onSaved?.();
   }, t('saved'));
 
+  const fetchModels = (name) => run(`models-${name}`, async () => {
+    setModelsError((e) => ({ ...e, [name]: '' }));
+    try {
+      const res = await api.get(`/api/settings/credentials/models/${name}`);
+      setLiveModels((m) => ({ ...m, [name]: res.models || [] }));
+    } catch (err) {
+      setModelsError((e) => ({ ...e, [name]: err.message || String(err) }));
+    }
+  });
+
   const runTest = () => run('test', async () => {
     setTest(null);
     setTest(await api.post('/api/settings/credentials/test-ai'));
@@ -102,7 +114,12 @@ export default function KeysCard({ onSaved }) {
     const info = engines[name] || {};
     const on = hasKey(name);
     const field = `${name}_model`;
-    const models = info.models || [];
+    const suggested = info.models || [];
+    const live = liveModels[name];
+    const models = live
+      ? [...suggested.filter((m) => live.includes(m.id)),
+        ...live.filter((id) => !suggested.some((m) => m.id === id)).map((id) => ({ id, note: t('from_account') }))]
+      : suggested;
     const current = form[field] || info.default_model || '';
     const known = models.some((m) => m.id === current);
     const showCustom = customModel[name] || (current && !known);
@@ -145,6 +162,13 @@ export default function KeysCard({ onSaved }) {
                 {models.map((m) => <option key={m.id} value={m.id}>{m.id} — {m.note}</option>)}
                 <option value={CUSTOM}>{t('other_model')}</option>
               </select>
+              {values[`${name}_api_key`]?.set && (
+                <div className="row" style={{ gap: 8, marginTop: 6 }}>
+                  <Button size="sm" busy={busy === `models-${name}`} onClick={() => fetchModels(name)}>{t('fetch_models')}</Button>
+                  {live && <span className="xs muted">{live.length} {t('models_available')}</span>}
+                </div>
+              )}
+              {modelsError[name] && <span className="xs" style={{ color: 'var(--danger)' }}>{modelsError[name]}</span>}
               {showCustom && (
                 <input className="input ltr" style={{ marginTop: 6 }} value={form[field]}
                   placeholder={name === 'openrouter' ? 'vendor/model:free' : info.default_model}

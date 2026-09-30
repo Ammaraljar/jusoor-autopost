@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     ai_json_mode: bool = True               # send response_format=json_object on the first try
     ai_timeout_seconds: int = 180
     mistral_api_key: str = ""
-    mistral_model: str = "mistral-small-4-0-26-03"
+    mistral_model: str = "mistral-small-latest"
     openrouter_api_key: str = ""
     openrouter_model: str = "openrouter/free"   # free router; any ":free" model id also works
     groq_api_key: str = ""

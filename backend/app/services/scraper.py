@@ -71,7 +71,10 @@ def discover_links(source, limit: int = 20) -> ListingResult:
             status = resp.status_code
             resp.raise_for_status()
             soup = BeautifulSoup(resp.text, "html.parser")
-            anchors = soup.select(source.link_selector) if source.link_selector else soup.find_all("a", href=True)
+            anchors = soup.select(source.link_selector) if source.link_selector else []
+            if not anchors:
+                # The site changed its markup (or no selector): scan every link, the pattern still filters
+                anchors = soup.find_all("a", href=True)
             listing_path = urlparse(listing).path.rstrip("/")
             for a in anchors:
                 href = a.get("href")

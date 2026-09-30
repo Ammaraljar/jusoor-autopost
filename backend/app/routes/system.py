@@ -103,6 +103,17 @@ async def test_ai():
     return await generator.test_connection()
 
 
+@router.get("/settings/credentials/models/{engine}", dependencies=[RequireUser])
+async def engine_models(engine: str):
+    """Models the saved key can really use — fetched live from the provider."""
+    if engine not in credentials.ENGINES:
+        raise HTTPException(404, "محرّك غير معروف")
+    try:
+        return {"engine": engine, "models": await generator.list_models(engine, fresh=True)}
+    except generator.AIError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
 @router.put("/settings/credentials", dependencies=[RequireUser])
 def write_credentials(body: dict, db: Session = Depends(get_db)):
     """Save keys. An empty secret keeps the current one; null removes it."""

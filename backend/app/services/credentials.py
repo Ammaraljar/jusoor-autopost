@@ -25,18 +25,18 @@ from ..config import get_settings
 from ..db import AppSetting, session_scope
 
 SETTINGS_KEY = "credentials"
-VERSION = "3.0-mistral-openrouter-groq"
+VERSION = "3.1-live-models"
 
 # Each engine carries what its own environment needs: suggested models, the key's format,
 # where to get the key, and request tweaks applied in generator._tune_payload().
 ENGINES: dict[str, dict[str, Any]] = {
     "mistral": {
         "label": "Mistral", "kind": "openai", "base_url": "https://api.mistral.ai/v1",
-        "default_model": "mistral-small-4-0-26-03",
+        "default_model": "mistral-small-latest",
         "models": [
-            {"id": "mistral-small-4-0-26-03", "note": "سريع واقتصادي — مناسب للمنشورات"},
-            {"id": "mistral-medium-3-5-26-04", "note": "جودة أعلى"},
-            {"id": "mistral-large-3-25-12", "note": "الأقوى — أبطأ"},
+            {"id": "mistral-small-latest", "note": "سريع واقتصادي — مناسب للمنشورات"},
+            {"id": "mistral-medium-latest", "note": "جودة أعلى"},
+            {"id": "mistral-large-latest", "note": "الأقوى — أبطأ"},
         ],
         "key_url": "https://console.mistral.ai/api-keys", "key_prefix": "", "key_placeholder": "مفتاح من 32 حرفًا",
         "free": "خطة Experiment مجانية بحدود استخدام",

@@ -22,6 +22,18 @@ PRESETS = [
     {"name": "The Star - Culture", "kind": "website", "base_url": "https://www.thestar.com.my",
      "listing_urls": ["https://www.thestar.com.my/lifestyle/culture"], "category": "culture", "country": "Malaysia",
      "language": "en", "link_pattern": r"/lifestyle/culture/\d{4}/\d{2}/\d{2}/"},
+    {"name": "Travel Daily Media - Malaysia", "kind": "website", "base_url": "https://www.traveldailymedia.com",
+     "listing_urls": ["https://www.traveldailymedia.com/category/asia-news/malaysia/"],
+     "category": "travel", "country": "Malaysia", "language": "en",
+     "link_selector": "h3.entry-title a",
+     "link_pattern": r"^https://www\.traveldailymedia\.com/[a-zA-Z0-9-]+/?$",
+     "body_selector": ".entry-content, .td-post-content"},
+    {"name": "TripAdvisor - Top Destinations", "kind": "website", "base_url": "https://www.tripadvisor.com.my",
+     "listing_urls": ["https://www.tripadvisor.com.my/TravelersChoice-Destinations-cTop-g2"],
+     "category": "destinations", "country": "", "language": "en",
+     "link_selector": "div.ui_columns a.b_title, a[href*=\"/Tourism-g\"]",
+     "link_pattern": r"/Tourism-g\d+-[A-Za-z0-9_]+",
+     "body_selector": "div.body_text, .ui_column div.p13n_description"},
 ]
 
 
