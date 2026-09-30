@@ -4,7 +4,7 @@ import { Button, Field, Spinner, useAction, useLoad } from './ui';
 import { api } from '../lib/api';
 import { useI18n } from '../lib/i18n';
 
-const ENGINE_ORDER = ['claude', 'gemini', 'deepseek', 'mistral', 'openrouter', 'groq', 'custom'];
+const ENGINE_ORDER = ['mistral', 'openrouter', 'groq'];
 const MODEL_FIELDS = ENGINE_ORDER.map((n) => `${n}_model`);
 const PUBLISH_KEYS = [
   { field: 'pexels_api_key', label: 'stock_photos', hint: 'pexels.com/api' },
@@ -26,10 +26,9 @@ function KeyState({ state }) {
 function initialForm(v) {
   return {
     ai_mode: v.ai_mode || 'single',
-    ai_primary: v.ai_primary || 'claude',
+    ai_primary: v.ai_primary || 'mistral',
     ensemble: (v.ai_ensemble || '').split(',').map((x) => x.trim()).filter(Boolean),
     ...Object.fromEntries(MODEL_FIELDS.map((f) => [f, v[f] || ''])),
-    custom_base_url: v.custom_base_url || '',
     secrets: {},
   };
 }
@@ -56,7 +55,7 @@ export default function KeysCard({ onSaved }) {
   const payload = () => ({
     ai_mode: form.ai_mode, ai_primary: form.ai_primary, ai_ensemble: form.ensemble.join(','),
     ...Object.fromEntries(MODEL_FIELDS.map((f) => [f, form[f]])),
-    custom_base_url: form.custom_base_url, ...form.secrets,
+    ...form.secrets,
   });
   const initial = initialForm(values);
   const dirty = JSON.stringify({ ...form, secrets: {} }) !== JSON.stringify(initial)
@@ -110,13 +109,7 @@ export default function KeysCard({ onSaved }) {
           )}
         </div>
         <div className="stack" style={{ gap: 10 }}>
-          {name === 'custom' && (
-            <Field label={t('base_url')} hint="https://…/api/v1/openai">
-              <input className="input ltr" value={form.custom_base_url}
-                onChange={(e) => set('custom_base_url', e.target.value)} />
-            </Field>
-          )}
-          <Field label={t('model')} hint={name === 'custom' ? 'workspace slug' : info.default_model}>
+          <Field label={t('model')} hint={info.default_model}>
             <input className="input ltr" value={form[`${name}_model`]} placeholder={info.default_model}
               onChange={(e) => set(`${name}_model`, e.target.value)} />
           </Field>

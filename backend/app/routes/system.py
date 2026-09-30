@@ -93,8 +93,7 @@ def all_settings(db: Session = Depends(get_db)):
 @router.get("/settings/credentials", dependencies=[RequireUser])
 def read_credentials():
     """Keys and AI provider settings. Secrets come back as a status, never as a value."""
-    return {"values": credentials.public_view(),
-            "providers": {"ai": ["anthropic", "openai_compatible"]}}
+    return {"values": credentials.public_view(), "providers": {"ai": list(credentials.ENGINES)}}
 
 
 @router.post("/settings/credentials/test-ai", dependencies=[RequireUser])
@@ -106,9 +105,8 @@ async def test_ai():
 @router.put("/settings/credentials", dependencies=[RequireUser])
 def write_credentials(body: dict, db: Session = Depends(get_db)):
     """Save keys. An empty secret keeps the current one; null removes it."""
-    unknown = [k for k in body if k not in credentials.FIELDS and k not in credentials.LEGACY_FIELDS]
-    if unknown:
-        raise HTTPException(400, f"حقول غير معروفة: {', '.join(unknown)}")
+    # Fields of removed engines (sent by an older dashboard) are ignored instead of failing.
+    body = {k: v for k, v in body.items() if k in credentials.FIELDS}
     return {"values": credentials.save(db, body)}
 
 

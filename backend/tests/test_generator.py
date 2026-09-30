@@ -1,4 +1,4 @@
-"""AI provider layer: Claude tool use and OpenAI-compatible servers (AnythingLLM)."""
+"""AI engine layer: Mistral / OpenRouter / Groq through their OpenAI-compatible APIs."""
 import asyncio
 import json
 
@@ -31,12 +31,16 @@ def _mock(module, handler):
 
 @pytest.fixture
 def anythingllm(monkeypatch):
+    """Only Mistral configured (from environment variables)."""
+    from app.services import credentials
     s = get_settings()
-    monkeypatch.setattr(s, "ai_provider", "openai_compatible")
-    monkeypatch.setattr(s, "ai_base_url", "https://llm.example.com/api/v1/openai")
-    monkeypatch.setattr(s, "ai_api_key", "AK-123")
-    monkeypatch.setattr(s, "ai_model", "jusoor-workspace")
+    for f in ("openrouter_api_key", "groq_api_key"):
+        monkeypatch.setattr(s, f, "")
+    monkeypatch.setattr(s, "mistral_api_key", "AK-123")
+    monkeypatch.setattr(s, "mistral_model", "mistral-test")
+    monkeypatch.setattr(s, "ai_mode", "single")
     monkeypatch.setattr(s, "ai_json_mode", True)
+    credentials.refresh()
     return s
 
 
@@ -64,9 +68,9 @@ def test_anythingllm_generates_post(client, anythingllm, monkeypatch):
     post = asyncio.run(gen_mod.generate_from_article(BRAND, GEN, "Penang", "body text", "The Star"))
     assert post.hook == "بينانغ تسرق القلب"
     assert post.hashtags == ["#سفر", "#ماليزيا"] and len(post.slides) == 2
-    assert seen["url"] == "https://llm.example.com/api/v1/openai/chat/completions"
+    assert seen["url"] == "https://api.mistral.ai/v1/chat/completions"
     assert seen["auth"] == "Bearer AK-123"
-    assert seen["body"]["model"] == "jusoor-workspace"
+    assert seen["body"]["model"] == "mistral-test"
     assert seen["body"]["response_format"] == {"type": "json_object"}
     assert "JSON Schema" in seen["body"]["messages"][1]["content"]
 
@@ -116,39 +120,10 @@ def test_missing_fields_raise(client, anythingllm, monkeypatch):
         asyncio.run(gen_mod.generate_from_topic(BRAND, GEN, "موضوع"))
 
 
-def test_claude_provider_uses_tool_use(client, monkeypatch):
-    s = get_settings()
-    monkeypatch.setattr(s, "ai_provider", "anthropic")
-    monkeypatch.setattr(s, "ai_api_key", "")
-    monkeypatch.setattr(s, "anthropic_api_key", "sk-test")
-    monkeypatch.setattr(s, "anthropic_model", "claude-sonnet-5")
-    captured = {}
-
-    class FakeMessages:
-        async def create(self, **kwargs):
-            captured.update(kwargs)
-            block = type("B", (), {"type": "tool_use", "input": GOOD})()
-            return type("M", (), {"content": [block]})()
-
-    class FakeClient:
-        def __init__(self, **kwargs):
-            self.messages = FakeMessages()
-
-    import anthropic
-    monkeypatch.setattr(anthropic, "AsyncAnthropic", FakeClient)
-    post = asyncio.run(gen_mod.generate_from_article(BRAND, GEN, "Penang", "body", "The Star"))
-    assert post.hook == "بينانغ تسرق القلب"
-    assert captured["tool_choice"] == {"type": "tool", "name": "create_post"}
-    assert captured["model"] == "claude-sonnet-5"
+def test_ai_info_for_mistral(client, anythingllm):
     info = gen_mod.ai_info()
-    assert info["configured"] and info["provider"] == "anthropic" and info["model"] == "claude-sonnet-5"
-    assert info["primary"] == "claude" and info["mode"] == "single"
-
-
-def test_ai_info_for_anythingllm(client, anythingllm):
-    info = gen_mod.ai_info()
-    assert info["provider"] == "openai_compatible" and info["configured"] is True
-    assert info["base_url"].endswith("/api/v1/openai") and info["model"] == "jusoor-workspace"
+    assert info["provider"] == "mistral" and info["configured"] is True and info["primary"] == "mistral"
+    assert info["base_url"] == "https://api.mistral.ai/v1" and info["model"] == "mistral-test"
 
 
 def test_health_reports_supabase_misconfiguration(client, monkeypatch):
@@ -193,42 +168,34 @@ def test_credentials_saved_from_the_dashboard_are_used(client, monkeypatch):
     from app.config import get_settings
     from app.services import credentials
     s = get_settings()
-    monkeypatch.setattr(s, "ai_provider", "anthropic")
-    monkeypatch.setattr(s, "ai_api_key", "")
-    monkeypatch.setattr(s, "anthropic_api_key", "")
+    for f in ("mistral_api_key", "openrouter_api_key", "groq_api_key", "ai_primary"):
+        monkeypatch.setattr(s, f, "")
     credentials.refresh()
     assert client.get("/api/status").json()["ai"]["configured"] is False
 
     saved = client.put("/api/settings/credentials", json={
-        "ai_primary": "custom",
-        "custom_base_url": "https://llm.example.com/api/v1/openai",
-        "custom_model": "jusoor",
-        "custom_api_key": "AK-secret-value",
+        "ai_primary": "groq", "groq_model": "groq-model", "groq_api_key": "gsk_secret-value",
         "pexels_api_key": "PX-secret",
     }).json()["values"]
-    assert saved["custom_api_key"] == {"set": True, "source": "dashboard", "hint": "…alue"}
-    assert saved["custom_base_url"] == "https://llm.example.com/api/v1/openai"
-    assert saved["engines"]["custom"]["ready"] is True
-    assert "AK-secret-value" not in str(saved)
+    assert saved["groq_api_key"] == {"set": True, "source": "dashboard", "hint": "…alue"}
+    assert saved["engines"]["groq"]["ready"] is True
+    assert set(saved["engines"]) == {"mistral", "openrouter", "groq"}
+    assert "gsk_secret-value" not in str(saved)
 
     status = client.get("/api/status").json()
-    assert status["ai"]["configured"] is True and status["ai"]["primary"] == "custom"
-    assert status["ai"]["provider"] == "openai_compatible" and status["ai"]["model"] == "jusoor"
+    assert status["ai"]["configured"] is True and status["ai"]["primary"] == "groq"
+    assert status["ai"]["model"] == "groq-model"
     assert status["images"]["pexels"] is True
-    assert credentials.current()["custom_api_key"] == "AK-secret-value"
 
     # Empty string keeps the stored secret, null clears it
-    client.put("/api/settings/credentials", json={"custom_api_key": "", "custom_model": "jusoor-2"})
-    assert credentials.current()["custom_api_key"] == "AK-secret-value"
-    client.put("/api/settings/credentials", json={"custom_api_key": None})
-    assert credentials.current()["custom_api_key"] == ""
+    client.put("/api/settings/credentials", json={"groq_api_key": "", "groq_model": "m2"})
+    assert credentials.current()["groq_api_key"] == "gsk_secret-value"
+    client.put("/api/settings/credentials", json={"groq_api_key": None})
+    assert credentials.current()["groq_api_key"] == ""
 
-    # The first version's field names are still accepted
-    client.put("/api/settings/credentials", json={"ai_provider": "anthropic", "ai_api_key": "sk-ant-legacy"})
-    assert credentials.current()["claude_api_key"] == "sk-ant-legacy"
-    assert credentials.current()["ai_primary"] == "claude"
-
-    assert client.put("/api/settings/credentials", json={"nope": "x"}).status_code == 400
+    # Fields of removed engines (an old dashboard) are ignored, not an error
+    r = client.put("/api/settings/credentials", json={"gemini_api_key": "AIza-x", "ai_primary": "claude"})
+    assert r.status_code == 200 and "gemini_api_key" not in r.json()["values"]
     client.put("/api/settings/credentials", json={f: None for f in credentials.FIELDS})
     credentials.refresh()
 
@@ -245,29 +212,6 @@ def test_publishers_read_keys_from_the_dashboard(client, monkeypatch):
     client.put("/api/settings/credentials", json={"buffer_api_key": "B-1", "meta_access_token": "M-1",
                                                   "uploadpost_api_key": "U-1"})
     assert all(get_publisher(n).configured() for n in ("buffer", "meta", "uploadpost"))
-    client.put("/api/settings/credentials", json={f: None for f in credentials.FIELDS})
-    credentials.refresh()
-
-
-def test_localhost_ai_url_is_explained(client, monkeypatch):
-    """The exact mistake from production: AnythingLLM on the user's laptop, server on the internet."""
-    from app.services import credentials
-    client.put("/api/settings/credentials", json={
-        "ai_provider": "openai_compatible", "ai_base_url": "http://localhost:3001/api/v1",
-        "ai_model": "claude-sonnet-5", "ai_api_key": "AK"})
-    warnings = client.get("/api/settings/credentials").json()["values"]["warnings"]
-    assert any("جهازك المحلي" in w for w in warnings)
-    assert any("مساحة العمل" in w for w in warnings)
-    problems = client.get("/api/health").json()["problems"]
-    assert any("جهازك المحلي" in p for p in problems)
-
-    def refuse(request):
-        raise httpx.ConnectError("All connection attempts failed", request=request)
-    monkeypatch.setattr(gen_mod.httpx, "AsyncClient", _mock(gen_mod, refuse))
-    result = client.post("/api/settings/credentials/test-ai").json()
-    assert result["ok"] is False
-    custom = [e for e in result["engines"] if e["engine"] == "custom"][0]
-    assert "جهازك المحلي" in custom["error"]
     client.put("/api/settings/credentials", json={f: None for f in credentials.FIELDS})
     credentials.refresh()
 

@@ -146,10 +146,10 @@ export default function SettingsPage() {
           <div className="card card-pad stack">
             <h3>{t('system')}</h3>
             <StatusLine icon={Bot} ok={st.ai.configured}
-              label={`${t('ai')} — ${st.ai.provider === 'openai_compatible' ? t('ai_compatible') : 'Claude API'}`}
+              label={`${t('ai')} — ${st.ai.provider || ''}`}
               detail={st.ai.configured
-                ? <span className="code">{st.ai.model}{st.ai.base_url ? ` · ${st.ai.base_url}` : ''}</span>
-                : (st.ai.provider === 'openai_compatible' ? 'AI_BASE_URL / AI_MODEL' : 'ANTHROPIC_API_KEY')} />
+                ? <span className="code">{st.ai.model}</span>
+                : 'MISTRAL_API_KEY / OPENROUTER_API_KEY / GROQ_API_KEY'} />
             <StatusLine icon={HardDrive} ok={st.storage.public} label={`${t('storage')} (${st.storage.backend})`}
               detail={st.storage.public ? t('public_ok') : t('public_missing')} />
             <StatusLine icon={PlugZap} ok={st.images.pexels} warn label="Pexels" detail={st.images.pexels ? t('configured') : 'PEXELS_API_KEY'} />

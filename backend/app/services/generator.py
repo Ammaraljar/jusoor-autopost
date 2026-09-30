@@ -1,11 +1,8 @@
 """AI content generation.
 
-Two providers are supported and chosen with AI_PROVIDER:
-
-* ``anthropic``          — Claude API with tool use, which guarantees valid structured output.
-* ``openai_compatible``  — any OpenAI-compatible server (AnythingLLM, Ollama, LM Studio, vLLM…).
-  Those servers usually have no tool calling, so the JSON Schema is put in the prompt and the
-  reply is parsed defensively (code fences, stray text and a retry round are all handled).
+Engines: Mistral, OpenRouter and Groq — all OpenAI-compatible. The JSON Schema is put in the
+prompt and the reply is parsed defensively (code fences, stray text and a retry round are all
+handled). If an engine fails, the next ready engine takes over automatically.
 """
 from __future__ import annotations
 
@@ -174,44 +171,6 @@ TRANSIENT_STATUSES = (429, 500, 502, 503, 504)
 RETRY_DELAYS: tuple[float, ...] = (3, 8, 15)
 
 
-# ============================================================ Claude (tool use)
-async def _call_claude(cfg: dict[str, str], system: str, user: str, tool: dict[str, Any],
-                       max_tokens: int = 3000) -> dict[str, Any]:
-    """Anthropic tool use — the model can only answer with a valid tool input."""
-    import anthropic
-    from anthropic import AsyncAnthropic
-
-    s = get_settings()
-    if not cfg["api_key"]:
-        raise AIError("مفتاح Claude غير مضبوط — أضفه من الإعدادات ← المفاتيح والاتصالات")
-    client = AsyncAnthropic(api_key=cfg["api_key"], timeout=s.ai_timeout_seconds)
-    try:
-        msg = await client.messages.create(
-            model=cfg["model"] or "claude-sonnet-5",
-            max_tokens=max_tokens,
-            system=system,
-            tools=[tool],
-            tool_choice={"type": "tool", "name": tool["name"]},
-            messages=[{"role": "user", "content": user}],
-        )
-    except anthropic.AuthenticationError as exc:
-        raise AIError("مفتاح Claude مرفوض — تأكد من نسخه كاملًا من console.anthropic.com") from exc
-    except anthropic.PermissionDeniedError as exc:
-        raise AIError("مفتاح Claude لا يملك صلاحية — تحقق من رصيد الحساب") from exc
-    except anthropic.NotFoundError as exc:
-        raise AIError(f"نموذج Claude «{cfg['model']}» غير موجود") from exc
-    except anthropic.RateLimitError as exc:
-        raise AIError("Claude: تجاوزت حد الاستخدام أو نفد الرصيد") from exc
-    except anthropic.APIConnectionError as exc:
-        raise AIError("تعذّر الاتصال بخوادم Anthropic — أعد المحاولة بعد قليل") from exc
-    except anthropic.APIStatusError as exc:
-        raise AIError(f"رد غير متوقع من Claude ({exc.status_code}): {str(exc)[:200]}") from exc
-    for block in msg.content:
-        if block.type == "tool_use":
-            return dict(block.input)
-    raise AIError("Claude لم يُعد مخرجات منظّمة")
-
-
 # ============================================================ OpenAI-compatible engines
 def extract_json(text: str) -> dict[str, Any]:
     """Pull one JSON object out of a free-text reply (code fences, prefixes, trailing notes)."""
@@ -255,12 +214,12 @@ def _schema_prompt(user: str, tool: dict[str, Any]) -> str:
 
 async def _call_openai_compatible(cfg: dict[str, str], system: str, user: str, tool: dict[str, Any],
                                   max_tokens: int = 3000) -> dict[str, Any]:
-    """Gemini, DeepSeek, AnythingLLM…: ask for JSON in the prompt, then parse it defensively."""
+    """Mistral, OpenRouter, Groq: ask for JSON in the prompt, then parse it defensively."""
     s = get_settings()
     label = cfg["label"]
     if not cfg["base_url"]:
         raise AIError(f"{label}: رابط الخادم غير مضبوط")
-    if cfg["name"] != "custom" and not cfg["api_key"]:
+    if not cfg["api_key"]:
         raise AIError(f"مفتاح {label} غير مضبوط")
     url = cfg["base_url"].rstrip("/") + "/chat/completions"
     headers = {"Authorization": f"Bearer {cfg['api_key']}", "Content-Type": "application/json"}
@@ -282,8 +241,7 @@ async def _call_openai_compatible(cfg: dict[str, str], system: str, user: str, t
             try:
                 resp = await client.post(url, json=payload, headers=headers)
             except httpx.ConnectError as exc:
-                warnings = [w for w in credentials.ai_warnings() if "جهازك المحلي" in w] if cfg["name"] == "custom" else []
-                raise AIError(warnings[0] if warnings else f"{label}: تعذّر الوصول إلى {cfg['base_url']}") from exc
+                raise AIError(f"{label}: تعذّر الوصول إلى {cfg['base_url']}") from exc
             except httpx.TimeoutException as exc:
                 raise AIError(f"{label}: انتهت مهلة الاتصال ({s.ai_timeout_seconds} ثانية)") from exc
             except httpx.TransportError as exc:
@@ -345,10 +303,27 @@ async def _call_openai_compatible(cfg: dict[str, str], system: str, user: str, t
 # ============================================================ engine routing
 async def _call_engine(name: str, system: str, user: str, tool: dict[str, Any],
                        max_tokens: int = 3000) -> dict[str, Any]:
-    cfg = credentials.engine(name)
-    if cfg["kind"] == "anthropic":
-        return await _call_claude(cfg, system, user, tool, max_tokens)
-    return await _call_openai_compatible(cfg, system, user, tool, max_tokens)
+    return await _call_openai_compatible(credentials.engine(name), system, user, tool, max_tokens)
+
+
+async def _call_with_fallback(system: str, user: str, tool: dict[str, Any],
+                              max_tokens: int = 3000) -> tuple[str, dict[str, Any], dict[str, str]]:
+    """Primary engine first; if it fails, the next ready engine takes over."""
+    order = credentials.fallback_order()
+    if not order:
+        raise AIError("لا يوجد محرّك ذكاء اصطناعي جاهز — أضف مفتاح Mistral أو OpenRouter أو Groq "
+                      "من الإعدادات ← المفاتيح والاتصالات")
+    errors: dict[str, str] = {}
+    for name in order:
+        try:
+            data = await _call_engine(name, system, user, tool, max_tokens)
+            if tool is POST_TOOL:
+                _parse(data)                       # a reply we cannot use counts as a failure
+            return name, data, errors
+        except Exception as exc:  # noqa: BLE001 - try the next engine
+            log.warning("%s failed, trying the next engine: %s", name, exc)
+            errors[credentials.ENGINES[name]["label"]] = str(exc)[:300]
+    raise AIError("فشلت كل المحرّكات: " + " | ".join(f"{n}: {e}" for n, e in errors.items()))
 
 
 def _primary() -> str:
@@ -356,8 +331,9 @@ def _primary() -> str:
 
 
 async def _call_model(system: str, user: str, tool: dict[str, Any], max_tokens: int = 3000) -> dict[str, Any]:
-    """Quick tasks (rewrite one field or one slide) use the primary engine only."""
-    return await _call_engine(_primary(), system, user, tool, max_tokens)
+    """Quick tasks (rewrite one field or one slide): primary engine, with fallback."""
+    _name, data, _errors = await _call_with_fallback(system, user, tool, max_tokens)
+    return data
 
 
 JUDGE_TOOL = {
@@ -428,9 +404,12 @@ async def _generate_post(system: str, user: str, gen: dict[str, Any]) -> Generat
     label = lambda n: credentials.ENGINES[n]["label"]  # noqa: E731
 
     if len(engines) < 2:
-        name = cfg["ai_primary"]
-        post = _parse(await _call_engine(name, system, user, POST_TOOL))
+        name, data, errors = await _call_with_fallback(system, user, POST_TOOL)
+        post = _parse(data)
         post.meta = {"mode": "single", "engine": name, "engine_label": label(name)}
+        if errors:
+            post.meta["errors"] = errors
+            post.meta["reason"] = "تولّى هذا المحرّك الكتابة بعد تعذّر المحرّك الأساسي"
         return post
 
     results = await asyncio.gather(*(_call_engine(n, system, user, POST_TOOL) for n in engines),
@@ -498,8 +477,7 @@ def ai_info() -> dict[str, Any]:
     primary = cfg["ai_primary"]
     engine = credentials.engine(primary, cfg)
     return {"configured": ai_available(), "mode": cfg["ai_mode"], "primary": primary,
-            "provider": "anthropic" if engine["kind"] == "anthropic" else "openai_compatible",
-            "model": engine["model"], "base_url": engine["base_url"] if primary == "custom" else "",
+            "provider": primary, "model": engine["model"], "base_url": engine["base_url"],
             "ready": credentials.ready_engines(cfg), "ensemble": credentials.ensemble_engines(cfg),
             "source": credentials.source_of(f"{primary}_api_key")}
 
@@ -554,7 +532,7 @@ def demo_post(title: str, body: str, gen: dict[str, Any]) -> GeneratedPost:
     sentences = [s.strip() for s in re.split(r"(?<=[.!?؟])\s+", body or "") if s.strip()] or [title]
     slides = [{"heading": f"النقطة {i + 1}", "body": sentences[i % len(sentences)][:180]} for i in range(n)]
     return GeneratedPost(
-        hook=(title or "منشور تجريبي")[:80], subtitle="نسخة تجريبية — أضف مفتاح Claude لتوليد محتوى حقيقي",
+        hook=(title or "منشور تجريبي")[:80], subtitle="نسخة تجريبية — أضف مفتاح Mistral أو OpenRouter أو Groq لتوليد محتوى حقيقي",
         caption=f"{title}\n\n{sentences[0][:300]}\n\nتواصل معنا لتخطيط رحلتك.",
         hashtags=["#سفر", "#ماليزيا", "#سياحة", "#جسور_للسفر", "#travel"], slides=slides,
         cta="احجز رحلتك القادمة مع جسور للسفر", first_comment="", image_keywords="travel malaysia",

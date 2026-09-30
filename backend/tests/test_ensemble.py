@@ -1,4 +1,4 @@
-"""Parallel generation: Gemini + DeepSeek write at the same time, a judge picks the best post."""
+"""Parallel generation: Mistral + Groq write at the same time, a judge picks the best post."""
 import asyncio
 import json
 
@@ -27,8 +27,8 @@ def chat(content):
 @pytest.fixture
 def two_engines(client, monkeypatch):
     client.put("/api/settings/credentials", json={
-        "ai_mode": "ensemble", "ai_primary": "gemini", "ai_ensemble": "gemini,deepseek",
-        "gemini_api_key": "AIza-test-gemini", "deepseek_api_key": "sk-test-deepseek",
+        "ai_mode": "ensemble", "ai_primary": "mistral", "ai_ensemble": "mistral,groq",
+        "mistral_api_key": "mk-test-mistral", "groq_api_key": "gsk_test-groq",
     })
     yield
     client.put("/api/settings/credentials", json={f: None for f in credentials.FIELDS})
@@ -52,43 +52,43 @@ def test_both_engines_write_and_the_judge_picks(client, two_engines, monkeypatch
         host = request.url.host
         seen.append((host, body["model"], request.headers["Authorization"]))
         prompt = body["messages"][-1]["content"]
-        assert "json" in prompt                       # DeepSeek JSON mode requirement
+        assert "json" in prompt                       # Groq JSON mode requirement
         if "choose_best" in prompt or "Candidates" in prompt:
             return chat(json.dumps({"winner": "B", "scores": {"A": 6, "B": 9},
                                     "reason": "عنوان أقوى ولغة أوضح"}, ensure_ascii=False))
-        hook = "نسخة Gemini" if host == "generativelanguage.googleapis.com" else "نسخة DeepSeek"
+        hook = "نسخة Mistral" if host == "api.mistral.ai" else "نسخة Groq"
         return chat(json.dumps(post(hook), ensure_ascii=False))
 
     install(monkeypatch, handler)
     result = asyncio.run(gen_mod.generate_from_topic(BRAND, GEN, "شلالات لنكاوي"))
 
-    assert result.hook == "نسخة DeepSeek"                     # B = deepseek won
-    assert result.meta["mode"] == "ensemble" and result.meta["engine"] == "deepseek"
-    assert result.meta["method"] == "judge" and result.meta["judge"] == "Gemini"
-    assert result.meta["scores"] == {"Gemini": 6, "DeepSeek": 9}
+    assert result.hook == "نسخة Groq"                     # B = groq won
+    assert result.meta["mode"] == "ensemble" and result.meta["engine"] == "groq"
+    assert result.meta["method"] == "judge" and result.meta["judge"] == "Mistral"
+    assert result.meta["scores"] == {"Mistral": 6, "Groq": 9}
     assert result.meta["reason"] == "عنوان أقوى ولغة أوضح"
 
     hosts = [h for h, _m, _a in seen]
-    assert hosts.count("generativelanguage.googleapis.com") == 2   # writer + judge
-    assert hosts.count("api.deepseek.com") == 1
+    assert hosts.count("api.mistral.ai") == 2   # writer + judge
+    assert hosts.count("api.groq.com") == 1
     auth = {h: a for h, _m, a in seen}
-    assert auth["api.deepseek.com"] == "Bearer sk-test-deepseek"
+    assert auth["api.groq.com"] == "Bearer gsk_test-groq"
     models = {h: m for h, m, _a in seen}
-    assert models["api.deepseek.com"] == "deepseek-flash"
-    assert models["generativelanguage.googleapis.com"] == "gemini-3.8-flash"
+    assert models["api.groq.com"] == "openai/gpt-oss-120b"
+    assert models["api.mistral.ai"] == "mistral-small-4-0-26-03"
 
 
 def test_one_engine_failing_does_not_stop_the_post(client, two_engines, monkeypatch):
     def handler(request):
-        if request.url.host == "api.deepseek.com":
+        if request.url.host == "api.groq.com":
             return httpx.Response(402, json={"error": "Insufficient Balance"})
-        return chat(json.dumps(post("نسخة Gemini"), ensure_ascii=False))
+        return chat(json.dumps(post("نسخة Mistral"), ensure_ascii=False))
 
     install(monkeypatch, handler)
     result = asyncio.run(gen_mod.generate_from_topic(BRAND, GEN, "موضوع"))
-    assert result.hook == "نسخة Gemini"
-    assert result.meta["engine"] == "gemini" and "DeepSeek" in result.meta["errors"]
-    assert "الرصيد" in result.meta["errors"]["DeepSeek"]
+    assert result.hook == "نسخة Mistral"
+    assert result.meta["engine"] == "mistral" and "Groq" in result.meta["errors"]
+    assert "الرصيد" in result.meta["errors"]["Groq"]
 
 
 def test_judge_failure_falls_back_to_quality_rules(client, two_engines, monkeypatch):
@@ -96,7 +96,7 @@ def test_judge_failure_falls_back_to_quality_rules(client, two_engines, monkeypa
         prompt = json.loads(request.content)["messages"][-1]["content"]
         if "Candidates" in prompt:
             return httpx.Response(500, text="judge down")
-        if request.url.host == "api.deepseek.com":
+        if request.url.host == "api.groq.com":
             weak = post("عنوان طويل جدا جدا جدا جدا جدا جدا جدا جدا جدا جدا جدا جدا", slides=1)
             weak["hashtags"] = ["سفر"]
             return chat(json.dumps(weak, ensure_ascii=False))
@@ -112,7 +112,7 @@ def test_all_engines_failing_gives_one_clear_error(client, two_engines, monkeypa
     install(monkeypatch, lambda r: httpx.Response(401, text="bad key"))
     with pytest.raises(gen_mod.AIError) as err:
         asyncio.run(gen_mod.generate_from_topic(BRAND, GEN, "موضوع"))
-    assert "Gemini" in str(err.value) and "DeepSeek" in str(err.value)
+    assert "Mistral" in str(err.value) and "Groq" in str(err.value)
 
 
 def test_ensemble_verdict_is_stored_on_the_draft(client, two_engines, monkeypatch, fake_network):
@@ -127,14 +127,14 @@ def test_ensemble_verdict_is_stored_on_the_draft(client, two_engines, monkeypatc
     assert created["ok"]
     drafts = client.get("/api/drafts?status=all").json()
     d = client.get(f"/api/drafts/{drafts[0]['id']}").json()
-    assert d["ai_meta"]["mode"] == "ensemble" and d["ai_meta"]["engine"] == "gemini"
+    assert d["ai_meta"]["mode"] == "ensemble" and d["ai_meta"]["engine"] == "mistral"
     assert d["ai_meta"]["reason"] == "أدق"
     client.delete(f"/api/drafts/{d['id']}")
 
 
 def test_single_mode_uses_only_the_primary(client, monkeypatch):
-    client.put("/api/settings/credentials", json={"ai_mode": "single", "ai_primary": "deepseek",
-                                                  "deepseek_api_key": "sk-x", "gemini_api_key": "AIza-y"})
+    client.put("/api/settings/credentials", json={"ai_mode": "single", "ai_primary": "groq",
+                                                  "groq_api_key": "sk-x", "mistral_api_key": "AIza-y"})
     hosts = []
 
     def handler(request):
@@ -143,18 +143,18 @@ def test_single_mode_uses_only_the_primary(client, monkeypatch):
 
     install(monkeypatch, handler)
     result = asyncio.run(gen_mod.generate_from_topic(BRAND, GEN, "موضوع"))
-    assert hosts == ["api.deepseek.com"] and result.meta == {"mode": "single", "engine": "deepseek",
-                                                              "engine_label": "DeepSeek"}
+    assert hosts == ["api.groq.com"] and result.meta == {"mode": "single", "engine": "groq",
+                                                              "engine_label": "Groq"}
     client.put("/api/settings/credentials", json={f: None for f in credentials.FIELDS})
     credentials.refresh()
 
 
 def test_ensemble_warnings(client):
-    client.put("/api/settings/credentials", json={"ai_mode": "ensemble", "ai_ensemble": "gemini,deepseek",
-                                                  "gemini_api_key": "AQ.not-a-gemini-key"})
+    client.put("/api/settings/credentials", json={"ai_mode": "ensemble", "ai_ensemble": "mistral,groq",
+                                                  "groq_api_key": "not-a-groq-key"})
     warnings = client.get("/api/settings/credentials").json()["values"]["warnings"]
     assert any("محرّكين" in w for w in warnings)          # only one engine ready
-    assert any("AIza" in w for w in warnings)             # key format hint
+    assert any("gsk_" in w for w in warnings)             # key format hint
     client.put("/api/settings/credentials", json={f: None for f in credentials.FIELDS})
     credentials.refresh()
 
@@ -173,9 +173,9 @@ def test_migration_adds_new_column_to_an_old_database(tmp_path, monkeypatch):
     db_mod._migrate()   # idempotent
 
 
-def test_railway_variables_alone_enable_gemini_and_deepseek(client, monkeypatch):
-    """The production situation: an old localhost AnythingLLM setting is stored in the database,
-    and the two keys arrive as Railway variables. The variables must be enough on their own."""
+def test_railway_variables_alone_enable_mistral_and_groq(client, monkeypatch):
+    """Old settings of removed engines are stored in the database and the keys arrive as Railway
+    variables. The variables must be enough on their own."""
     from app.config import get_settings
     from app.db import AppSetting, session_scope
 
@@ -190,14 +190,13 @@ def test_railway_variables_alone_enable_gemini_and_deepseek(client, monkeypatch)
     credentials.refresh()
 
     s = get_settings()
-    for attr, value in {"gemini_api_key": "AIza-env", "deepseek_api_key": "sk-env", "ai_mode": "ensemble",
-                        "ai_ensemble": "gemini,deepseek", "ai_primary": "deepseek",
-                        "anthropic_api_key": ""}.items():
+    for attr, value in {"mistral_api_key": "AIza-env", "groq_api_key": "sk-env", "ai_mode": "ensemble",
+                        "ai_ensemble": "mistral,groq", "ai_primary": "groq"}.items():
         monkeypatch.setattr(s, attr, value)
 
     info = client.get("/api/status").json()["ai"]
-    assert info["mode"] == "ensemble" and info["primary"] == "deepseek"
-    assert info["ensemble"] == ["gemini", "deepseek"]
+    assert info["mode"] == "ensemble" and info["primary"] == "groq"
+    assert info["ensemble"] == ["mistral", "groq"]
 
     hosts = []
 
@@ -210,47 +209,45 @@ def test_railway_variables_alone_enable_gemini_and_deepseek(client, monkeypatch)
 
     install(monkeypatch, handler)
     result = asyncio.run(gen_mod.generate_from_topic(BRAND, GEN, "موضوع"))
-    assert result.meta["mode"] == "ensemble" and result.meta["judge"] == "DeepSeek"
-    assert "localhost" not in hosts and hosts.count("api.deepseek.com") == 2   # writer + judge
+    assert result.meta["mode"] == "ensemble" and result.meta["judge"] == "Groq"
+    assert "localhost" not in hosts and hosts.count("api.groq.com") == 2   # writer + judge
 
-    # Quick edits go to the primary (DeepSeek), never to the dead localhost server
+    # Quick edits go to the primary (Groq), never to the dead localhost server
     hosts.clear()
     data = asyncio.run(gen_mod._call_model("s", "u", {"name": "t", "input_schema": {"type": "object"}}))
-    assert hosts == ["api.deepseek.com"] and isinstance(data, dict)
+    assert hosts == ["api.groq.com"] and isinstance(data, dict)
 
     with session_scope() as db:
         db.get(AppSetting, credentials.SETTINGS_KEY).value = {}
     credentials.refresh()
 
 
-def test_gemini_failing_still_produces_posts_with_deepseek(client, monkeypatch):
-    """If the Google key turns out to be invalid, DeepSeek alone keeps the pipeline running."""
+def test_mistral_failing_still_produces_posts_with_groq(client, monkeypatch):
+    """If the Mistral key turns out to be invalid, Groq alone keeps the pipeline running."""
     from app.config import get_settings
     s = get_settings()
-    for attr, value in {"gemini_api_key": "AQ.not-a-real-gemini-key", "deepseek_api_key": "sk-env",
-                        "ai_mode": "ensemble", "ai_ensemble": "gemini,deepseek", "ai_primary": "deepseek",
-                        "anthropic_api_key": ""}.items():
+    for attr, value in {"mistral_api_key": "AQ.not-a-real-mistral-key", "groq_api_key": "sk-env",
+                        "ai_mode": "ensemble", "ai_ensemble": "mistral,groq", "ai_primary": "groq"}.items():
         monkeypatch.setattr(s, attr, value)
     credentials.refresh()
 
     def handler(request):
-        if request.url.host == "generativelanguage.googleapis.com":
+        if request.url.host == "api.mistral.ai":
             return httpx.Response(401, json={"error": {"message": "API key not valid"}})
-        return chat(json.dumps(post("من DeepSeek"), ensure_ascii=False))
+        return chat(json.dumps(post("من Groq"), ensure_ascii=False))
 
     install(monkeypatch, handler)
     result = asyncio.run(gen_mod.generate_from_topic(BRAND, GEN, "موضوع"))
-    assert result.hook == "من DeepSeek" and "Gemini" in result.meta["errors"]
+    assert result.hook == "من Groq" and "Mistral" in result.meta["errors"]
 
 
 def test_busy_provider_is_retried_until_it_answers(client, monkeypatch):
-    """Gemini's 503 "high demand" is temporary: wait and try again instead of failing."""
+    """A provider's 503 "high demand" is temporary: wait and try again instead of failing."""
     from app.config import get_settings
     s = get_settings()
-    monkeypatch.setattr(s, "gemini_api_key", "AIza-ok")
-    monkeypatch.setattr(s, "ai_primary", "gemini")
+    monkeypatch.setattr(s, "mistral_api_key", "AIza-ok")
+    monkeypatch.setattr(s, "ai_primary", "mistral")
     monkeypatch.setattr(s, "ai_mode", "single")
-    monkeypatch.setattr(s, "anthropic_api_key", "")
     credentials.refresh()
     calls = []
     busy = {"error": {"code": 503, "message": "This model is currently experiencing high demand.",
@@ -270,10 +267,9 @@ def test_busy_provider_is_retried_until_it_answers(client, monkeypatch):
 def test_busy_provider_gives_a_clear_message_when_it_stays_busy(client, monkeypatch):
     from app.config import get_settings
     s = get_settings()
-    monkeypatch.setattr(s, "gemini_api_key", "AIza-ok")
-    monkeypatch.setattr(s, "ai_primary", "gemini")
+    monkeypatch.setattr(s, "mistral_api_key", "AIza-ok")
+    monkeypatch.setattr(s, "ai_primary", "mistral")
     monkeypatch.setattr(s, "ai_mode", "single")
-    monkeypatch.setattr(s, "anthropic_api_key", "")
     credentials.refresh()
     calls = []
 
@@ -327,3 +323,22 @@ def test_mistral_key_id_warning(client):
         assert any("Mistral" in w for w in warnings)
     finally:
         client.put("/api/settings/credentials", json={"mistral_api_key": None})
+
+
+def test_single_mode_falls_back_to_the_next_engine(client, monkeypatch):
+    """Primary fails → the next ready engine writes the post, and the draft says so."""
+    from app.config import get_settings
+    s = get_settings()
+    for attr, value in {"mistral_api_key": "mk", "groq_api_key": "gsk_x", "openrouter_api_key": "",
+                        "ai_mode": "single", "ai_primary": "mistral"}.items():
+        monkeypatch.setattr(s, attr, value)
+    credentials.refresh()
+
+    def handler(request):
+        if request.url.host == "api.mistral.ai":
+            return httpx.Response(401, json={"message": "Unauthorized"})
+        return chat(json.dumps(post("من Groq"), ensure_ascii=False))
+
+    install(monkeypatch, handler)
+    result = asyncio.run(gen_mod.generate_from_topic(BRAND, GEN, "موضوع"))
+    assert result.hook == "من Groq" and result.meta["engine"] == "groq" and "Mistral" in result.meta["errors"]

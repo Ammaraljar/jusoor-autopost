@@ -33,43 +33,18 @@ class Settings(BaseSettings):
     media_dir: str = "./data/media"
     supabase_bucket: str = "autopost-media"
 
-    # AI — provider can be Claude directly, or any OpenAI-compatible server (AnythingLLM, Ollama, LM Studio, …)
-    ai_provider: str = "anthropic"          # anthropic | openai_compatible
-    ai_base_url: str = ""                   # e.g. https://llm.jusoor.example/api/v1/openai
-    ai_api_key: str = ""
-    ai_model: str = ""                      # AnythingLLM: the workspace slug
+    # AI engines — Mistral, OpenRouter and Groq (all OpenAI-compatible; the dashboard can set them too)
     ai_json_mode: bool = True               # send response_format=json_object on the first try
     ai_timeout_seconds: int = 180
-    # Legacy / Claude-specific names (still supported)
-    anthropic_api_key: str = ""
-    anthropic_model: str = "claude-sonnet-5"
-    # Extra engines (all optional — the dashboard can set them too)
-    gemini_api_key: str = ""
-    gemini_model: str = "gemini-3.8-flash"
-    deepseek_api_key: str = ""
-    deepseek_model: str = "deepseek-flash"
     mistral_api_key: str = ""
     mistral_model: str = "mistral-small-4-0-26-03"
     openrouter_api_key: str = ""
     openrouter_model: str = "openrouter/free"   # free router; any ":free" model id also works
     groq_api_key: str = ""
     groq_model: str = "openai/gpt-oss-120b"
-    ai_mode: str = "single"             # single | ensemble
-    ai_ensemble: str = "gemini,deepseek"
-    ai_primary: str = ""                # claude | gemini | deepseek | mistral | openrouter | groq | custom (judge + quick edits)
-
-    @property
-    def is_openai_compatible(self) -> bool:
-        return self.ai_provider.lower() in ("openai_compatible", "openai", "anythingllm")
-
-    @property
-    def ai_key(self) -> str:
-        """The API key of the active provider."""
-        return self.ai_api_key or ("" if self.is_openai_compatible else self.anthropic_api_key)
-
-    @property
-    def ai_model_name(self) -> str:
-        return self.ai_model or (self.anthropic_model if not self.is_openai_compatible else "")
+    ai_mode: str = "single"                 # single (with automatic fallback) | ensemble
+    ai_ensemble: str = "mistral,groq,openrouter"
+    ai_primary: str = ""                    # mistral | openrouter | groq (judge + quick edits)
 
     # Images
     pexels_api_key: str = ""
