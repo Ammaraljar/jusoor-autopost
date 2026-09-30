@@ -41,6 +41,7 @@ async def health(check: bool = True):
     problems.extend(credentials.ai_warnings())
     return {
         "ok": not problems,
+        "version": credentials.VERSION,
         "environment": s.environment,
         "auth": {
             "mode": s.auth_mode,

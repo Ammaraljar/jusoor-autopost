@@ -23,11 +23,12 @@ function KeyState({ state }) {
   );
 }
 
+const CUSTOM = '__custom__';
+
 function initialForm(v) {
   return {
     ai_mode: v.ai_mode || 'single',
     ai_primary: v.ai_primary || 'mistral',
-    ensemble: (v.ai_ensemble || '').split(',').map((x) => x.trim()).filter(Boolean),
     ...Object.fromEntries(MODEL_FIELDS.map((f) => [f, v[f] || ''])),
     secrets: {},
   };
@@ -38,6 +39,7 @@ export default function KeysCard({ onSaved }) {
   const creds = useLoad(() => api.get('/api/settings/credentials'), []);
   const [form, setForm] = useState(null);
   const [test, setTest] = useState(null);
+  const [customModel, setCustomModel] = useState({});
   const [busy, run] = useAction();
 
   useEffect(() => { if (creds.data) setForm(initialForm(creds.data.values)); }, [creds.data]);
@@ -45,15 +47,18 @@ export default function KeysCard({ onSaved }) {
 
   const values = creds.data.values;
   const engines = values.engines || {};
+  const outdated = !engines.mistral;                 // the server still runs a release without these engines
   const ensembleMode = form.ai_mode === 'ensemble';
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const setSecret = (field, value) => setForm((f) => ({ ...f, secrets: { ...f.secrets, [field]: value } }));
-  const toggleEnsemble = (name) => setForm((f) => ({
-    ...f, ensemble: f.ensemble.includes(name) ? f.ensemble.filter((n) => n !== name) : [...f.ensemble, name],
-  }));
+
+  // An engine is active when it has a saved key, or a key typed in this form
+  const hasKey = (n) => Boolean(values[`${n}_api_key`]?.set || (form.secrets[`${n}_api_key`] || '').trim());
+  const active = ENGINE_ORDER.filter(hasKey);
+  const primary = active.includes(form.ai_primary) ? form.ai_primary : (active[0] || form.ai_primary);
 
   const payload = () => ({
-    ai_mode: form.ai_mode, ai_primary: form.ai_primary, ai_ensemble: form.ensemble.join(','),
+    ai_mode: form.ai_mode, ai_primary: primary,
     ...Object.fromEntries(MODEL_FIELDS.map((f) => [f, form[f]])),
     ...form.secrets,
   });
@@ -95,25 +100,58 @@ export default function KeysCard({ onSaved }) {
 
   const engineBlock = (name) => {
     const info = engines[name] || {};
+    const on = hasKey(name);
+    const field = `${name}_model`;
+    const models = info.models || [];
+    const current = form[field] || info.default_model || '';
+    const known = models.some((m) => m.id === current);
+    const showCustom = customModel[name] || (current && !known);
+    const typed = (form.secrets[`${name}_api_key`] || '').trim();
+    const badPrefix = typed && info.key_prefix && !typed.startsWith(info.key_prefix);
     return (
-      <div key={name} className={`target ${info.ready ? 'on' : ''}`}>
-        <div className="row" style={{ marginBottom: 10 }}>
+      <div key={name} className={`target ${on ? 'on' : ''}`} style={on ? {} : { opacity: 0.85 }}>
+        <div className="row" style={{ marginBottom: 6 }}>
           <b>{info.label}</b>
-          <span className={`pill ${info.ready ? 'ok' : ''}`}>{info.ready ? t('ready') : t('not_ready')}</span>
+          <span className={`pill ${on ? 'ok' : ''}`}>{on ? t('engine_on') : t('engine_off')}</span>
+          {on && primary === name && <span className="pill gold">{ensembleMode ? t('judge') : t('primary')}</span>}
           <div className="spacer" />
-          {ensembleMode && (
-            <label className="check small">
-              <input type="checkbox" checked={form.ensemble.includes(name)} onChange={() => toggleEnsemble(name)} />
-              {t('participates')}
-            </label>
-          )}
+          {info.key_url && <a className="xs" href={info.key_url} target="_blank" rel="noreferrer">{t('get_key')}</a>}
         </div>
+        {info.free && <p className="xs muted" style={{ margin: '0 0 10px' }}>{info.free}</p>}
         <div className="stack" style={{ gap: 10 }}>
-          <Field label={t('model')} hint={info.default_model}>
-            <input className="input ltr" value={form[`${name}_model`]} placeholder={info.default_model}
-              onChange={(e) => set(`${name}_model`, e.target.value)} />
+          <Field label={t('api_key')}>
+            <>
+              <div className="row" style={{ flexWrap: 'nowrap', gap: 8 }}>
+                <input className="input ltr" type="password" autoComplete="new-password"
+                  placeholder={info.key_placeholder || '••••••••'}
+                  value={form.secrets[`${name}_api_key`] ?? ''} onChange={(e) => setSecret(`${name}_api_key`, e.target.value)} />
+                {values[`${name}_api_key`]?.set && values[`${name}_api_key`]?.source === 'dashboard' && (
+                  <Button size="sm" variant="danger" icon={Trash2} busy={busy === `clear-${name}_api_key`}
+                    onClick={() => clear(`${name}_api_key`)} title={t('remove_key')} />
+                )}
+              </div>
+              <KeyState state={values[`${name}_api_key`]} />
+              {badPrefix && <span className="xs" style={{ color: 'var(--warn)' }}>{t('key_prefix_warn')} {info.key_prefix}</span>}
+            </>
           </Field>
-          <Field label={t('api_key')} hint={info.key_hint}>{secretInput(`${name}_api_key`)}</Field>
+          <Field label={t('model')}>
+            <>
+              <select className="select ltr" value={showCustom ? CUSTOM : current}
+                onChange={(e) => {
+                  if (e.target.value === CUSTOM) { setCustomModel((c) => ({ ...c, [name]: true })); return; }
+                  setCustomModel((c) => ({ ...c, [name]: false }));
+                  set(field, e.target.value);
+                }}>
+                {models.map((m) => <option key={m.id} value={m.id}>{m.id} — {m.note}</option>)}
+                <option value={CUSTOM}>{t('other_model')}</option>
+              </select>
+              {showCustom && (
+                <input className="input ltr" style={{ marginTop: 6 }} value={form[field]}
+                  placeholder={name === 'openrouter' ? 'vendor/model:free' : info.default_model}
+                  onChange={(e) => set(field, e.target.value)} />
+              )}
+            </>
+          </Field>
         </div>
       </div>
     );
@@ -126,6 +164,15 @@ export default function KeysCard({ onSaved }) {
         <p className="small muted" style={{ marginTop: -8 }}>{t('keys_sub')}</p>
       </div>
 
+      {outdated && (
+        <div className="banner danger small" style={{ margin: 0 }}>
+          <AlertTriangle size={16} /> {t('server_outdated')}
+        </div>
+      )}
+
+      <b className="small">{t('engines')}</b>
+      <div className="target-grid">{ENGINE_ORDER.map(engineBlock)}</div>
+
       <div className="grid grid-2">
         <Field label={t('ai_mode')}>
           <select className="select" value={form.ai_mode} onChange={(e) => set('ai_mode', e.target.value)}>
@@ -134,21 +181,26 @@ export default function KeysCard({ onSaved }) {
           </select>
         </Field>
         <Field label={ensembleMode ? t('primary_ensemble') : t('primary_single')}>
-          <select className="select" value={form.ai_primary} onChange={(e) => set('ai_primary', e.target.value)}>
-            {ENGINE_ORDER.map((n) => <option key={n} value={n}>{engines[n]?.label || n}</option>)}
-          </select>
+          {active.length ? (
+            <select className="select" value={primary} onChange={(e) => set('ai_primary', e.target.value)}>
+              {active.map((n) => <option key={n} value={n}>{engines[n]?.label || n}</option>)}
+            </select>
+          ) : <span className="small muted">{t('no_engine_key')}</span>}
         </Field>
       </div>
-
-      <b className="small">{t('engines')}</b>
-      <div className="target-grid">{ENGINE_ORDER.map(engineBlock)}</div>
+      <p className="xs muted" style={{ marginTop: -6 }}>
+        {active.length === 0 ? t('no_engine_key')
+          : ensembleMode
+            ? `${t('ensemble_auto')} ${active.map((n) => engines[n]?.label).join(' + ')}`
+            : `${t('single_auto')} ${active.filter((n) => n !== primary).map((n) => engines[n]?.label).join('، ') || '—'}`}
+      </p>
 
       {(values.warnings || []).map((w) => (
         <div key={w} className="banner warn small" style={{ margin: 0 }}><AlertTriangle size={16} /> {w}</div>
       ))}
 
       <div className="row">
-        <Button variant="primary" icon={Save} busy={busy === 'save'} disabled={!dirty} onClick={save}>{t('save')}</Button>
+        <Button variant="primary" icon={Save} busy={busy === 'save'} disabled={!dirty || outdated} onClick={save}>{t('save')}</Button>
         <Button icon={PlugZap} busy={busy === 'test'} disabled={dirty} onClick={runTest}>{t('test_connection')}</Button>
         {dirty && <span className="xs muted">{t('save_first')}</span>}
       </div>
@@ -169,7 +221,7 @@ export default function KeysCard({ onSaved }) {
       ))}
       <p className="xs muted">{t('key_hint')}</p>
       <div>
-        <Button variant="primary" icon={Save} busy={busy === 'save'} disabled={!dirty} onClick={save}>{t('save')}</Button>
+        <Button variant="primary" icon={Save} busy={busy === 'save'} disabled={!dirty || outdated} onClick={save}>{t('save')}</Button>
       </div>
     </div>
   );

@@ -153,7 +153,7 @@ def test_ensemble_warnings(client):
     client.put("/api/settings/credentials", json={"ai_mode": "ensemble", "ai_ensemble": "mistral,groq",
                                                   "groq_api_key": "not-a-groq-key"})
     warnings = client.get("/api/settings/credentials").json()["values"]["warnings"]
-    assert any("محرّكين" in w for w in warnings)          # only one engine ready
+    assert any("مفتاحين" in w for w in warnings)          # only one engine has a key
     assert any("gsk_" in w for w in warnings)             # key format hint
     client.put("/api/settings/credentials", json={f: None for f in credentials.FIELDS})
     credentials.refresh()
@@ -342,3 +342,32 @@ def test_single_mode_falls_back_to_the_next_engine(client, monkeypatch):
     install(monkeypatch, handler)
     result = asyncio.run(gen_mod.generate_from_topic(BRAND, GEN, "موضوع"))
     assert result.hook == "من Groq" and result.meta["engine"] == "groq" and "Mistral" in result.meta["errors"]
+
+
+def test_each_engine_gets_a_request_suited_to_it():
+    base = {"model": "", "messages": [], "max_tokens": 3000, "temperature": 0.6,
+            "response_format": {"type": "json_object"}}
+    groq = dict(base, model="openai/gpt-oss-120b")
+    gen_mod._tune_payload({"name": "groq", "model": "openai/gpt-oss-120b"}, groq)
+    assert groq["reasoning_effort"] == "low" and groq["max_tokens"] >= 8000
+    mistral = dict(base)
+    gen_mod._tune_payload({"name": "mistral", "model": "mistral-small-4-0-26-03"}, mistral)
+    assert mistral["temperature"] <= 0.5 and "reasoning_effort" not in mistral
+    orr = dict(base)
+    gen_mod._tune_payload({"name": "openrouter", "model": "openrouter/free"}, orr)
+    assert orr["provider"] == {"require_parameters": True}
+
+
+def test_only_engines_with_keys_take_part(client, monkeypatch):
+    from app.config import get_settings
+    s = get_settings()
+    for attr, value in {"mistral_api_key": "mk", "groq_api_key": "", "openrouter_api_key": "sk-or-x",
+                        "ai_mode": "ensemble", "ai_ensemble": "groq", "ai_primary": "groq"}.items():
+        monkeypatch.setattr(s, attr, value)
+    credentials.refresh()
+    cfg = credentials.current()
+    assert credentials.ensemble_engines(cfg) == ["mistral", "openrouter"]
+    assert cfg["ai_primary"] == "mistral"                     # groq has no key → not used
+    view = client.get("/api/settings/credentials").json()["values"]
+    assert view["ready"] == ["mistral", "openrouter"] and view["version"].startswith("3.")
+    assert view["engines"]["groq"]["models"][0]["id"] == "openai/gpt-oss-120b"

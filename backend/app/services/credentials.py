@@ -11,7 +11,7 @@ openrouter  OpenRouter — one key for many models, including free ones (openrou
 groq        Groq — fast, with a free tier
 
 Mode ``single`` uses the primary engine (and falls back to the other ready engines if it fails).
-Mode ``ensemble`` asks every selected engine at the same time and lets a judge (the primary
+Mode ``ensemble`` asks every engine that has a key at the same time and lets a judge (the primary
 engine) pick the best post.
 """
 from __future__ import annotations
@@ -25,14 +25,42 @@ from ..config import get_settings
 from ..db import AppSetting, session_scope
 
 SETTINGS_KEY = "credentials"
+VERSION = "3.0-mistral-openrouter-groq"
 
-ENGINES: dict[str, dict[str, str]] = {
-    "mistral": {"label": "Mistral", "kind": "openai", "base_url": "https://api.mistral.ai/v1",
-                "default_model": "mistral-small-4-0-26-03", "key_hint": "console.mistral.ai → API Keys"},
-    "openrouter": {"label": "OpenRouter", "kind": "openai", "base_url": "https://openrouter.ai/api/v1",
-                   "default_model": "openrouter/free", "key_hint": "openrouter.ai/keys → sk-or-…"},
-    "groq": {"label": "Groq", "kind": "openai", "base_url": "https://api.groq.com/openai/v1",
-             "default_model": "openai/gpt-oss-120b", "key_hint": "console.groq.com/keys → gsk_…"},
+# Each engine carries what its own environment needs: suggested models, the key's format,
+# where to get the key, and request tweaks applied in generator._tune_payload().
+ENGINES: dict[str, dict[str, Any]] = {
+    "mistral": {
+        "label": "Mistral", "kind": "openai", "base_url": "https://api.mistral.ai/v1",
+        "default_model": "mistral-small-4-0-26-03",
+        "models": [
+            {"id": "mistral-small-4-0-26-03", "note": "سريع واقتصادي — مناسب للمنشورات"},
+            {"id": "mistral-medium-3-5-26-04", "note": "جودة أعلى"},
+            {"id": "mistral-large-3-25-12", "note": "الأقوى — أبطأ"},
+        ],
+        "key_url": "https://console.mistral.ai/api-keys", "key_prefix": "", "key_placeholder": "مفتاح من 32 حرفًا",
+        "free": "خطة Experiment مجانية بحدود استخدام",
+    },
+    "openrouter": {
+        "label": "OpenRouter", "kind": "openai", "base_url": "https://openrouter.ai/api/v1",
+        "default_model": "openrouter/free",
+        "models": [
+            {"id": "openrouter/free", "note": "يختار نموذجًا مجانيًا يدعم JSON تلقائيًا"},
+        ],
+        "key_url": "https://openrouter.ai/keys", "key_prefix": "sk-or-", "key_placeholder": "sk-or-v1-…",
+        "free": "مجاني بحد يومي للطلبات — أي نموذج ينتهي بـ :free",
+    },
+    "groq": {
+        "label": "Groq", "kind": "openai", "base_url": "https://api.groq.com/openai/v1",
+        "default_model": "openai/gpt-oss-120b",
+        "models": [
+            {"id": "openai/gpt-oss-120b", "note": "الأفضل للعربية على Groq"},
+            {"id": "openai/gpt-oss-20b", "note": "أسرع وأخف"},
+            {"id": "qwen/qwen3.8-27b", "note": "تجريبي (Preview)"},
+        ],
+        "key_url": "https://console.groq.com/keys", "key_prefix": "gsk_", "key_placeholder": "gsk_…",
+        "free": "خطة مجانية بحدود في الدقيقة واليوم",
+    },
 }
 ENGINE_ORDER = ("mistral", "groq", "openrouter")   # preference when no primary is chosen
 
@@ -149,9 +177,8 @@ def fallback_order(values: dict[str, str] | None = None) -> list[str]:
 
 
 def ensemble_engines(values: dict[str, str] | None = None) -> list[str]:
-    """Engines that take part in parallel generation (only the ready ones)."""
-    v = values or current()
-    return [n for n in _names(v.get("ai_ensemble", "")) if _ready(n, v)]
+    """Parallel generation uses every engine that has an API key — nothing else to configure."""
+    return ready_engines(values)
 
 
 def ai_warnings(values: dict[str, str] | None = None) -> list[str]:
@@ -160,8 +187,8 @@ def ai_warnings(values: dict[str, str] | None = None) -> list[str]:
     out: list[str] = []
     if not ready_engines(v):
         out.append("لا يوجد محرّك ذكاء اصطناعي جاهز — أضف مفتاح Mistral أو OpenRouter أو Groq")
-    if v.get("ai_mode") == "ensemble" and len(ensemble_engines(v)) < 2:
-        out.append("وضع التوازي يحتاج محرّكين جاهزين على الأقل — سيعمل حاليًا بمحرّك واحد")
+    if v.get("ai_mode") == "ensemble" and len(ensemble_engines(v)) == 1:
+        out.append("وضع التوازي يحتاج مفتاحين على الأقل — يعمل حاليًا بمحرّك واحد")
 
     mistral_key = v.get("mistral_api_key", "")
     if mistral_key and re.fullmatch(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
@@ -189,9 +216,15 @@ def public_view() -> dict[str, Any]:
         else:
             out[field] = values[field]
     out["engines"] = {name: {"label": ENGINES[name]["label"], "ready": _ready(name, values),
+                             "model": engine(name, values)["model"],
                              "default_model": ENGINES[name]["default_model"],
-                             "key_hint": ENGINES[name]["key_hint"]}
+                             "models": ENGINES[name]["models"], "key_url": ENGINES[name]["key_url"],
+                             "key_prefix": ENGINES[name]["key_prefix"],
+                             "key_placeholder": ENGINES[name]["key_placeholder"],
+                             "free": ENGINES[name]["free"]}
                       for name in ENGINE_ORDER}
+    out["ready"] = ready_engines(values)
+    out["version"] = VERSION
     out["warnings"] = ai_warnings(values)
     return out
 

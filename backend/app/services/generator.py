@@ -212,6 +212,22 @@ def _schema_prompt(user: str, tool: dict[str, Any]) -> str:
             f"{json.dumps(tool['input_schema'], ensure_ascii=False)}")
 
 
+def _tune_payload(cfg: dict[str, str], payload: dict[str, Any]) -> None:
+    """Per-engine adjustments so each provider gets a request it handles well."""
+    name, model = cfg["name"], (cfg["model"] or "").lower()
+    if name == "groq" and model.startswith("openai/gpt-oss"):
+        # Reasoning model: thinking tokens count toward the limit, so keep it short and leave room.
+        payload["reasoning_effort"] = "low"
+        payload["max_tokens"] = max(payload["max_tokens"], 8000)
+    elif name == "mistral":
+        payload["temperature"] = min(payload["temperature"], 0.5)   # steadier JSON on Mistral
+    elif name == "openrouter":
+        payload["max_tokens"] = max(payload["max_tokens"], 4000)
+        if "response_format" in payload:
+            # Route only to free models that accept every parameter we send (JSON mode included).
+            payload["provider"] = {"require_parameters": True}
+
+
 async def _call_openai_compatible(cfg: dict[str, str], system: str, user: str, tool: dict[str, Any],
                                   max_tokens: int = 3000) -> dict[str, Any]:
     """Mistral, OpenRouter, Groq: ask for JSON in the prompt, then parse it defensively."""
@@ -238,6 +254,7 @@ async def _call_openai_compatible(cfg: dict[str, str], system: str, user: str, t
                                        "max_tokens": max_tokens, "temperature": 0.6, "stream": False}
             if json_mode:
                 payload["response_format"] = {"type": "json_object"}
+            _tune_payload(cfg, payload)
             try:
                 resp = await client.post(url, json=payload, headers=headers)
             except httpx.ConnectError as exc:
