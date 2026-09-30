@@ -12,6 +12,7 @@ import httpx
 from fastapi import Depends, HTTPException, Request, status
 
 from .config import get_settings
+from .security import read_token
 
 log = logging.getLogger(__name__)
 _cache: dict[str, tuple[float, dict]] = {}
@@ -21,6 +22,10 @@ CACHE_SECONDS = 60
 def _config_error() -> str | None:
     """Server-side misconfiguration that makes any login impossible."""
     s = get_settings()
+    if s.auth_mode == "internal":
+        return None
+    if s.auth_mode == "unconfigured":
+        return ("لا توجد طريقة دخول مضبوطة — أضف ADMIN_EMAIL و ADMIN_PASSWORD في الخادم")
     if not s.supabase_base:
         return "SUPABASE_URL غير مضبوط في الخادم"
     kind = s.anon_key_kind
@@ -35,6 +40,8 @@ def _config_error() -> str | None:
 async def check_supabase_key() -> dict:
     """Live check of the SUPABASE_URL + SUPABASE_ANON_KEY pair (no user session needed)."""
     s = get_settings()
+    if s.auth_mode != "supabase":
+        return {"ok": True, "mode": s.auth_mode}
     problem = _config_error()
     if problem:
         return {"ok": False, "error": problem, "key_kind": s.anon_key_kind, "url": s.supabase_base}
@@ -99,7 +106,15 @@ async def current_user(request: Request) -> dict:
     header = request.headers.get("Authorization", "")
     if not header.lower().startswith("bearer "):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "مطلوب تسجيل الدخول")
-    user = await _verify_with_supabase(header.split(" ", 1)[1].strip())
+    token = header.split(" ", 1)[1].strip()
+
+    if s.auth_mode == "internal":
+        payload = read_token(token)
+        if not payload:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "انتهت صلاحية الجلسة، سجّل الدخول من جديد")
+        return {"id": "admin", "email": payload.get("email")}
+
+    user = await _verify_with_supabase(token)
     allowed = s.allowed_email_list
     email = (user.get("email") or "").lower()
     if allowed and email not in allowed:

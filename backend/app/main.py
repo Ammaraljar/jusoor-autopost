@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
 from .db import init_db, session_scope
-from .routes import brands, drafts, planning, sources, system
+from .routes import auth_routes, brands, drafts, planning, sources, system
 from .services.jobs import jobs
 from .services.pipeline import ensure_default_brand
 from .services.renderer import renderer
@@ -36,7 +36,7 @@ app = FastAPI(title=settings.app_name, lifespan=lifespan,
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origin_list, allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])
 
-for r in (system.router, drafts.router, sources.router, planning.router, brands.router):
+for r in (system.router, auth_routes.router, drafts.router, sources.router, planning.router, brands.router):
     app.include_router(r)
 
 if settings.storage_backend == "local":

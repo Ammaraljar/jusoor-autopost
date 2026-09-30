@@ -28,7 +28,11 @@ async def health(check: bool = True):
     problems: list[str] = []
     if auth_check and not auth_check.get("ok"):
         problems.append(auth_check.get("error", "إعداد Supabase غير صحيح"))
-    if not s.allowed_email_list and not s.auth_disabled:
+    if s.auth_mode == "unconfigured":
+        problems.append("لا توجد طريقة دخول — أضف ADMIN_EMAIL و ADMIN_PASSWORD")
+    if s.auth_mode == "internal" and len(s.admin_password) < 8:
+        problems.append("ADMIN_PASSWORD قصيرة جدًا — استخدم 8 أحرف على الأقل")
+    if s.auth_mode == "supabase" and not s.allowed_email_list:
         problems.append("ALLOWED_EMAILS فارغ — أي حساب في مشروع Supabase يستطيع الدخول")
     if not s.supabase_service_role_key and s.storage_backend == "supabase":
         problems.append("SUPABASE_SERVICE_ROLE_KEY غير مضبوط — رفع صور المنشورات سيفشل")
@@ -40,6 +44,8 @@ async def health(check: bool = True):
         "ok": not problems,
         "environment": s.environment,
         "auth": {
+            "mode": s.auth_mode,
+            "admin_email": "set" if s.admin_email else "missing",
             "supabase_url": s.supabase_base or None,
             "anon_key": s.anon_key_kind,
             "service_role_key": "set" if s.supabase_service_role_key else "missing",

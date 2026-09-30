@@ -15,7 +15,13 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173"
     timezone: str = "Asia/Kuala_Lumpur"
 
-    # Auth (Supabase)
+    # Auth — internal (email + password from the environment) or Supabase
+    admin_email: str = ""
+    admin_password: str = ""
+    secret_key: str = ""                # signs the dashboard session token
+    session_hours: int = 720            # 30 days
+
+    # Auth (Supabase — only when internal credentials are not set)
     supabase_url: str = ""
     supabase_anon_key: str = ""
     supabase_service_role_key: str = ""
@@ -64,6 +70,25 @@ class Settings(BaseSettings):
 
     # Scheduler
     scheduler_enabled: bool = True
+
+    @property
+    def auth_mode(self) -> str:
+        """internal = e-mail/password kept in the environment, supabase = Supabase Auth."""
+        if self.auth_disabled:
+            return "disabled"
+        if self.admin_email and self.admin_password:
+            return "internal"
+        if self.supabase_url:
+            return "supabase"
+        return "unconfigured"
+
+    @property
+    def token_secret(self) -> str:
+        """Key that signs session tokens; derived from the password when SECRET_KEY is unset."""
+        if self.secret_key:
+            return self.secret_key
+        import hashlib
+        return hashlib.sha256(f"jusoor-autopost::{self.admin_password}".encode()).hexdigest()
 
     @property
     def supabase_base(self) -> str:

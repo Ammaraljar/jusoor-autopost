@@ -59,7 +59,7 @@ Claude API ──► عنوان + نص + هاشتاقات + شرائح + CTA + �
 |---|---|
 | لوحة التحكم | React 18 + Vite، وخط Cairo، وأيقونات Lucide، وCSS خاص بهوية جسور (بدون Bootstrap) |
 | الخادم | Python 3.11 + FastAPI + SQLAlchemy + APScheduler |
-| قاعدة البيانات وتسجيل الدخول وتخزين الصور | Supabase (PostgreSQL وAuth وStorage) |
+| قاعدة البيانات وتسجيل الدخول والتخزين | داخلي: SQLite أو PostgreSQL + دخول ببريد وكلمة مرور + قرص دائم — أو Supabase اختياريًا |
 | الذكاء الاصطناعي | **Claude API** (مخرجات منظّمة عبر tool use) أو أي خادم متوافق مع OpenAI مثل **AnythingLLM** |
 | سحب الأخبار | httpx + BeautifulSoup + trafilatura + feedparser |
 | تصميم الشرائح | HTML → JPEG عبر Chromium (Playwright)، لضمان تشكيل عربي صحيح |
@@ -117,49 +117,49 @@ npm run dev                              # http://localhost:5173
 
 ---
 
-## النشر على الإنترنت
+## النشر على الإنترنت (الطريقة المبسّطة)
 
-### 1) Supabase
+كل شيء داخل خدمتين فقط: **Railway** للخادم وقاعدة البيانات والصور، و**Vercel** للوحة. لا حاجة إلى Supabase ولا إلى أي مفاتيح خارجية.
 
-1. أنشئ مشروعًا جديدًا (المنطقة المقترحة: Singapore).
-2. افتح **SQL Editor** وشغّل الملف `supabase/schema.sql`. سينشئ الجداول ويفعّل RLS، وينشئ حاوية الصور العامة `autopost-media`.
-3. من **Authentication → Users → Add user** أنشئ حسابك (بريد وكلمة مرور)، ثم عطّل التسجيل العام من **Authentication → Sign In / Providers**.
-4. احتفظ بهذه القيم:
-   - `Project URL`
-   - مفتاح `anon`
-   - مفتاح `service_role` (سري، للخادم فقط)
-   - رابط قاعدة البيانات من **Connect → Session pooler**
+### 1) الخادم على Railway
 
-### 2) الخادم على Railway
-
-1. **New Project → Deploy from GitHub** واختر مجلد `backend`. سيبني Railway الملف `Dockerfile` تلقائيًا.
-2. أضف المتغيرات من `backend/.env.example`، وأهمها:
+1. **New Project → Deploy from GitHub repo**، واضبط **Root Directory** على `backend`.
+2. **Settings → Volumes → Add Volume** ومسار التركيب: `/app/data`
+   هذا القرص الدائم يحفظ قاعدة البيانات والصور بين عمليات النشر، وبدونه تضيع بياناتك مع كل تحديث.
+3. **Variables** — أضف:
 
 | المتغير | القيمة |
 |---|---|
-| `DATABASE_URL` | رابط Session pooler (المنفذ 5432) |
-| `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` | من Supabase |
-| `ALLOWED_EMAILS` | بريدك (ومن تريد إضافته) |
-| `STORAGE_BACKEND` | `supabase` |
-| `CORS_ORIGINS` | رابط الواجهة على Vercel |
-| `AI_PROVIDER` | `anthropic` أو `openai_compatible` |
-| `ANTHROPIC_API_KEY` | من console.anthropic.com (عند اختيار anthropic) |
-| `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | عند اختيار AnythingLLM أو أي خادم متوافق مع OpenAI |
-| `PEXELS_API_KEY` | من pexels.com/api (مجاني) |
-| `BUFFER_API_KEY` / `META_ACCESS_TOKEN` / `UPLOADPOST_API_KEY` | حسب ما تستخدمه |
+| `DATABASE_URL` | `sqlite:////app/data/autopost.db` |
+| `MEDIA_DIR` | `/app/data/media` |
+| `STORAGE_BACKEND` | `local` |
+| `PUBLIC_BASE_URL` | رابط الخدمة على Railway |
+| `CORS_ORIGINS` | رابط اللوحة على Vercel |
+| `ADMIN_EMAIL` | بريدك |
+| `ADMIN_PASSWORD` | كلمة مرور قوية تختارها |
+| `SECRET_KEY` | نص عشوائي طويل |
+| `ANTHROPIC_API_KEY` أو إعدادات AnythingLLM | حسب المحرّك الذي تستخدمه |
+| `PEXELS_API_KEY` | اختياري لكن مفيد |
 
-3. اترك عدد النسخ **1**. المجدول الداخلي يعمل داخل الخادم، وتعدد النسخ يكرر السحب والنشر.
+4. **Settings → Networking → Generate Domain** للحصول على الرابط العام.
 
-### 3) الواجهة على Vercel
+عدد النسخ يبقى **1**، لأن المجدول الداخلي يعمل داخل الخادم.
 
-1. **New Project** واختر مجلد `frontend` (Framework: Vite).
-2. أضف المتغيرات:
-   - `VITE_API_URL`: رابط الخادم على Railway
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
-3. يمكنك ربط نطاق فرعي مثل `autopost.jusoortravel.com`، ثم إضافته إلى `CORS_ORIGINS` في Railway.
+> لاحقًا إن كبرت البيانات: أضف **Postgres** إلى مشروع Railway واجعل `DATABASE_URL = ${{Postgres.DATABASE_URL}}`. النظام يعمل على الاثنين.
 
----
+### 2) اللوحة على Vercel
+
+1. **Add New → Project** من نفس المستودع، و**Root Directory** = `frontend`.
+2. متغيّر واحد فقط: `VITE_API_URL` = رابط الخادم على Railway.
+3. **لا تضف** `VITE_SUPABASE_URL` ولا `VITE_SUPABASE_ANON_KEY`؛ وجودهما يحوّل اللوحة إلى وضع Supabase.
+
+### 3) الدخول
+
+افتح رابط Vercel وسجّل الدخول بالبريد وكلمة المرور اللذين وضعتهما في Railway. لتغيير كلمة المرور لاحقًا، غيّر `ADMIN_PASSWORD` في Railway — وتُلغى كل الجلسات القديمة تلقائيًا.
+
+### البديل: Supabase
+
+النظام ما زال يدعم Supabase (قاعدة بيانات وتسجيل دخول وتخزين). لتفعيله: شغّل `supabase/schema.sql`، واضبط `SUPABASE_URL` و`SUPABASE_ANON_KEY` و`SUPABASE_SERVICE_ROLE_KEY` و`ALLOWED_EMAILS` و`STORAGE_BACKEND=supabase`، واترك `ADMIN_EMAIL` و`ADMIN_PASSWORD` فارغين، وأضف `VITE_SUPABASE_URL` و`VITE_SUPABASE_ANON_KEY` في Vercel.
 
 ## اختيار محرّك الذكاء الاصطناعي (Claude أو AnythingLLM)
 
@@ -268,6 +268,8 @@ AI_JSON_MODE=true
 
 | ما تراه | المعنى |
 |---|---|
+| `"mode": "internal"` | الدخول الداخلي مفعّل (بريد وكلمة مرور) |
+| `"mode": "unconfigured"` | لا `ADMIN_EMAIL`/`ADMIN_PASSWORD` ولا إعداد Supabase |
 | `"anon_key": "secret_key_wrong"` | وضعت المفتاح السري بدل مفتاح anon في `SUPABASE_ANON_KEY` |
 | `"anon_key": "missing"` | المتغير غير موجود في الخادم |
 | `"supabase_check": {"ok": false, ...}` | الرابط والمفتاح لا يخصان نفس المشروع |

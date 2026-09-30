@@ -163,13 +163,17 @@ def test_health_reports_supabase_misconfiguration(client, monkeypatch):
     assert any("SUPABASE_ANON_KEY" in p for p in body["problems"])
 
 
-def test_health_flags_missing_url(client, monkeypatch):
+def test_health_flags_missing_supabase_key(client, monkeypatch):
     from app.config import get_settings
     s = get_settings()
     monkeypatch.setattr(s, "auth_disabled", False)
-    monkeypatch.setattr(s, "supabase_url", "")
+    monkeypatch.setattr(s, "admin_email", "")
+    monkeypatch.setattr(s, "admin_password", "")
+    monkeypatch.setattr(s, "supabase_url", "https://proj.supabase.co")
+    monkeypatch.setattr(s, "supabase_anon_key", "")
     body = client.get("/api/health").json()
-    assert any("SUPABASE_URL" in p for p in body["problems"])
+    assert body["auth"]["mode"] == "supabase"
+    assert any("SUPABASE_ANON_KEY" in p for p in body["problems"])
 
 
 def test_protected_route_explains_server_misconfiguration(client, monkeypatch):

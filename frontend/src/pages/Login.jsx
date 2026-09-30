@@ -28,7 +28,7 @@ export default function Login() {
     setBusy(true);
     setError('');
     const { error: err } = await signIn(email.trim(), password);
-    if (err) setError(err.message);
+    if (err) setError(err.message || t('error'));
     setBusy(false);
   };
 

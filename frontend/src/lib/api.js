@@ -1,6 +1,20 @@
 import { supabase } from './supabase';
 
 const BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+const TOKEN_KEY = 'autopost-token';
+
+let internalToken = (() => {
+  try { return localStorage.getItem(TOKEN_KEY); } catch { return null; }
+})();
+
+/** Store (or clear) the session token issued by our own backend. */
+export function setInternalToken(token) {
+  internalToken = token || null;
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+  } catch { /* ignore */ }
+}
 
 export class ApiError extends Error {
   constructor(message, status) {
@@ -10,7 +24,7 @@ export class ApiError extends Error {
 }
 
 async function authHeader() {
-  if (!supabase) return {};
+  if (!supabase) return internalToken ? { Authorization: `Bearer ${internalToken}` } : {};
   const { data } = await supabase.auth.getSession();
   const token = data?.session?.access_token;
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -38,11 +52,15 @@ async function request(method, path, body, { raw = false } = {}) {
       message = typeof data.detail === 'string' ? data.detail
         : Array.isArray(data.detail) ? data.detail.map((d) => d.msg).join('، ') : message;
     } catch { /* not json */ }
-    if (res.status === 401 && supabase) {
-      // The server rejected the session: sign out, but keep the reason for the login screen
-      // instead of looping silently.
-      try { sessionStorage.setItem('auth-error', message); } catch { /* ignore */ }
-      await supabase.auth.signOut();
+    if (res.status === 401 && !path.startsWith('/api/auth/')) {
+      // A session that the server rejected: end it and keep the reason for the login screen
+      // instead of looping silently. A plain "not signed in" answer is not an error worth showing.
+      const hadSession = Boolean(internalToken || supabase);
+      if (hadSession) {
+        try { sessionStorage.setItem('auth-error', message); } catch { /* ignore */ }
+      }
+      if (supabase) await supabase.auth.signOut();
+      else if (internalToken) { setInternalToken(null); window.location.reload(); }
     }
     throw new ApiError(message, res.status);
   }
