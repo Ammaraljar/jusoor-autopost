@@ -94,7 +94,9 @@ def collect_source(source_id: int) -> dict:
                         art.published_at = art.published_at or item.published_at
                     except Exception as exc:  # noqa: BLE001
                         log.warning("article fetch failed %s: %s", item.url, exc)
-                        continue
+                        if len(item.body) < 250:     # RSS text is enough when the page itself is blocked
+                            continue
+                        art = item
                 status_value, note = "new", None
                 if len(art.body) < 250:
                     status_value, note = "skipped", "نص المقال قصير جدًا"
@@ -114,9 +116,9 @@ def collect_source(source_id: int) -> dict:
             return {"ok": True, "new_articles": created}
         except Exception as exc:  # noqa: BLE001
             source.health = "failing"
-            source.last_error = str(exc)[:1000]
+            source.last_error = scraper.friendly_error(exc)[:1000]
             log.exception("collect failed for source %s", source_id)
-            return {"ok": False, "error": str(exc)[:300]}
+            return {"ok": False, "error": scraper.friendly_error(exc)[:300]}
 
 
 def due_sources() -> list[int]:

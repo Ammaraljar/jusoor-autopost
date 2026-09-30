@@ -162,7 +162,12 @@ def fetch_feed(feed_url: str, limit: int = 20) -> tuple[list[ScrapedArticle], in
         published = None
         if entry.get("published_parsed"):
             published = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
-        summary = BeautifulSoup(entry.get("summary", ""), "html.parser").get_text(" ", strip=True)
+        # Many feeds (WordPress) carry the full article in content:encoded — prefer it over the summary
+        html = ""
+        for part in entry.get("content") or []:
+            if len(part.get("value", "")) > len(html):
+                html = part.get("value", "")
+        summary = BeautifulSoup(html or entry.get("summary", ""), "html.parser").get_text(" ", strip=True)
         items.append(ScrapedArticle(url=entry.get("link", ""), title=entry.get("title", ""), body=summary,
                                     image_url=image, published_at=published))
     return [i for i in items if i.url], status
@@ -197,4 +202,21 @@ def test_source(source) -> dict:
         return {"ok": bool(result.links), "http_status": result.http_status, "count": len(result.links),
                 "links": result.links, "samples": samples}
     except Exception as exc:  # noqa: BLE001 - report any failure to the UI
-        return {"ok": False, "error": str(exc)[:500]}
+        return {"ok": False, "error": friendly_error(exc)}
+
+
+def friendly_error(exc: Exception) -> str:
+    """Explain the usual failures in plain Arabic."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        code = exc.response.status_code
+        url = str(exc.request.url)
+        if code in (401, 403, 429):
+            return (f"الموقع رفض الطلب (خطأ {code}): هذا الموقع يمنع السحب الآلي من صفحاته. "
+                    "استخدم رابط RSS الخاص به إن وُجد (نوع المصدر RSS)، أو اختر مصدرًا آخر. "
+                    f"الرابط: {url}")
+        if code == 404:
+            return f"الصفحة غير موجودة (404): {url}"
+        return f"الموقع أعاد خطأ {code}: {url}"
+    if isinstance(exc, httpx.TimeoutException):
+        return "انتهت مهلة الاتصال بالموقع — أعد المحاولة لاحقًا"
+    return str(exc)[:500]
