@@ -169,6 +169,11 @@ class AIError(RuntimeError):
     """A readable, user-facing failure of an AI engine."""
 
 
+# Provider-side overload or rate limit: retried after a short pause (seconds between attempts).
+TRANSIENT_STATUSES = (429, 500, 502, 503, 504)
+RETRY_DELAYS: tuple[float, ...] = (3, 8, 15)
+
+
 # ============================================================ Claude (tool use)
 async def _call_claude(cfg: dict[str, str], system: str, user: str, tool: dict[str, Any],
                        max_tokens: int = 3000) -> dict[str, Any]:
@@ -259,12 +264,17 @@ async def _call_openai_compatible(cfg: dict[str, str], system: str, user: str, t
         raise AIError(f"مفتاح {label} غير مضبوط")
     url = cfg["base_url"].rstrip("/") + "/chat/completions"
     headers = {"Authorization": f"Bearer {cfg['api_key']}", "Content-Type": "application/json"}
+    if cfg["name"] == "openrouter":            # optional attribution headers OpenRouter recommends
+        headers["HTTP-Referer"] = s.public_base_url or "https://jusoor-autopost.app"
+        headers["X-Title"] = "JUSOOR AutoPost"
     messages = [{"role": "system", "content": system}, {"role": "user", "content": _schema_prompt(user, tool)}]
     json_mode = s.ai_json_mode
     last_error = ""
+    json_retries = 0
+    transient = 0
 
     async with httpx.AsyncClient(timeout=s.ai_timeout_seconds) as client:
-        for attempt in range(3):
+        while True:
             payload: dict[str, Any] = {"model": cfg["model"], "messages": messages,
                                        "max_tokens": max_tokens, "temperature": 0.6, "stream": False}
             if json_mode:
@@ -278,12 +288,23 @@ async def _call_openai_compatible(cfg: dict[str, str], system: str, user: str, t
                 raise AIError(f"{label}: انتهت مهلة الاتصال ({s.ai_timeout_seconds} ثانية)") from exc
             except httpx.TransportError as exc:
                 raise AIError(f"{label}: تعذّر الوصول إلى {cfg['base_url']} ({exc})") from exc
+
+            # Overload / rate limit on the provider's side: wait and try again.
+            if resp.status_code in TRANSIENT_STATUSES:
+                if transient < len(RETRY_DELAYS):
+                    log.warning("%s busy (%s), retrying in %ss", label, resp.status_code, RETRY_DELAYS[transient])
+                    await asyncio.sleep(RETRY_DELAYS[transient])
+                    transient += 1
+                    continue
+                if resp.status_code == 429:
+                    raise AIError(f"{label}: تجاوزت حد الطلبات أو الحصة المجانية — انتظر قليلًا ثم أعد المحاولة")
+                raise AIError(f"{label} مشغول حاليًا بسبب ضغط الطلبات عنده (خطأ {resp.status_code}) — "
+                              "المفتاح صالح، والمشكلة مؤقتة من جهة المزوّد؛ أعد المحاولة بعد دقائق")
             if resp.status_code in (401, 403):
                 raise AIError(f"{label} رفض المفتاح — تأكد من المفتاح أو أنشئ مفتاحًا جديدًا")
             if resp.status_code == 402:
-                raise AIError(f"{label}: الرصيد غير كافٍ — أضف رصيدًا في حسابك")
-            if resp.status_code == 429:
-                raise AIError(f"{label}: تجاوزت حد الطلبات أو الحصة المجانية — انتظر قليلًا")
+                tip = " أو اختر نموذجًا مجانيًا مثل openrouter/free" if cfg["name"] == "openrouter" else ""
+                raise AIError(f"{label}: الرصيد غير كافٍ — أضف رصيدًا في حسابك{tip}")
             if resp.status_code == 404:
                 raise AIError(f"{label}: الرابط أو النموذج «{cfg['model']}» غير موجود")
             if resp.status_code >= 400:
@@ -309,6 +330,9 @@ async def _call_openai_compatible(cfg: dict[str, str], system: str, user: str, t
                 return extract_json(text)
             except ValueError as exc:
                 last_error = str(exc)
+                json_retries += 1
+                if json_retries >= 3:
+                    break
                 log.warning("%s reply was not valid JSON (%s), asking again", label, last_error)
                 messages = messages[:2] + [
                     {"role": "assistant", "content": text[:2000] or "(empty)"},

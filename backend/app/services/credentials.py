@@ -9,6 +9,9 @@ Engines
 claude    Anthropic API (structured output through tool use)
 gemini    Google AI Studio, through its OpenAI-compatible endpoint
 deepseek  DeepSeek, OpenAI-compatible
+mistral   Mistral AI (La Plateforme), OpenAI-compatible
+openrouter OpenRouter — one key for many models, including free ones (":free" / openrouter/free)
+groq      Groq, OpenAI-compatible, fast free tier
 custom    Any OpenAI-compatible server (AnythingLLM, Ollama, LM Studio, vLLM…)
 
 Mode ``single`` uses the primary engine. Mode ``ensemble`` asks every selected engine at the
@@ -16,6 +19,7 @@ same time and lets a judge (the primary engine) pick the best post.
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 from urllib.parse import urlparse
 
@@ -34,6 +38,12 @@ ENGINES: dict[str, dict[str, str]] = {
                "default_model": "gemini-3.8-flash", "key_hint": "aistudio.google.com → Get API key"},
     "deepseek": {"label": "DeepSeek", "kind": "openai", "base_url": "https://api.deepseek.com",
                  "default_model": "deepseek-flash", "key_hint": "platform.deepseek.com → API keys"},
+    "mistral": {"label": "Mistral", "kind": "openai", "base_url": "https://api.mistral.ai/v1",
+                "default_model": "mistral-small-4-0-26-03", "key_hint": "console.mistral.ai → API Keys"},
+    "openrouter": {"label": "OpenRouter", "kind": "openai", "base_url": "https://openrouter.ai/api/v1",
+                   "default_model": "openrouter/free", "key_hint": "openrouter.ai/keys → sk-or-…"},
+    "groq": {"label": "Groq", "kind": "openai", "base_url": "https://api.groq.com/openai/v1",
+             "default_model": "openai/gpt-oss-120b", "key_hint": "console.groq.com/keys → gsk_…"},
     "custom": {"label": "AnythingLLM / خادم مخصص", "kind": "openai", "base_url": "", "default_model": "",
                "key_hint": "AnythingLLM API key"},
 }
@@ -49,6 +59,12 @@ FIELDS: dict[str, tuple[bool, str]] = {
     "gemini_model": (False, "gemini_model"),
     "deepseek_api_key": (True, "deepseek_api_key"),
     "deepseek_model": (False, "deepseek_model"),
+    "mistral_api_key": (True, "mistral_api_key"),
+    "mistral_model": (False, "mistral_model"),
+    "openrouter_api_key": (True, "openrouter_api_key"),
+    "openrouter_model": (False, "openrouter_model"),
+    "groq_api_key": (True, "groq_api_key"),
+    "groq_model": (False, "groq_model"),
     "custom_base_url": (False, "ai_base_url"),
     "custom_api_key": (True, "ai_api_key"),
     "custom_model": (False, "ai_model"),
@@ -135,7 +151,7 @@ def current() -> dict[str, str]:
 def _default_primary(values: dict[str, str]) -> str:
     if get_settings().is_openai_compatible and values.get("custom_base_url"):
         return "custom"
-    for name in ("claude", "gemini", "deepseek", "custom"):
+    for name in ("claude", "gemini", "deepseek", "mistral", "groq", "openrouter", "custom"):
         if _ready(name, values):
             return name
     return "claude"
@@ -206,6 +222,17 @@ def ai_warnings(values: dict[str, str] | None = None) -> list[str]:
     if gemini_key and not gemini_key.startswith("AIza"):
         out.append("مفاتيح Google AI Studio تبدأ عادةً بـ AIza — إن فشل الاختبار فأنشئ مفتاحًا جديدًا من "
                    "aistudio.google.com")
+    mistral_key = v.get("mistral_api_key", "")
+    if mistral_key and re.fullmatch(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+                                    mistral_key):
+        out.append("مفتاح Mistral يبدو كمعرّف المفتاح (UUID) لا المفتاح السري نفسه — انسخ المفتاح الذي يظهر "
+                   "مرة واحدة عند إنشائه من console.mistral.ai")
+    or_key = v.get("openrouter_api_key", "")
+    if or_key and not or_key.startswith("sk-or-"):
+        out.append("مفاتيح OpenRouter تبدأ عادةً بـ sk-or- — تأكد من نسخ المفتاح كاملًا")
+    groq_key = v.get("groq_api_key", "")
+    if groq_key and not groq_key.startswith("gsk_"):
+        out.append("مفاتيح Groq تبدأ عادةً بـ gsk_ — تأكد من نسخ المفتاح كاملًا")
     return out
 
 

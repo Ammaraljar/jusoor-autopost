@@ -60,6 +60,13 @@ def fake_site(request: httpx.Request) -> httpx.Response:
     return httpx.Response(404)
 
 
+@pytest.fixture(autouse=True)
+def no_retry_waits(monkeypatch):
+    """Provider retries wait seconds in production; tests must not."""
+    from app.services import generator
+    monkeypatch.setattr(generator, "RETRY_DELAYS", (0, 0, 0))
+
+
 @pytest.fixture(scope="session")
 def client():
     from fastapi.testclient import TestClient

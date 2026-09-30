@@ -241,3 +241,89 @@ def test_gemini_failing_still_produces_posts_with_deepseek(client, monkeypatch):
     install(monkeypatch, handler)
     result = asyncio.run(gen_mod.generate_from_topic(BRAND, GEN, "موضوع"))
     assert result.hook == "من DeepSeek" and "Gemini" in result.meta["errors"]
+
+
+def test_busy_provider_is_retried_until_it_answers(client, monkeypatch):
+    """Gemini's 503 "high demand" is temporary: wait and try again instead of failing."""
+    from app.config import get_settings
+    s = get_settings()
+    monkeypatch.setattr(s, "gemini_api_key", "AIza-ok")
+    monkeypatch.setattr(s, "ai_primary", "gemini")
+    monkeypatch.setattr(s, "ai_mode", "single")
+    monkeypatch.setattr(s, "anthropic_api_key", "")
+    credentials.refresh()
+    calls = []
+    busy = {"error": {"code": 503, "message": "This model is currently experiencing high demand.",
+                      "status": "UNAVAILABLE"}}
+
+    def handler(request):
+        calls.append(1)
+        if len(calls) <= 2:
+            return httpx.Response(503, json=[busy])
+        return chat(json.dumps(post("بعد الانتظار"), ensure_ascii=False))
+
+    install(monkeypatch, handler)
+    result = asyncio.run(gen_mod.generate_from_topic(BRAND, GEN, "موضوع"))
+    assert result.hook == "بعد الانتظار" and len(calls) == 3
+
+
+def test_busy_provider_gives_a_clear_message_when_it_stays_busy(client, monkeypatch):
+    from app.config import get_settings
+    s = get_settings()
+    monkeypatch.setattr(s, "gemini_api_key", "AIza-ok")
+    monkeypatch.setattr(s, "ai_primary", "gemini")
+    monkeypatch.setattr(s, "ai_mode", "single")
+    monkeypatch.setattr(s, "anthropic_api_key", "")
+    credentials.refresh()
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        return httpx.Response(503, text="overloaded")
+
+    install(monkeypatch, handler)
+    with pytest.raises(gen_mod.AIError) as err:
+        asyncio.run(gen_mod.generate_from_topic(BRAND, GEN, "موضوع"))
+    assert "المفتاح صالح" in str(err.value) and "مؤقتة" in str(err.value)
+    assert len(calls) == 1 + len(gen_mod.RETRY_DELAYS)
+    # json mode must be kept during retries (a 503 is not a rejection of response_format)
+
+
+def test_new_engines_route_to_their_hosts(client, monkeypatch):
+    """Mistral, OpenRouter and Groq are first-class engines with their own hosts, models and headers."""
+    generator = gen_mod
+    seen = []
+
+    def handler(request: httpx.Request):
+        body = json.loads(request.content)
+        seen.append((request.url.host, request.url.path, body["model"], dict(request.headers)))
+        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(post("x"))}}]})
+
+    install(monkeypatch, handler)
+    client.put("/api/settings/credentials", json={
+        "ai_mode": "single", "mistral_api_key": "mk-test", "openrouter_api_key": "sk-or-test",
+        "groq_api_key": "gsk_test"})
+    try:
+        for name in ("mistral", "openrouter", "groq"):
+            cfg = credentials.engine(name)
+            asyncio.run(generator._call_openai_compatible(cfg, "sys", "user", generator.POST_TOOL))
+        hosts = {h: (p, m, hd) for h, p, m, hd in seen}
+        assert hosts["api.mistral.ai"][:2] == ("/v1/chat/completions", "mistral-small-4-0-26-03")
+        assert hosts["openrouter.ai"][:2] == ("/api/v1/chat/completions", "openrouter/free")
+        assert hosts["openrouter.ai"][2]["x-title"] == "JUSOOR AutoPost"
+        assert hosts["api.groq.com"][:2] == ("/openai/v1/chat/completions", "openai/gpt-oss-120b")
+        assert hosts["api.groq.com"][2]["authorization"] == "Bearer gsk_test"
+        view = client.get("/api/settings/credentials").json()["values"]
+        assert all(view["engines"][n]["ready"] for n in ("mistral", "openrouter", "groq"))
+    finally:
+        client.put("/api/settings/credentials", json={
+            "mistral_api_key": None, "openrouter_api_key": None, "groq_api_key": None})
+
+
+def test_mistral_key_id_warning(client):
+    client.put("/api/settings/credentials", json={"mistral_api_key": "123e4567-e89b-12d3-a456-426614174000"})
+    try:
+        warnings = client.get("/api/settings/credentials").json()["values"]["warnings"]
+        assert any("Mistral" in w for w in warnings)
+    finally:
+        client.put("/api/settings/credentials", json={"mistral_api_key": None})

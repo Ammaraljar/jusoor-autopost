@@ -4,7 +4,8 @@ import { Button, Field, Spinner, useAction, useLoad } from './ui';
 import { api } from '../lib/api';
 import { useI18n } from '../lib/i18n';
 
-const ENGINE_ORDER = ['claude', 'gemini', 'deepseek', 'custom'];
+const ENGINE_ORDER = ['claude', 'gemini', 'deepseek', 'mistral', 'openrouter', 'groq', 'custom'];
+const MODEL_FIELDS = ENGINE_ORDER.map((n) => `${n}_model`);
 const PUBLISH_KEYS = [
   { field: 'pexels_api_key', label: 'stock_photos', hint: 'pexels.com/api' },
   { field: 'buffer_api_key', label: 'Buffer', hint: 'publish.buffer.com' },
@@ -27,8 +28,7 @@ function initialForm(v) {
     ai_mode: v.ai_mode || 'single',
     ai_primary: v.ai_primary || 'claude',
     ensemble: (v.ai_ensemble || '').split(',').map((x) => x.trim()).filter(Boolean),
-    claude_model: v.claude_model || '', gemini_model: v.gemini_model || '',
-    deepseek_model: v.deepseek_model || '', custom_model: v.custom_model || '',
+    ...Object.fromEntries(MODEL_FIELDS.map((f) => [f, v[f] || ''])),
     custom_base_url: v.custom_base_url || '',
     secrets: {},
   };
@@ -55,8 +55,8 @@ export default function KeysCard({ onSaved }) {
 
   const payload = () => ({
     ai_mode: form.ai_mode, ai_primary: form.ai_primary, ai_ensemble: form.ensemble.join(','),
-    claude_model: form.claude_model, gemini_model: form.gemini_model, deepseek_model: form.deepseek_model,
-    custom_model: form.custom_model, custom_base_url: form.custom_base_url, ...form.secrets,
+    ...Object.fromEntries(MODEL_FIELDS.map((f) => [f, form[f]])),
+    custom_base_url: form.custom_base_url, ...form.secrets,
   });
   const initial = initialForm(values);
   const dirty = JSON.stringify({ ...form, secrets: {} }) !== JSON.stringify(initial)

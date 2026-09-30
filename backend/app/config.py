@@ -48,9 +48,15 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-3.8-flash"
     deepseek_api_key: str = ""
     deepseek_model: str = "deepseek-flash"
+    mistral_api_key: str = ""
+    mistral_model: str = "mistral-small-4-0-26-03"
+    openrouter_api_key: str = ""
+    openrouter_model: str = "openrouter/free"   # free router; any ":free" model id also works
+    groq_api_key: str = ""
+    groq_model: str = "openai/gpt-oss-120b"
     ai_mode: str = "single"             # single | ensemble
     ai_ensemble: str = "gemini,deepseek"
-    ai_primary: str = ""                # claude | gemini | deepseek | custom (judge + quick edits)
+    ai_primary: str = ""                # claude | gemini | deepseek | mistral | openrouter | groq | custom (judge + quick edits)
 
     @property
     def is_openai_compatible(self) -> bool:

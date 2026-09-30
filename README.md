@@ -60,7 +60,7 @@ Claude API ──► عنوان + نص + هاشتاقات + شرائح + CTA + �
 | لوحة التحكم | React 18 + Vite، وخط Cairo، وأيقونات Lucide، وCSS خاص بهوية جسور (بدون Bootstrap) |
 | الخادم | Python 3.11 + FastAPI + SQLAlchemy + APScheduler |
 | قاعدة البيانات وتسجيل الدخول والتخزين | داخلي: SQLite أو PostgreSQL + دخول ببريد وكلمة مرور + قرص دائم — أو Supabase اختياريًا |
-| الذكاء الاصطناعي | Claude وGemini وDeepSeek وAnythingLLM — منفردة أو بالتوازي مع حَكَم يختار الأفضل |
+| الذكاء الاصطناعي | Claude وGemini وDeepSeek وMistral وOpenRouter وGroq وAnythingLLM — منفردة أو بالتوازي مع حَكَم يختار الأفضل |
 | سحب الأخبار | httpx + BeautifulSoup + trafilatura + feedparser |
 | تصميم الشرائح | HTML → JPEG عبر Chromium (Playwright)، لضمان تشكيل عربي صحيح |
 | النشر | Buffer GraphQL API، وMeta Graph API، وupload-post.com API |
@@ -188,6 +188,9 @@ npm run dev                              # http://localhost:5173
 | **Claude** | console.anthropic.com | `claude-sonnet-5` |
 | **Gemini** | aistudio.google.com ← Get API key (يبدأ بـ `AIza`) | `gemini-3.8-flash` |
 | **DeepSeek** | platform.deepseek.com ← API keys | `deepseek-flash` |
+| **Mistral** | console.mistral.ai ← API Keys | `mistral-small-4-0-26-03` |
+| **OpenRouter** | openrouter.ai/keys | `openrouter/free` (نماذج مجانية، حد يومي للطلبات) |
+| **Groq** | console.groq.com/keys | `openai/gpt-oss-120b` |
 | **AnythingLLM / خادم مخصص** | لوحة AnythingLLM | اسم مساحة العمل |
 
 ### وضعا العمل
