@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Pencil, Plus, Target, Trash2 } from 'lucide-react';
-import { Button, Empty, ErrorBox, Field, Loading, Modal, PageHead, useAction, useLoad } from '../components/ui';
+import { BulkBar, Button, Empty, ErrorBox, Field, Loading, Modal, PageHead, SelectAll, useAction, useLoad, useSelection } from '../components/ui';
 import { api } from '../lib/api';
 import { fmtDate } from '../lib/format';
 import { useI18n } from '../lib/i18n';
@@ -11,19 +11,30 @@ export default function Campaigns() {
   const list = useLoad(() => api.get('/api/campaigns'), []);
   const [editing, setEditing] = useState(null);
   const [busy, run] = useAction();
+  const sel = useSelection(list.data);
 
   if (list.loading && !list.data) return <Loading />;
+  const bulkDelete = () => run('bulk-delete', async () => {
+    await api.post('/api/campaigns/bulk-delete', { ids: sel.ids });
+    sel.clear();
+    list.reload(true);
+  }, t('done'));
   return (
     <>
       <PageHead title={t('campaigns_title')} sub={t('campaigns_sub')}>
         <Button variant="primary" icon={Plus} onClick={() => setEditing({})}>{t('add_campaign')}</Button>
       </PageHead>
       {list.error && <ErrorBox error={list.error} onRetry={list.reload} />}
+      {list.data?.length > 0 && <div className="select-row"><SelectAll sel={sel} label={t('select_all')} /></div>}
+      <BulkBar sel={sel} busy={busy} onAction={bulkDelete} selectedLabel={t('selected')} clearLabel={t('clear_selection')}
+        actions={[{ key: 'delete', label: t('delete_forever'), icon: Trash2, variant: 'danger', confirm: t('confirm_bulk_delete') }]} />
       {list.data?.length === 0 && <div className="card"><Empty icon={Target}>{t('add_campaign')}</Empty></div>}
       <div className="grid grid-3">
         {list.data?.map((c) => (
-          <div key={c.id} className="card card-pad stack" style={{ borderTop: `5px solid ${c.color}` }}>
+          <div key={c.id} className="card card-pad stack" style={{ borderTop: `5px solid ${c.color}`,
+            outline: sel.has(c.id) ? '3px solid var(--gold)' : undefined }}>
             <div className="row">
+              <input type="checkbox" checked={sel.has(c.id)} onChange={() => sel.toggle(c.id)} aria-label={t('select')} />
               <h3 style={{ margin: 0 }}>{c.name}</h3>
               <div className="spacer" />
               <button className="btn btn-sm btn-ghost icon-btn" onClick={() => setEditing(c)} aria-label={t('edit')}><Pencil size={15} /></button>

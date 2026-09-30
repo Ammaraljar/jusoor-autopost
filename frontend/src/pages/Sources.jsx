@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Download, FlaskConical, List, Pencil, Plus, RefreshCw, Rss, Sparkles, Trash2 } from 'lucide-react';
-import { Button, Empty, ErrorBox, Field, Loading, Modal, PageHead, StatusPill, useAction, useLoad } from '../components/ui';
+import { Download, FlaskConical, ImageOff, List, Pause, Pencil, Play, Plus, RefreshCw, Rss, Sparkles, Trash2 } from 'lucide-react';
+import { BulkBar, Button, Empty, ErrorBox, Field, Loading, Modal, PageHead, SelectAll, StatusPill, useAction, useLoad, useSelection } from '../components/ui';
 import { api } from '../lib/api';
 import { fmtDateTime, relative } from '../lib/format';
 import { useI18n } from '../lib/i18n';
@@ -19,15 +19,27 @@ export default function Sources() {
   const [articlesFor, setArticlesFor] = useState(null);
   const [testResult, setTestResult] = useState(null);
   const [busy, run] = useAction();
+  const sel = useSelection(sources.data);
 
   if (sources.loading && !sources.data) return <Loading />;
+  const bulk = (action) => run(`bulk-${action}`, async () => {
+    await api.post('/api/sources/bulk', { ids: sel.ids, action });
+    if (action === 'delete') sel.clear();
+    sources.reload(true);
+  }, action === 'scrape' ? t('started') : t('done'));
+  const bulkActions = [
+    { key: 'scrape', label: t('scrape_now'), icon: RefreshCw },
+    { key: 'enable', label: t('enable_sel'), icon: Play },
+    { key: 'disable', label: t('disable_sel'), icon: Pause },
+    { key: 'delete', label: t('delete_forever'), icon: Trash2, variant: 'danger', confirm: t('confirm_delete_sources') },
+  ];
   const existing = new Set((sources.data || []).map((s) => s.name));
   const missingPresets = (presets.data || []).filter((p) => !existing.has(p.name));
 
   const test = (s) => run(`test-${s.id}`, async () => setTestResult({ name: s.name, ...(await api.post(`/api/sources/${s.id}/test`)) }));
   const scrape = (s) => run(`scrape-${s.id}`, () => api.post(`/api/sources/${s.id}/scrape`), t('started'));
   const toggle = (s) => run(`tog-${s.id}`, async () => { await api.patch(`/api/sources/${s.id}`, { enabled: !s.enabled }); sources.reload(true); });
-  const remove = (s) => window.confirm(t('confirm_delete')) &&
+  const remove = (s) => window.confirm(t('confirm_delete_sources')) &&
     run(`del-${s.id}`, async () => { await api.del(`/api/sources/${s.id}`); sources.reload(true); });
 
   return (
@@ -51,18 +63,23 @@ export default function Sources() {
         </div>
       )}
 
+      <BulkBar sel={sel} actions={bulkActions} onAction={bulk} busy={busy}
+        selectedLabel={t('selected')} clearLabel={t('clear_selection')} />
+
       {sources.data?.length === 0 ? <div className="card"><Empty icon={Rss}>{t('add_source')}</Empty></div> : (
         <div className="card table-wrap">
           <table className="table">
             <thead>
               <tr>
+                <th style={{ width: 36 }}><input type="checkbox" checked={sel.allOn} onChange={sel.toggleAll} title={t('select_all')} /></th>
                 <th>{t('name')}</th><th>{t('kind')}</th><th>{t('health')}</th><th>{t('last_check')}</th>
                 <th>{t('articles')}</th><th>{t('enabled')}</th><th />
               </tr>
             </thead>
             <tbody>
               {sources.data?.map((s) => (
-                <tr key={s.id} style={{ opacity: s.enabled ? 1 : 0.55 }}>
+                <tr key={s.id} style={{ opacity: s.enabled ? 1 : 0.55, background: sel.has(s.id) ? 'var(--gold-tint)' : undefined }}>
+                  <td><input type="checkbox" checked={sel.has(s.id)} onChange={() => sel.toggle(s.id)} /></td>
                   <td>
                     <div className="bold">{s.name}</div>
                     <div className="xs muted code">{(s.kind === 'rss' ? s.feed_url : (s.listing_urls?.[0] || s.base_url))}</div>
@@ -139,6 +156,15 @@ function SourceModal({ initial, onClose, onSaved }) {
       <Button icon={FlaskConical} busy={busy === 'test'} onClick={() => run('test', async () => setResult(await api.post('/api/sources/test', payload())))}>
         {t('test')}
       </Button>
+      {initial.id && (
+        <Button variant="danger" icon={Trash2} busy={busy === 'delete'}
+          onClick={() => window.confirm(t('confirm_delete_sources')) && run('delete', async () => {
+            await api.del(`/api/sources/${initial.id}`);
+            onSaved();
+          }, t('done'))}>
+          {t('delete_source')}
+        </Button>
+      )}
       <div className="spacer" />
       <Button onClick={onClose}>{t('cancel')}</Button>
       <Button variant="primary" busy={busy === 'save'} disabled={!f.name} onClick={save}>{t('save')}</Button>
@@ -236,13 +262,30 @@ function ArticlesModal({ source, onClose }) {
   const { t, lang } = useI18n();
   const articles = useLoad(() => api.get(`/api/sources/${source.id}/articles`), [source.id]);
   const [busy, run] = useAction();
+  const sel = useSelection(articles.data);
   const tone = { new: 'info', drafted: 'ok', skipped: '', error: 'danger' };
+  const bulk = (action) => run(`bulk-${action}`, async () => {
+    await api.post('/api/sources/articles/bulk', { ids: sel.ids, action });
+    sel.clear();
+    articles.reload(true);
+  }, action === 'draft' ? t('started') : t('done'));
   return (
     <Modal wide title={`${t('view_articles')} — ${source.name}`} onClose={onClose}>
       {articles.loading ? <Loading /> : articles.data?.length === 0 ? <Empty>—</Empty> : (
         <div className="stack">
+          <SelectAll sel={sel} label={t('select_all')} />
+          <BulkBar sel={sel} busy={busy} onAction={bulk} selectedLabel={t('selected')} clearLabel={t('clear_selection')}
+            actions={[
+              { key: 'draft', label: t('make_drafts'), icon: Sparkles },
+              { key: 'delete', label: t('delete_forever'), icon: Trash2, variant: 'danger', confirm: t('confirm_bulk_delete') },
+            ]} />
           {articles.data?.map((a) => (
-            <div key={a.id} className="row" style={{ borderBottom: '1px dashed var(--border)', paddingBottom: 8 }}>
+            <div key={a.id} className="row" style={{ borderBottom: '1px dashed var(--border)', paddingBottom: 8, flexWrap: 'nowrap',
+              background: sel.has(a.id) ? 'var(--gold-tint)' : undefined, borderRadius: 8 }}>
+              <input type="checkbox" checked={sel.has(a.id)} onChange={() => sel.toggle(a.id)} />
+              {a.image_url
+                ? <img className="art-thumb" src={a.image_url} alt="" loading="lazy" referrerPolicy="no-referrer" />
+                : <span className="art-thumb" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }} title={t('no_image')}><ImageOff size={20} className="muted" /></span>}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <a className="bold small" href={a.url} target="_blank" rel="noreferrer" dir="auto">{a.title}</a>
                 <div className="xs muted">{fmtDateTime(a.published_at || a.fetched_at, lang)} {a.note ? `· ${a.note}` : ''}</div>

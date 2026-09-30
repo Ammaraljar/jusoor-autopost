@@ -124,7 +124,7 @@ def parse_article(url: str, html: str, body_selector: str | None = None) -> Scra
         return None
 
     title = meta("og:title", "twitter:title") or (soup.title.string.strip() if soup.title and soup.title.string else "")
-    image = meta("og:image", "twitter:image")
+    image = find_image(soup, url, meta, body_selector)
     published = _parse_date(meta("article:published_time", "og:published_time", "pubdate", "date",
                                  "parsely-pub-date", "publish-date"))
     body = ""
@@ -137,8 +137,75 @@ def parse_article(url: str, html: str, body_selector: str | None = None) -> Scra
         md = trafilatura.extract_metadata(html)
         if md and md.date:
             published = _parse_date(md.date)
-    return ScrapedArticle(url=url, title=title, body=body.strip(), image_url=urljoin(url, image) if image else None,
-                          published_at=published)
+    return ScrapedArticle(url=url, title=title, body=body.strip(), image_url=image, published_at=published)
+
+
+_BAD_IMG = re.compile(r"(logo|icon|avatar|sprite|placeholder|blank|pixel|spacer|badge|emoji|gravatar|"
+                      r"\.svg($|\?)|\.gif($|\?)|data:)", re.I)
+
+
+def _img_src(tag) -> str:
+    for attr in ("data-src", "data-lazy-src", "data-original", "src"):
+        if tag.get(attr) and not str(tag[attr]).startswith("data:"):
+            return str(tag[attr])
+    srcset = tag.get("srcset") or tag.get("data-srcset") or ""
+    if srcset:
+        return srcset.split(",")[-1].strip().split(" ")[0]       # largest candidate
+    return ""
+
+
+def _big_enough(tag) -> bool:
+    for attr in ("width", "height"):
+        try:
+            if int(str(tag.get(attr, "0")).rstrip("px")) and int(str(tag.get(attr)).rstrip("px")) < 300:
+                return False
+        except ValueError:
+            pass
+    return True
+
+
+def find_image(soup, url: str, meta=None, body_selector: str | None = None) -> str | None:
+    """The article's main photo: social-share image, structured data, then the first large photo."""
+    candidates: list[str] = []
+    if meta:
+        for name in ("og:image", "og:image:secure_url", "twitter:image", "twitter:image:src"):
+            value = meta(name)
+            if value:
+                candidates.append(value)
+    link = soup.find("link", rel="image_src")
+    if link and link.get("href"):
+        candidates.append(link["href"])
+    for script in soup.find_all("script", type="application/ld+json"):
+        try:
+            data = json.loads(script.string or "")
+        except (ValueError, TypeError):
+            continue
+        for node in (data if isinstance(data, list) else [data]):
+            img = node.get("image") if isinstance(node, dict) else None
+            if isinstance(img, dict):
+                img = img.get("url")
+            if isinstance(img, list) and img:
+                img = img[0].get("url") if isinstance(img[0], dict) else img[0]
+            if isinstance(img, str):
+                candidates.append(img)
+    scope = soup.select(body_selector) if body_selector else []
+    for root in (scope or [soup.find("article") or soup]):
+        for tag in root.find_all("img"):
+            src = _img_src(tag)
+            if src and _big_enough(tag):
+                candidates.append(src)
+    for c in candidates:
+        c = urljoin(url, c.strip())
+        if c.startswith(("http://", "https://")) and not _BAD_IMG.search(c):
+            return c
+    return None
+
+
+def image_from_html(html: str, base_url: str) -> str | None:
+    """First usable photo inside an HTML fragment (e.g. an RSS item's content)."""
+    if not html:
+        return None
+    return find_image(BeautifulSoup(html, "html.parser"), base_url)
 
 
 def fetch_feed(feed_url: str, limit: int = 20) -> tuple[list[ScrapedArticle], int | None]:
@@ -168,6 +235,8 @@ def fetch_feed(feed_url: str, limit: int = 20) -> tuple[list[ScrapedArticle], in
             if len(part.get("value", "")) > len(html):
                 html = part.get("value", "")
         summary = BeautifulSoup(html or entry.get("summary", ""), "html.parser").get_text(" ", strip=True)
+        if not image:
+            image = image_from_html(html or entry.get("summary", ""), entry.get("link", ""))
         items.append(ScrapedArticle(url=entry.get("link", ""), title=entry.get("title", ""), body=summary,
                                     image_url=image, published_at=published))
     return [i for i in items if i.url], status

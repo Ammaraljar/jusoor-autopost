@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, ExternalLink, Plus, Sparkles, Trash2 } from 'lucide-react';
-import { Button, ErrorBox, Field, Modal, PageHead, StatusPill, useAction, useLoad } from '../components/ui';
+import { CheckSquare, ChevronLeft, ChevronRight, ExternalLink, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { BulkBar, Button, ErrorBox, Field, Modal, PageHead, StatusPill, useAction, useLoad, useSelection } from '../components/ui';
 import { api } from '../lib/api';
 import { isoDay } from '../lib/format';
 import { useI18n } from '../lib/i18n';
@@ -32,6 +32,14 @@ export default function CalendarPage() {
   const cal = useLoad(() => api.get(`/api/calendar?${range}`), [range]);
   const campaigns = useLoad(() => api.get('/api/campaigns'), []);
   const [editing, setEditing] = useState(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const sel = useSelection(cal.data?.items);
+  const [busy, run] = useAction();
+  const bulkDelete = () => run('bulk-delete', async () => {
+    await api.post('/api/calendar/bulk-delete', { ids: sel.ids });
+    sel.clear();
+    cal.reload(true);
+  }, t('done'));
 
   const byDay = useMemo(() => {
     const map = {};
@@ -55,8 +63,13 @@ export default function CalendarPage() {
   return (
     <>
       <PageHead title={t('calendar_title')} sub={t('calendar_sub')}>
+        <Button icon={CheckSquare} variant={selectMode ? 'primary' : ''}
+          onClick={() => { setSelectMode((m) => !m); sel.clear(); }}>{t('select')}</Button>
         <Button variant="primary" icon={Plus} onClick={() => setEditing({ date: today, time: '10:00' })}>{t('add_item')}</Button>
       </PageHead>
+      {selectMode && !sel.count && <div className="banner info small">{t('calendar_select_hint')}</div>}
+      <BulkBar sel={sel} busy={busy} onAction={bulkDelete} selectedLabel={t('selected')} clearLabel={t('clear_selection')}
+        actions={[{ key: 'delete', label: t('delete_forever'), icon: Trash2, variant: 'danger', confirm: t('confirm_bulk_delete') }]} />
       {cal.error && <ErrorBox error={cal.error} onRetry={cal.reload} />}
       <div className="row" style={{ marginBottom: 12 }}>
         <button className="btn icon-btn" onClick={() => shift(-1)} aria-label="prev"><Prev size={18} /></button>
@@ -76,12 +89,14 @@ export default function CalendarPage() {
           const out = d.getMonth() !== anchor.getMonth();
           return (
             <div key={key} className={`cal-day ${out ? 'out' : ''} ${key === today ? 'today' : ''}`}
-              onClick={() => setEditing({ date: key, time: '10:00' })}>
+              onClick={() => { if (!selectMode) setEditing({ date: key, time: '10:00' }); }}>
               <span className="num">{d.getDate()}</span>
               {entry.items.map((i) => (
                 <div key={`i${i.id}`} className="chip" title={i.topic} dir="auto"
-                  style={campaignColor(i.campaign_id) ? { borderInlineStartColor: campaignColor(i.campaign_id) } : undefined}
-                  onClick={(e) => { e.stopPropagation(); setEditing(i); }}>
+                  style={{ ...(campaignColor(i.campaign_id) ? { borderInlineStartColor: campaignColor(i.campaign_id) } : {}),
+                    ...(sel.has(i.id) ? { outline: '2px solid var(--gold)', background: 'var(--gold-tint)' } : {}) }}
+                  onClick={(e) => { e.stopPropagation(); if (selectMode) sel.toggle(i.id); else setEditing(i); }}>
+                  {selectMode && <input type="checkbox" readOnly checked={sel.has(i.id)} style={{ marginInlineEnd: 4, pointerEvents: 'none' }} />}
                   {i.time} {i.topic}
                 </div>
               ))}

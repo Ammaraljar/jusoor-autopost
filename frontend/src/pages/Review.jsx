@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ChevronDown, ChevronLeft, Images, Lightbulb, RefreshCw, Search, Sparkles } from 'lucide-react';
-import { Button, Empty, ErrorBox, Field, Modal, PageHead, Spinner, StatusPill, useAction, useLoad } from '../components/ui';
+import { Check, ChevronDown, ChevronLeft, Images, Lightbulb, RefreshCw, RotateCcw, Search, Sparkles, Trash2, X } from 'lucide-react';
+import { BulkBar, Button, Empty, ErrorBox, Field, Modal, PageHead, SelectAll, Spinner, StatusPill, useAction, useLoad, useSelection } from '../components/ui';
 import { api, mediaUrl } from '../lib/api';
 import { dayBucket, fmtDate, relative } from '../lib/format';
 import { useI18n } from '../lib/i18n';
@@ -44,6 +44,20 @@ export default function Review() {
     (drafts.data || []).forEach((d) => g[dayBucket(d.created_at)].push(d));
     return g;
   }, [drafts.data]);
+
+  const sel = useSelection(drafts.data);
+  const bulk = (action) => run(`bulk-${action}`, async () => {
+    const res = await api.post('/api/drafts/bulk', { ids: sel.ids, action });
+    sel.clear();
+    await Promise.all([drafts.reload(true), counts.reload(true)]);
+    return res;
+  }, t('done'));
+  const bulkActions = [
+    { key: 'approve', label: t('approve'), icon: Check },
+    { key: 'reject', label: t('reject'), icon: X },
+    { key: 'restore', label: t('restore'), icon: RotateCcw },
+    { key: 'delete', label: t('delete_forever'), icon: Trash2, variant: 'danger', confirm: t('confirm_bulk_delete') },
+  ];
 
   const scrape = () => run('scrape', async () => {
     await api.post('/api/scrape/run-all');
@@ -92,6 +106,15 @@ export default function Review() {
         </div>
       )}
 
+      {drafts.data?.length > 0 && (
+        <div className="select-row">
+          <SelectAll sel={sel} label={t('select_all')} />
+          {!sel.count && <span className="xs muted">{t('select_hint')}</span>}
+        </div>
+      )}
+      <BulkBar sel={sel} actions={bulkActions} onAction={bulk} busy={busy}
+        selectedLabel={t('selected')} clearLabel={t('clear_selection')} />
+
       {drafts.error && <ErrorBox error={drafts.error} onRetry={drafts.reload} />}
       {drafts.loading && !drafts.data && <div className="center-page"><Spinner /></div>}
       {drafts.data && drafts.data.length === 0 && <Empty>{t('no_drafts')}</Empty>}
@@ -104,7 +127,7 @@ export default function Review() {
           </button>
           {!collapsed[b] && (
             <div className="draft-grid">
-              {groups[b].map((d) => <DraftCard key={d.id} d={d} />)}
+              {groups[b].map((d) => <DraftCard key={d.id} d={d} picked={sel.has(d.id)} onPick={() => sel.toggle(d.id)} />)}
             </div>
           )}
         </section>
@@ -115,12 +138,16 @@ export default function Review() {
   );
 }
 
-function DraftCard({ d }) {
+function DraftCard({ d, picked, onPick }) {
   const { t, lang } = useI18n();
   const origin = d.origin === 'source' ? d.source : d.origin === 'calendar' ? t('calendar_origin') : t('manual');
   return (
-    <Link to={`/drafts/${d.id}`} className="card draft-card">
+    <Link to={`/drafts/${d.id}`} className={`card draft-card ${picked ? 'picked' : ''}`}>
       <div className="thumb">
+        <span className="pick" role="checkbox" aria-checked={picked} title={t('select')}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPick(); }}>
+          <input type="checkbox" checked={picked} readOnly tabIndex={-1} style={{ pointerEvents: 'none' }} />
+        </span>
         {d.cover_url ? <img src={mediaUrl(d.cover_url)} alt="" loading="lazy" /> : <Sparkles size={34} />}
         <StatusPill status={d.status} />
         {d.slides > 0 && <span className="count"><Images size={12} /> {d.slides}</span>}

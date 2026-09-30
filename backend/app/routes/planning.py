@@ -5,7 +5,7 @@ from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from ..auth import RequireUser
@@ -139,6 +139,28 @@ def delete_item(item_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "العنصر غير موجود")
     db.delete(item)
     return {"ok": True}
+
+
+class BulkIds(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=500)
+
+
+@router.post("/calendar/bulk-delete")
+def bulk_delete_items(body: BulkIds, db: Session = Depends(get_db)):
+    db.execute(update(Draft).where(Draft.calendar_item_id.in_(body.ids)).values(calendar_item_id=None))
+    rows = db.scalars(select(CalendarItem).where(CalendarItem.id.in_(body.ids))).all()
+    for item in rows:
+        db.delete(item)
+    return {"ok": True, "done": len(rows)}
+
+
+@router.post("/campaigns/bulk-delete")
+def bulk_delete_campaigns(body: BulkIds, db: Session = Depends(get_db)):
+    db.execute(update(Draft).where(Draft.campaign_id.in_(body.ids)).values(campaign_id=None))
+    rows = db.scalars(select(Campaign).where(Campaign.id.in_(body.ids))).all()
+    for c in rows:
+        db.delete(c)
+    return {"ok": True, "done": len(rows)}
 
 
 @router.post("/calendar/{item_id}/generate")

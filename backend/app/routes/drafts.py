@@ -93,6 +93,50 @@ async def create_manual(body: ManualDraft, background: BackgroundTasks, db: Sess
     return {"ok": True, "calendar_item_id": item.id}
 
 
+class BulkBody(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=500)
+    action: str                     # approve | reject | restore | unschedule | delete
+
+
+@router.post("/bulk")
+def bulk(body: BulkBody, db: Session = Depends(get_db)):
+    """Apply one decision to many posts at once — including permanent deletion."""
+    if body.action not in ("approve", "reject", "restore", "unschedule", "delete"):
+        raise HTTPException(400, "إجراء غير معروف")
+    done, skipped = 0, 0
+    for d in db.scalars(select(Draft).where(Draft.id.in_(body.ids))).all():
+        if body.action == "delete":
+            if d.status == "publishing":          # never pull a post out from under the publisher
+                skipped += 1
+                continue
+            for sl in d.slides:
+                if sl.image_key:
+                    storage.delete(sl.image_key)
+            db.delete(d)
+        elif body.action == "approve":
+            if d.status in ("generating", "publishing", "published"):
+                skipped += 1
+                continue
+            d.status, d.error = "approved", None
+        elif body.action == "reject":
+            if d.status in ("publishing", "published"):
+                skipped += 1
+                continue
+            d.status = "rejected"
+        elif body.action == "restore":
+            if d.status in ("generating", "publishing"):
+                skipped += 1
+                continue
+            d.status, d.error, d.scheduled_at = "pending_review", None, None
+        elif body.action == "unschedule":
+            if d.status != "scheduled":
+                skipped += 1
+                continue
+            d.status, d.scheduled_at = "approved", None
+        done += 1
+    return {"ok": True, "done": done, "skipped": skipped}
+
+
 @router.get("/{draft_id}")
 def get_draft(draft_id: int, db: Session = Depends(get_db)):
     return _full(db, _get(db, draft_id))

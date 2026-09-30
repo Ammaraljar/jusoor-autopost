@@ -140,8 +140,9 @@ def build_html(spec: SlideSpec, brand: BrandStyle) -> str:
     elif spec.kind == "cta":
         site = f'<div class="site">{_esc(brand.website)}</div>' if brand.website else ""
         button = _esc(brand.handle or brand.name)
-        content = (f'{bg}<div class="cta-overlay"></div>{top}'
-                   f'<div class="cta-wrap"><div class="ring">✈</div>'
+        # Last slide: the brand logo takes the centre (no plane icon, no small logo in the corner)
+        content = (f'{bg}<div class="cta-overlay"></div>'
+                   f'<div class="cta-wrap"><div class="cta-logo">{_logo_html(brand, False)}</div>'
                    f'<h1 style="font-size:70px" data-fit="520,40">{_esc(spec.heading)}</h1>'
                    f'<p style="font-size:36px;opacity:.9">{_esc(spec.body)}</p>'
                    f'<div class="button">{button}</div>{site}</div>'

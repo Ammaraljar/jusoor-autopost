@@ -57,8 +57,8 @@ def collect_backgrounds(article_image: str | None, keywords: str, mode: str, nee
         candidates = article
     else:
         stock = search_pexels(keywords, count=max(needed, 4))
-        # Stock photos first (lower copyright risk); the article image stays as a fallback in auto mode.
-        candidates = stock if mode == "pexels" else stock + article
+        # Auto: the article's own photo is the cover, stock photos fill the other slides.
+        candidates = stock if mode == "pexels" else article + stock
     out: list[dict] = []
     seen: set[str] = set()
     for c in candidates:

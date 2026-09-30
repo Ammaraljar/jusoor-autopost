@@ -97,8 +97,17 @@ def collect_source(source_id: int) -> dict:
                         if len(item.body) < 250:     # RSS text is enough when the page itself is blocked
                             continue
                         art = item
+                if not art.image_url and source.kind == "rss":
+                    # Every article must come with its photo: look on the article page itself
+                    try:
+                        page = scraper.fetch_article(art.url, source.body_selector)
+                        art.image_url = page.image_url
+                    except Exception as exc:  # noqa: BLE001
+                        log.info("no image page for %s: %s", art.url, exc)
                 status_value, note = "new", None
-                if len(art.body) < 250:
+                if not art.image_url:
+                    status_value, note = "skipped", "المقال بلا صورة"
+                elif len(art.body) < 250:
                     status_value, note = "skipped", "نص المقال قصير جدًا"
                 elif art.published_at and utcnow() - art.published_at > max_age:
                     status_value, note = "skipped", "المقال أقدم من الحد المسموح"

@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from ..auth import RequireUser
@@ -131,6 +131,62 @@ def test_unsaved(body: SourceIn):
     return scraper.test_source(Source(**data))
 
 
+class BulkSources(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=500)
+    action: str                     # enable | disable | delete | scrape
+
+
+@router.post("/bulk")
+async def bulk_sources(body: BulkSources, background: BackgroundTasks, db: Session = Depends(get_db)):
+    if body.action not in ("enable", "disable", "delete", "scrape"):
+        raise HTTPException(400, "إجراء غير معروف")
+    rows = db.scalars(select(Source).where(Source.id.in_(body.ids))).all()
+    if body.action == "scrape":
+        if jobs.busy:
+            raise HTTPException(409, "توجد عملية سحب قيد التنفيذ")
+        background.add_task(jobs.run_collection, [s.id for s in rows])
+        return {"ok": True, "done": len(rows)}
+    for s in rows:
+        if body.action == "delete":
+            _delete_source(db, s)
+        else:
+            s.enabled = body.action == "enable"
+    return {"ok": True, "done": len(rows)}
+
+
+class BulkArticles(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=500)
+    action: str                     # delete | draft
+
+
+@router.post("/articles/bulk")
+async def bulk_articles(body: BulkArticles, background: BackgroundTasks, db: Session = Depends(get_db)):
+    if body.action not in ("delete", "draft"):
+        raise HTTPException(400, "إجراء غير معروف")
+    rows = db.scalars(select(Article).where(Article.id.in_(body.ids))).all()
+    for a in rows:
+        if body.action == "delete":
+            db.execute(update(Draft).where(Draft.article_id == a.id).values(article_id=None))
+            db.delete(a)
+        else:
+            a.status = "new"
+    db.commit()
+    if body.action == "draft":
+        for a in rows:
+            background.add_task(pipeline.draft_from_article, a.id)
+    return {"ok": True, "done": len(rows)}
+
+
+def _delete_source(db: Session, s: Source) -> None:
+    """Remove a source and its collected articles; posts already made from it are kept."""
+    db.execute(update(Draft).where(Draft.source_id == s.id).values(source_id=None))
+    art_ids = list(db.scalars(select(Article.id).where(Article.source_id == s.id)))
+    if art_ids:
+        db.execute(update(Draft).where(Draft.article_id.in_(art_ids)).values(article_id=None))
+        db.execute(delete(Article).where(Article.id.in_(art_ids)))
+    db.delete(s)
+
+
 @router.get("/{source_id}")
 def get_source(source_id: int, db: Session = Depends(get_db)):
     s = db.get(Source, source_id)
@@ -157,7 +213,7 @@ def delete_source(source_id: int, db: Session = Depends(get_db)):
     s = db.get(Source, source_id)
     if not s:
         raise HTTPException(404, "المصدر غير موجود")
-    db.delete(s)
+    _delete_source(db, s)
     return {"ok": True}
 
 

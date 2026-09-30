@@ -167,3 +167,51 @@ export function PageHead({ title, sub, children }) {
     </div>
   );
 }
+
+/* ----------------------------------------------------------------- multi-select */
+export function useSelection(items) {
+  const [selected, setSelected] = useState(() => new Set());
+  const ids = (items || []).map((x) => x.id);
+  // Forget ids that are no longer in the list (deleted, filtered out)
+  useEffect(() => {
+    setSelected((s) => {
+      const keep = new Set([...s].filter((id) => ids.includes(id)));
+      return keep.size === s.size ? s : keep;
+    });
+  }, [ids.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+  const toggle = (id) => setSelected((s) => {
+    const n = new Set(s);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
+  const allOn = ids.length > 0 && ids.every((id) => selected.has(id));
+  const toggleAll = () => setSelected(allOn ? new Set() : new Set(ids));
+  const clear = () => setSelected(new Set());
+  return { selected, ids: [...selected], count: selected.size, has: (id) => selected.has(id), toggle, toggleAll, allOn, clear };
+}
+
+export function SelectAll({ sel, label }) {
+  return (
+    <label className="check small" style={{ whiteSpace: 'nowrap' }}>
+      <input type="checkbox" checked={sel.allOn} onChange={sel.toggleAll} /> {label}
+    </label>
+  );
+}
+
+/** Sticky bar shown while items are selected. actions: [{key, label, icon, variant, confirm}] */
+export function BulkBar({ sel, actions, onAction, busy, selectedLabel, clearLabel }) {
+  if (!sel.count) return null;
+  return (
+    <div className="bulk-bar">
+      <b>{sel.count}</b> <span>{selectedLabel}</span>
+      <div className="spacer" />
+      {actions.map((a) => (
+        <Button key={a.key} size="sm" variant={a.variant || ''} icon={a.icon} busy={busy === `bulk-${a.key}`}
+          onClick={() => { if (!a.confirm || window.confirm(a.confirm)) onAction(a.key); }}>
+          {a.label}
+        </Button>
+      ))}
+      <Button size="sm" variant="ghost" onClick={sel.clear}>{clearLabel}</Button>
+    </div>
+  );
+}
