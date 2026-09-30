@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     deepseek_model: str = "deepseek-flash"
     ai_mode: str = "single"             # single | ensemble
     ai_ensemble: str = "gemini,deepseek"
+    ai_primary: str = ""                # claude | gemini | deepseek | custom (judge + quick edits)
 
     @property
     def is_openai_compatible(self) -> bool:

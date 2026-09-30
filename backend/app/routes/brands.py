@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import RequireUser
 from ..db import Brand, get_db
+from ..services import palette as colours
 from ..services import pipeline, storage
 from ..services.renderer import SlideSpec, renderer
 
@@ -29,12 +30,17 @@ class BrandIn(BaseModel):
     font_family: str | None = None
     logo_placement: str | None = Field(None, pattern="^(top-left|top-right)$")
     card_style: str | None = Field(None, pattern="^(frosted|solid|minimal)$")
+    color_mode: str | None = Field(None, pattern="^(auto|brand)$")
+    logo_backdrop: str | None = Field(None, pattern="^(auto|always|never)$")
     cta_text: str | None = None
     publish_config: dict[str, Any] | None = None
 
 
 def _out(b: Brand) -> dict:
-    return {**b.to_dict(), "logo_url": storage.public_url(b.logo_path) if b.logo_path else None}
+    data = b.to_dict()
+    data["color_mode"] = b.color_mode or "auto"
+    data["logo_backdrop"] = b.logo_backdrop or "auto"
+    return {**data, "logo_url": storage.public_url(b.logo_path) if b.logo_path else None}
 
 
 @router.get("")
@@ -131,7 +137,15 @@ async def preview(bid: int, body: PreviewIn, db: Session = Depends(get_db)):
         "cta": (b.cta_text or "خطّط رحلتك القادمة معنا", "فريقنا جاهز لمساعدتك"),
     }
     heading, text = samples.get(body.kind, samples["cover"])
+    # Each preview uses a different sample photo: a bright sky (shows the logo plate),
+    # a turquoise sea and a warm sunset (show how colours follow the photo).
+    background = colours.sample_background(body.kind)
+    if (b.color_mode or "auto") == "auto":
+        style.palette = colours.extract_palette(background)
+    plate = body.kind != "cta" and colours.logo_needs_plate(background, b.logo_placement or "top-left",
+                                                            body.language == "ar")
     jpeg = await renderer.render(SlideSpec(kind=body.kind, heading=heading, body=text, position=0, total=6,
+                                           background=background, logo_plate=plate,
                                            badge="news" if body.kind == "cover" else None,
                                            credit="The Star" if body.kind != "cta" else ""), style)
     return {"image": "data:image/jpeg;base64," + base64.b64encode(jpeg).decode()}

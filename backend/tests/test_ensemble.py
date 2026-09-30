@@ -169,5 +169,75 @@ def test_migration_adds_new_column_to_an_old_database(tmp_path, monkeypatch):
         conn.execute(text("CREATE TABLE drafts (id INTEGER PRIMARY KEY, hook TEXT)"))
     monkeypatch.setattr(db_mod, "engine", old)
     db_mod._migrate()
-    assert "ai_meta" in {c["name"] for c in inspect(old).get_columns("drafts")}
+    assert {"ai_meta", "palette"} <= {c["name"] for c in inspect(old).get_columns("drafts")}
     db_mod._migrate()   # idempotent
+
+
+def test_railway_variables_alone_enable_gemini_and_deepseek(client, monkeypatch):
+    """The production situation: an old localhost AnythingLLM setting is stored in the database,
+    and the two keys arrive as Railway variables. The variables must be enough on their own."""
+    from app.config import get_settings
+    from app.db import AppSetting, session_scope
+
+    with session_scope() as db:                    # what the first dashboard version saved
+        row = db.get(AppSetting, credentials.SETTINGS_KEY)
+        legacy = {"ai_provider": "openai_compatible", "ai_base_url": "http://localhost:3001/api/v1",
+                  "ai_model": "claude-sonnet-5", "ai_api_key": "AK-old"}
+        if row:
+            row.value = legacy
+        else:
+            db.add(AppSetting(key=credentials.SETTINGS_KEY, value=legacy))
+    credentials.refresh()
+
+    s = get_settings()
+    for attr, value in {"gemini_api_key": "AIza-env", "deepseek_api_key": "sk-env", "ai_mode": "ensemble",
+                        "ai_ensemble": "gemini,deepseek", "ai_primary": "deepseek",
+                        "anthropic_api_key": ""}.items():
+        monkeypatch.setattr(s, attr, value)
+
+    info = client.get("/api/status").json()["ai"]
+    assert info["mode"] == "ensemble" and info["primary"] == "deepseek"
+    assert info["ensemble"] == ["gemini", "deepseek"]
+
+    hosts = []
+
+    def handler(request):
+        hosts.append(request.url.host)
+        prompt = json.loads(request.content)["messages"][-1]["content"]
+        if "Candidates" in prompt:
+            return chat('{"winner": "A", "scores": {"A": 8, "B": 7}, "reason": "أوضح"}')
+        return chat(json.dumps(post("منشور"), ensure_ascii=False))
+
+    install(monkeypatch, handler)
+    result = asyncio.run(gen_mod.generate_from_topic(BRAND, GEN, "موضوع"))
+    assert result.meta["mode"] == "ensemble" and result.meta["judge"] == "DeepSeek"
+    assert "localhost" not in hosts and hosts.count("api.deepseek.com") == 2   # writer + judge
+
+    # Quick edits go to the primary (DeepSeek), never to the dead localhost server
+    hosts.clear()
+    data = asyncio.run(gen_mod._call_model("s", "u", {"name": "t", "input_schema": {"type": "object"}}))
+    assert hosts == ["api.deepseek.com"] and isinstance(data, dict)
+
+    with session_scope() as db:
+        db.get(AppSetting, credentials.SETTINGS_KEY).value = {}
+    credentials.refresh()
+
+
+def test_gemini_failing_still_produces_posts_with_deepseek(client, monkeypatch):
+    """If the Google key turns out to be invalid, DeepSeek alone keeps the pipeline running."""
+    from app.config import get_settings
+    s = get_settings()
+    for attr, value in {"gemini_api_key": "AQ.not-a-real-gemini-key", "deepseek_api_key": "sk-env",
+                        "ai_mode": "ensemble", "ai_ensemble": "gemini,deepseek", "ai_primary": "deepseek",
+                        "anthropic_api_key": ""}.items():
+        monkeypatch.setattr(s, attr, value)
+    credentials.refresh()
+
+    def handler(request):
+        if request.url.host == "generativelanguage.googleapis.com":
+            return httpx.Response(401, json={"error": {"message": "API key not valid"}})
+        return chat(json.dumps(post("من DeepSeek"), ensure_ascii=False))
+
+    install(monkeypatch, handler)
+    result = asyncio.run(gen_mod.generate_from_topic(BRAND, GEN, "موضوع"))
+    assert result.hook == "من DeepSeek" and "Gemini" in result.meta["errors"]

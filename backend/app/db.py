@@ -50,6 +50,8 @@ class Brand(Base):
     logo_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     logo_placement: Mapped[str] = mapped_column(String(20), default="top-left")
     card_style: Mapped[str] = mapped_column(String(20), default="frosted")
+    color_mode: Mapped[str | None] = mapped_column(String(20), nullable=True, default="auto")      # auto | brand
+    logo_backdrop: Mapped[str | None] = mapped_column(String(20), nullable=True, default="auto")   # auto | always | never
     cta_text: Mapped[str] = mapped_column(Text, default="")
     publish_config: Mapped[dict[str, Any]] = mapped_column(default=dict)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -156,6 +158,7 @@ class Draft(Base):
     image_keywords: Mapped[str] = mapped_column(Text, default="")
     relevance: Mapped[int | None] = mapped_column(Integer, nullable=True)
     ai_meta: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)   # engine / ensemble verdict
+    palette: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)   # colours taken from the photo
     badge: Mapped[str] = mapped_column(String(30), default="news")
     status: Mapped[str] = mapped_column(String(20), default="generating", index=True)
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -232,6 +235,9 @@ SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 # existing tables, so these are added in place on start-up.
 _ADDED_COLUMNS = [
     ("drafts", "ai_meta", "JSON"),
+    ("drafts", "palette", "JSON"),
+    ("brands", "color_mode", "VARCHAR(20)"),
+    ("brands", "logo_backdrop", "VARCHAR(20)"),
 ]
 
 

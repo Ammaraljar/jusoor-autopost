@@ -78,13 +78,22 @@ def _raw_stored() -> dict[str, str]:
     return _cache
 
 
+def _is_local(url: str) -> bool:
+    host = (urlparse(url or "").hostname or "").lower()
+    return host in _LOCAL_HOSTS or host.startswith(("192.168.", "10.")) or host.endswith(".local")
+
+
 def _stored() -> dict[str, str]:
     """Stored values in the current format, with the first version's names translated."""
     raw = dict(_raw_stored())
     provider = raw.get("ai_provider", "").lower()
     if provider:
         target = "claude" if provider == "anthropic" else "custom"
-        raw.setdefault("ai_primary", target)
+        # An old setting that points at the user's own computer can never work from the server,
+        # and an AI_PRIMARY variable is a deliberate choice: neither is overridden by old data.
+        unusable = target == "custom" and _is_local(raw.get("ai_base_url", ""))
+        if not unusable and not get_settings().ai_primary:
+            raw.setdefault("ai_primary", target)
         if raw.get("ai_api_key"):
             raw.setdefault(f"{target}_api_key", raw["ai_api_key"])
         if raw.get("ai_model"):
@@ -107,6 +116,8 @@ def _env_value(field: str) -> str:
         return s.ai_api_key if s.is_openai_compatible else ""
     if field == "custom_model":
         return s.ai_model if s.is_openai_compatible else ""
+    if field == "ai_primary":
+        return s.ai_primary if s.ai_primary in ENGINES else ""
     attr = FIELDS[field][1]
     return str(getattr(s, attr, "") or "") if attr else ""
 

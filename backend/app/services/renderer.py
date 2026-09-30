@@ -28,7 +28,16 @@ BADGE_LABELS = {
 CREDIT_LABEL = {"ar": "المصدر", "en": "Source", "fr": "Source"}
 
 DEFAULT_COLORS = {"navy": "#16244F", "gold": "#C6A23C", "goldLight": "#D9B96A",
-                  "cardBg": "rgba(247,245,240,0.94)", "cardTitle": "#16244F", "cardText": "#3A4058"}
+                  "cardBg": "rgba(247,245,240,0.94)", "cardTitle": "#16244F", "cardText": "#3A4058",
+                  "cardHeading": "#8A6D16"}
+
+
+def _rgb_triplet(hex_colour: str) -> str:
+    value = (hex_colour or "#16244F").lstrip("#")
+    try:
+        return ",".join(str(int(value[i:i + 2], 16)) for i in (0, 2, 4))
+    except ValueError:
+        return "22,36,79"
 
 
 @dataclass
@@ -42,6 +51,7 @@ class SlideSpec:
     badge: str | None = None
     credit: str = ""
     variant: int = 0          # used to vary crop when a background is reused
+    logo_plate: bool = False  # navy backdrop behind the logo (bright photo behind it)
 
 
 @dataclass
@@ -55,6 +65,8 @@ class BrandStyle:
     logo_placement: str = "top-left"
     card_style: str = "frosted"
     language: str = "ar"
+    palette: dict | None = None       # colours taken from the photo (overrides brand colours)
+    logo_backdrop: str = "auto"       # auto | always | never
 
 
 @lru_cache
@@ -83,20 +95,24 @@ def _esc(text: str) -> str:
     return html.escape(text or "").replace("\n", "<br>")
 
 
-def _logo_html(brand: BrandStyle) -> str:
+def _logo_html(brand: BrandStyle, plate: bool = False) -> str:
+    cls = "logo plate" if plate else "logo"
     if brand.logo:
         mime = "image/svg+xml" if brand.logo.lstrip().startswith(b"<") else "image/png"
-        return f'<div class="logo"><img src="{_data_uri(brand.logo, mime)}" alt=""></div>'
+        return f'<div class="{cls}"><img src="{_data_uri(brand.logo, mime)}" alt=""></div>'
     parts = brand.name.split(" ", 1)
     first = _esc(parts[0])
     rest = f" <span>{_esc(parts[1])}</span>" if len(parts) > 1 else ""
-    return f'<div class="logo"><div class="wordmark">{first}{rest}</div></div>'
+    return f'<div class="{cls}"><div class="wordmark">{first}{rest}</div></div>'
 
 
 def build_html(spec: SlideSpec, brand: BrandStyle) -> str:
     lang = brand.language if brand.language in BADGE_LABELS else "ar"
     rtl = lang == "ar"
-    colors = {**DEFAULT_COLORS, **(brand.colors or {})}
+    brand_colors = {**DEFAULT_COLORS, **(brand.colors or {})}
+    colors = {**brand_colors, **(brand.palette or {})}
+    # The logo plate always uses the brand's own navy, so the logo keeps its identity.
+    plate = brand.logo_backdrop == "always" or (brand.logo_backdrop != "never" and spec.logo_plate)
     bg_pos = ["center", "30% center", "70% center", "center 30%", "center 70%"][spec.variant % 5]
     bg_filter = "filter: blur(2px) saturate(1.05); transform: scale(1.04);" if spec.variant % 2 and spec.kind == "content" else ""
     bg = f'<div class="bg" style="background-image:url({_data_uri(spec.background)})"></div>' if spec.background else ""
@@ -106,7 +122,7 @@ def build_html(spec: SlideSpec, brand: BrandStyle) -> str:
     top_dir = "row" if (logo_left != rtl) else "row-reverse"   # in RTL, row starts from the right
     badge_text = BADGE_LABELS[lang].get(spec.badge or "", "") if spec.badge else ""
     badge = f'<div class="badge">{_esc(badge_text)}</div>' if badge_text else "<div></div>"
-    top = f'<div class="top" >{_logo_html(brand)}{badge}</div>'
+    top = f'<div class="top" >{_logo_html(brand, plate)}{badge}</div>'
 
     dots = "".join(f'<i class="{"on" if i == spec.position else ""}"></i>' for i in range(spec.total))
     credit = f'<span class="credit">{CREDIT_LABEL[lang]}: {_esc(spec.credit)}</span>' if spec.credit else ""
@@ -139,6 +155,8 @@ def build_html(spec: SlideSpec, brand: BrandStyle) -> str:
         navy=colors["navy"], gold=colors["gold"], gold_light=colors.get("goldLight", colors["gold"]),
         card_bg=colors.get("cardBg"), card_title=colors.get("cardTitle"),
         card_text=colors.get("cardText", colors.get("cardSubtle", "#3A4058")),
+        card_heading=colors.get("cardHeading") or colors["gold"],
+        navy_rgb=_rgb_triplet(colors["navy"]), plate_rgb=_rgb_triplet(brand_colors["navy"]),
         bg_pos=bg_pos, bg_filter=bg_filter, top_dir=top_dir, content=content,
     )
 

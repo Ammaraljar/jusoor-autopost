@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..db import Article, Brand, CalendarItem, Draft, Slide, Source, session_scope, utcnow
 from . import app_settings, generator, images, scraper, storage
+from . import palette as colours
 from .renderer import BrandStyle, SlideSpec, renderer
 
 log = logging.getLogger(__name__)
@@ -54,7 +55,8 @@ def brand_style(brand: Brand, language: str) -> BrandStyle:
             logo = None
     return BrandStyle(name=brand.name, handle=brand.handle, website=brand.website, colors=brand.colors,
                       font_family=brand.font_family, logo=logo, logo_placement=brand.logo_placement,
-                      card_style=brand.card_style, language=language)
+                      card_style=brand.card_style, language=language,
+                      logo_backdrop=brand.logo_backdrop or "auto")
 
 
 # ---------------------------------------------------------------- collecting
@@ -230,6 +232,10 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
         badge = draft.badge
         mode = gen.get("image_source", "auto")
         prev_status = draft.status
+        color_mode = brand.color_mode or "auto"
+        stored_palette = draft.palette
+        logo_placement = brand.logo_placement or "top-left"
+        rtl = draft.language == "ar"
 
     backgrounds = []
     if needs_bg:
@@ -237,6 +243,22 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
         backgrounds = images.collect_backgrounds(article_image, keywords, mode, needed)
         if not backgrounds and mode != "source" and article_image:
             backgrounds = images.collect_backgrounds(article_image, keywords, "source", 1)
+
+    # Colours from the photo: computed once per post (from the cover) so all slides match,
+    # and recomputed only when the backgrounds change.
+    palette_to_store = stored_palette
+    if color_mode == "auto":
+        if needs_bg or not stored_palette:
+            cover_bytes = backgrounds[0]["bytes"] if backgrounds else None
+            if cover_bytes is None:
+                cover_url = next((s[5] for s in slides if s[1] == "cover" and s[5]), None)
+                cover_bytes = images.download_image(cover_url) if cover_url else None
+            found = colours.extract_palette(cover_bytes)
+            palette_to_store = found or {"source": "brand"}
+        style.palette = None if palette_to_store.get("source") == "brand" else palette_to_store
+    else:
+        style.palette = None
+        palette_to_store = None
 
     total = len(slides)
     results: dict[int, dict] = {}
@@ -256,7 +278,10 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
             spec = SlideSpec(kind=kind, heading=heading, body=body, position=pos, total=total,
                              background=bg["bytes"] if bg else None,
                              badge=badge if kind == "cover" else None,
-                             credit=credit if kind != "cta" else "", variant=pos)
+                             credit=credit if kind != "cta" else "", variant=pos,
+                             # the CTA slide sits on a dark overlay, so its logo never needs a plate
+                             logo_plate=kind != "cta" and colours.logo_needs_plate(
+                                 bg["bytes"] if bg else None, logo_placement, rtl))
             jpeg = await renderer.render(spec, style)
             key = f"generated/draft-{draft_id}-s{pos}-{uuid.uuid4().hex[:8]}.jpg"
             url = storage.save_bytes(key, jpeg)
@@ -278,6 +303,7 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
                     setattr(s, k, v)
         if prev_status in ("generating", "failed"):
             draft.status, draft.error = "pending_review", None
+        draft.palette = palette_to_store
         draft.updated_at = utcnow()
 
 

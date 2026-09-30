@@ -71,6 +71,7 @@ function BrandForm({ brand, onChanged }) {
     await api.patch(`/api/brands/${brand.id}`, {
       name: f.name, handle: f.handle, website: f.website, voice: f.voice, cta_text: f.cta_text,
       colors: f.colors, logo_placement: f.logo_placement, card_style: f.card_style, publish_config: f.publish_config,
+      color_mode: f.color_mode || 'auto', logo_backdrop: f.logo_backdrop || 'auto',
     });
     onChanged();
     refreshPreview();
@@ -100,12 +101,28 @@ function BrandForm({ brand, onChanged }) {
 
         <div className="card card-pad stack">
           <h3>{t('colors')}</h3>
+          {(f.color_mode || 'auto') === 'auto' && <p className="xs muted" style={{ marginTop: -8 }}>{t('colors_auto_hint')}</p>}
           <div className="swatches">
             {COLOR_KEYS.map((k) => (
               <Field key={k} label={t(`c_${k}`)}>
                 <input className="input" type="color" value={f.colors[k] || '#000000'} onChange={(e) => setColor(k, e.target.value)} />
               </Field>
             ))}
+          </div>
+          <div className="grid grid-2">
+            <Field label={t('color_mode')}>
+              <select className="select" value={f.color_mode || 'auto'} onChange={(e) => set('color_mode', e.target.value)}>
+                <option value="auto">{t('color_auto')}</option>
+                <option value="brand">{t('color_brand')}</option>
+              </select>
+            </Field>
+            <Field label={t('logo_backdrop')}>
+              <select className="select" value={f.logo_backdrop || 'auto'} onChange={(e) => set('logo_backdrop', e.target.value)}>
+                <option value="auto">{t('backdrop_auto')}</option>
+                <option value="always">{t('backdrop_always')}</option>
+                <option value="never">{t('backdrop_never')}</option>
+              </select>
+            </Field>
           </div>
           <div className="grid grid-2">
             <Field label={t('logo_placement')}>
@@ -198,7 +215,7 @@ function BrandForm({ brand, onChanged }) {
               <div className="ph" key={k}>{previews[k] ? <img src={previews[k]} alt={k} /> : <Spinner />}</div>
             ))}
           </div>
-          <p className="xs muted" style={{ marginTop: 8 }}>{t('save')} → {t('refresh_preview')}</p>
+          <p className="xs muted" style={{ marginTop: 8 }}>{t('preview_hint')} · {t('save')} → {t('refresh_preview')}</p>
         </div>
       </div>
     </div>
