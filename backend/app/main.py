@@ -33,7 +33,8 @@ async def lifespan(app: FastAPI):
 settings = get_settings()
 app = FastAPI(title=settings.app_name, lifespan=lifespan,
               docs_url="/api/docs" if settings.environment != "production" else None, redoc_url=None)
-app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origin_list, allow_credentials=True,
+app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origin_list,
+                   allow_origin_regex=settings.cors_origin_regex or None, allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])
 
 for r in (system.router, auth_routes.router, drafts.router, sources.router, planning.router, brands.router):

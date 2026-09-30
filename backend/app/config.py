@@ -134,7 +134,32 @@ class Settings(BaseSettings):
 
     @property
     def cors_origin_list(self) -> list[str]:
-        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+        """Allowed dashboard origins — trailing slashes and stray spaces are forgiven."""
+        out: list[str] = []
+        for raw in self.cors_origins.split(","):
+            origin = raw.strip().rstrip("/")
+            if not origin:
+                continue
+            if not origin.startswith(("http://", "https://")):
+                origin = "https://" + origin
+            if origin not in out:
+                out.append(origin)
+        return out
+
+    @property
+    def cors_origin_regex(self) -> str:
+        """Also allow Vercel preview deployments of the same project."""
+        import re
+        hosts = set()
+        for origin in self.cors_origin_list:
+            host = origin.split("://", 1)[-1]
+            if host.endswith(".vercel.app"):
+                project = host.split(".vercel.app")[0].split("-")[0]
+                if project:
+                    hosts.add(re.escape(project))
+        if not hosts:
+            return ""
+        return r"https://(" + "|".join(sorted(hosts)) + r")[a-z0-9\-]*\.vercel\.app"
 
 
 @lru_cache

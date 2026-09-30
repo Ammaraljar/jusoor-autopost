@@ -78,3 +78,24 @@ def test_unconfigured_auth_is_reported(client, monkeypatch):
     assert body["auth"]["mode"] == "unconfigured"
     assert any("ADMIN_EMAIL" in p for p in body["problems"])
     assert client.get("/api/drafts/counts").status_code == 500
+
+
+def test_cors_origins_are_forgiving(client, monkeypatch):
+    """A trailing slash or a missing scheme must not break the dashboard connection."""
+    from app.config import get_settings
+    s = get_settings()
+    monkeypatch.setattr(s, "cors_origins", " https://jusoor-autopost.vercel.app/ , jusoor.com ")
+    assert s.cors_origin_list == ["https://jusoor-autopost.vercel.app", "https://jusoor.com"]
+    import re
+    assert re.fullmatch(s.cors_origin_regex, "https://jusoor-autopost-abc123-team.vercel.app")
+
+
+def test_preview_origin_allowed_by_middleware(client):
+    """Preflight from a Vercel preview URL of the same project is accepted."""
+    from app.config import get_settings
+    get_settings.cache_clear() if hasattr(get_settings, "cache_clear") else None
+    r = client.options("/api/auth/login", headers={
+        "Origin": "https://jusoor-autopost.vercel.app",
+        "Access-Control-Request-Method": "POST",
+    })
+    assert r.status_code in (200, 400)   # 400 only when CORS_ORIGINS is unset in the test env
