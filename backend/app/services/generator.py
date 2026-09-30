@@ -9,6 +9,7 @@ Two providers are supported and chosen with AI_PROVIDER:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -71,6 +72,7 @@ class GeneratedPost:
     relevance: int = 10
     relevance_reason: str = ""
     raw: dict[str, Any] = field(default_factory=dict)
+    meta: dict[str, Any] = field(default_factory=dict)   # which engine wrote it, ensemble verdict
 
 
 @dataclass
@@ -164,29 +166,37 @@ def _parse(data: dict[str, Any]) -> GeneratedPost:
 
 
 class AIError(RuntimeError):
-    """A readable, user-facing failure of the AI provider."""
+    """A readable, user-facing failure of an AI engine."""
 
 
-async def _call_claude(system: str, user: str, tool: dict[str, Any], max_tokens: int = 3000) -> dict[str, Any]:
+# ============================================================ Claude (tool use)
+async def _call_claude(cfg: dict[str, str], system: str, user: str, tool: dict[str, Any],
+                       max_tokens: int = 3000) -> dict[str, Any]:
     """Anthropic tool use — the model can only answer with a valid tool input."""
     import anthropic
     from anthropic import AsyncAnthropic
 
     s = get_settings()
-    cfg = credentials.current()
-    if not cfg["ai_api_key"]:
+    if not cfg["api_key"]:
         raise AIError("مفتاح Claude غير مضبوط — أضفه من الإعدادات ← المفاتيح والاتصالات")
-    client = AsyncAnthropic(api_key=cfg["ai_api_key"], timeout=s.ai_timeout_seconds)
+    client = AsyncAnthropic(api_key=cfg["api_key"], timeout=s.ai_timeout_seconds)
     try:
-        msg = await _create_claude_message(client, s, cfg, system, user, tool, max_tokens)
+        msg = await client.messages.create(
+            model=cfg["model"] or "claude-sonnet-5",
+            max_tokens=max_tokens,
+            system=system,
+            tools=[tool],
+            tool_choice={"type": "tool", "name": tool["name"]},
+            messages=[{"role": "user", "content": user}],
+        )
     except anthropic.AuthenticationError as exc:
         raise AIError("مفتاح Claude مرفوض — تأكد من نسخه كاملًا من console.anthropic.com") from exc
     except anthropic.PermissionDeniedError as exc:
-        raise AIError("المفتاح لا يملك صلاحية — تحقق من رصيد الحساب في console.anthropic.com") from exc
+        raise AIError("مفتاح Claude لا يملك صلاحية — تحقق من رصيد الحساب") from exc
     except anthropic.NotFoundError as exc:
-        raise AIError(f"النموذج «{cfg['ai_model']}» غير موجود — جرّب claude-sonnet-5") from exc
+        raise AIError(f"نموذج Claude «{cfg['model']}» غير موجود") from exc
     except anthropic.RateLimitError as exc:
-        raise AIError("تجاوزت حد الاستخدام أو نفد الرصيد — راجع Billing في console.anthropic.com") from exc
+        raise AIError("Claude: تجاوزت حد الاستخدام أو نفد الرصيد") from exc
     except anthropic.APIConnectionError as exc:
         raise AIError("تعذّر الاتصال بخوادم Anthropic — أعد المحاولة بعد قليل") from exc
     except anthropic.APIStatusError as exc:
@@ -197,17 +207,7 @@ async def _call_claude(system: str, user: str, tool: dict[str, Any], max_tokens:
     raise AIError("Claude لم يُعد مخرجات منظّمة")
 
 
-async def _create_claude_message(client, s, cfg, system, user, tool, max_tokens):
-    return await client.messages.create(
-        model=cfg["ai_model"] or "claude-sonnet-5",
-        max_tokens=max_tokens,
-        system=system,
-        tools=[tool],
-        tool_choice={"type": "tool", "name": tool["name"]},
-        messages=[{"role": "user", "content": user}],
-    )
-
-
+# ============================================================ OpenAI-compatible engines
 def extract_json(text: str) -> dict[str, Any]:
     """Pull one JSON object out of a free-text reply (code fences, prefixes, trailing notes)."""
     if not text or not text.strip():
@@ -241,58 +241,66 @@ def extract_json(text: str) -> dict[str, Any]:
 
 
 def _schema_prompt(user: str, tool: dict[str, Any]) -> str:
+    # The word "json" must appear literally — DeepSeek's JSON mode requires it.
     return (f"{user}\n\n"
-            "Answer with ONE JSON object and nothing else: no explanation, no markdown, no code fences.\n"
+            "Answer with ONE json object and nothing else: no explanation, no markdown, no code fences.\n"
             "It must follow this JSON Schema exactly (all required keys present, correct types):\n"
             f"{json.dumps(tool['input_schema'], ensure_ascii=False)}")
 
 
-async def _call_openai_compatible(system: str, user: str, tool: dict[str, Any],
+async def _call_openai_compatible(cfg: dict[str, str], system: str, user: str, tool: dict[str, Any],
                                   max_tokens: int = 3000) -> dict[str, Any]:
-    """AnythingLLM and friends: ask for JSON in the prompt, then parse it defensively."""
+    """Gemini, DeepSeek, AnythingLLM…: ask for JSON in the prompt, then parse it defensively."""
     s = get_settings()
-    cfg = credentials.current()
-    if not cfg["ai_base_url"]:
-        raise AIError("رابط خادم الذكاء الاصطناعي غير مضبوط")
-    url = cfg["ai_base_url"].rstrip("/") + "/chat/completions"
-    headers = {"Authorization": f"Bearer {cfg['ai_api_key']}", "Content-Type": "application/json"}
+    label = cfg["label"]
+    if not cfg["base_url"]:
+        raise AIError(f"{label}: رابط الخادم غير مضبوط")
+    if cfg["name"] != "custom" and not cfg["api_key"]:
+        raise AIError(f"مفتاح {label} غير مضبوط")
+    url = cfg["base_url"].rstrip("/") + "/chat/completions"
+    headers = {"Authorization": f"Bearer {cfg['api_key']}", "Content-Type": "application/json"}
     messages = [{"role": "system", "content": system}, {"role": "user", "content": _schema_prompt(user, tool)}]
     json_mode = s.ai_json_mode
     last_error = ""
 
     async with httpx.AsyncClient(timeout=s.ai_timeout_seconds) as client:
         for attempt in range(3):
-            payload: dict[str, Any] = {"model": cfg["ai_model"], "messages": messages,
+            payload: dict[str, Any] = {"model": cfg["model"], "messages": messages,
                                        "max_tokens": max_tokens, "temperature": 0.6, "stream": False}
             if json_mode:
                 payload["response_format"] = {"type": "json_object"}
             try:
                 resp = await client.post(url, json=payload, headers=headers)
             except httpx.ConnectError as exc:
-                warnings = [w for w in credentials.ai_warnings(cfg) if "جهازك المحلي" in w]
-                raise AIError(warnings[0] if warnings else
-                              f"تعذّر الوصول إلى خادم الذكاء الاصطناعي على {cfg['ai_base_url']}") from exc
+                warnings = [w for w in credentials.ai_warnings() if "جهازك المحلي" in w] if cfg["name"] == "custom" else []
+                raise AIError(warnings[0] if warnings else f"{label}: تعذّر الوصول إلى {cfg['base_url']}") from exc
             except httpx.TimeoutException as exc:
-                raise AIError(f"انتهت مهلة الاتصال بخادم الذكاء الاصطناعي ({s.ai_timeout_seconds} ثانية)") from exc
+                raise AIError(f"{label}: انتهت مهلة الاتصال ({s.ai_timeout_seconds} ثانية)") from exc
+            except httpx.TransportError as exc:
+                raise AIError(f"{label}: تعذّر الوصول إلى {cfg['base_url']} ({exc})") from exc
             if resp.status_code in (401, 403):
-                raise AIError("خادم الذكاء الاصطناعي رفض المفتاح — تحقق من مفتاح AnythingLLM")
+                raise AIError(f"{label} رفض المفتاح — تأكد من المفتاح أو أنشئ مفتاحًا جديدًا")
+            if resp.status_code == 402:
+                raise AIError(f"{label}: الرصيد غير كافٍ — أضف رصيدًا في حسابك")
+            if resp.status_code == 429:
+                raise AIError(f"{label}: تجاوزت حد الطلبات أو الحصة المجانية — انتظر قليلًا")
             if resp.status_code == 404:
-                raise AIError(f"الرابط {url} غير موجود — في AnythingLLM ينتهي الرابط بـ /api/v1/openai")
+                raise AIError(f"{label}: الرابط أو النموذج «{cfg['model']}» غير موجود")
             if resp.status_code >= 400:
                 body = resp.text[:300]
                 if json_mode:
-                    # Some servers reject the unknown response_format field — drop it and retry once.
-                    log.warning("AI server rejected json mode (%s), retrying without it", resp.status_code)
+                    # Some servers reject response_format — drop it and retry once.
+                    log.warning("%s rejected json mode (%s), retrying without it", label, resp.status_code)
                     json_mode = False
                     continue
-                raise AIError(f"خادم الذكاء الاصطناعي أعاد خطأ {resp.status_code}: {body}")
+                raise AIError(f"{label} أعاد خطأ {resp.status_code}: {body}")
             try:
                 data = resp.json()
             except ValueError as exc:
-                raise RuntimeError(f"AI returned non-JSON response: {resp.text[:200]}") from exc
+                raise AIError(f"{label}: رد غير مفهوم: {resp.text[:200]}") from exc
             choices = data.get("choices") or []
             if not choices:
-                raise RuntimeError(f"AI returned no choices: {str(data)[:200]}")
+                raise AIError(f"{label}: لم يُرجع أي رد")
             message = choices[0].get("message") or {}
             text = message.get("content") or choices[0].get("text") or ""
             if isinstance(text, list):   # some servers return content parts
@@ -301,51 +309,175 @@ async def _call_openai_compatible(system: str, user: str, tool: dict[str, Any],
                 return extract_json(text)
             except ValueError as exc:
                 last_error = str(exc)
-                log.warning("AI reply was not valid JSON (%s), asking again", last_error)
+                log.warning("%s reply was not valid JSON (%s), asking again", label, last_error)
                 messages = messages[:2] + [
-                    {"role": "assistant", "content": text[:2000]},
-                    {"role": "user", "content": "Your previous reply was not a valid JSON object "
-                                                f"({last_error}). Return ONLY the JSON object, nothing else."},
+                    {"role": "assistant", "content": text[:2000] or "(empty)"},
+                    {"role": "user", "content": "Your previous reply was not a valid json object "
+                                                f"({last_error}). Return ONLY the json object, nothing else."},
                 ]
-    raise AIError(f"النموذج لم يُعد JSON صالحًا بعد 3 محاولات: {last_error}")
+    raise AIError(f"{label}: لم يُرجع JSON صالحًا بعد 3 محاولات ({last_error})")
 
 
-def _openai_compatible() -> bool:
-    return credentials.current()["ai_provider"].lower() in ("openai_compatible", "openai", "anythingllm")
+# ============================================================ engine routing
+async def _call_engine(name: str, system: str, user: str, tool: dict[str, Any],
+                       max_tokens: int = 3000) -> dict[str, Any]:
+    cfg = credentials.engine(name)
+    if cfg["kind"] == "anthropic":
+        return await _call_claude(cfg, system, user, tool, max_tokens)
+    return await _call_openai_compatible(cfg, system, user, tool, max_tokens)
+
+
+def _primary() -> str:
+    return credentials.current()["ai_primary"]
 
 
 async def _call_model(system: str, user: str, tool: dict[str, Any], max_tokens: int = 3000) -> dict[str, Any]:
-    if _openai_compatible():
-        return await _call_openai_compatible(system, user, tool, max_tokens)
-    return await _call_claude(system, user, tool, max_tokens)
+    """Quick tasks (rewrite one field or one slide) use the primary engine only."""
+    return await _call_engine(_primary(), system, user, tool, max_tokens)
 
 
+JUDGE_TOOL = {
+    "name": "choose_best",
+    "description": "Pick the best social media post among the candidates.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "winner": {"type": "string", "description": "Label of the best candidate (A, B, C…)."},
+            "scores": {"type": "object", "description": "Score from 0 to 10 for every label.",
+                       "additionalProperties": {"type": "integer"}},
+            "reason": {"type": "string", "description": "One short sentence in Arabic explaining the choice."},
+        },
+        "required": ["winner", "scores", "reason"],
+    },
+}
+
+
+def heuristic_score(post: GeneratedPost, expected_slides: int) -> float:
+    """Rule-based quality score used when no judge is available."""
+    score = 0.0
+    score += 2 if 0 < len(post.hook.split()) <= 10 else 0
+    score += 2 if 40 <= len(post.caption.split()) <= 220 else 0
+    score += 2 if 5 <= len(post.hashtags) <= 14 else 0
+    score += 2 if len(post.slides) == expected_slides else (1 if post.slides else 0)
+    score += 1 if post.cta and post.cta != post.hook else 0
+    score += 1 if not re.search(r"لا يوجد|N/A|TODO|\{\{", " ".join([post.hook, post.caption, post.cta])) else 0
+    return score + post.relevance / 10
+
+
+def _candidate_view(post: GeneratedPost) -> dict[str, Any]:
+    return {"hook": post.hook, "subtitle": post.subtitle, "caption": post.caption, "hashtags": post.hashtags,
+            "slides": post.slides, "cta": post.cta}
+
+
+async def _judge(brand_system: str, candidates: list[tuple[str, GeneratedPost]], expected_slides: int,
+                 judge_engine: str) -> tuple[int, dict[str, Any]]:
+    """Return the index of the best candidate and the verdict details."""
+    labels = [chr(ord("A") + i) for i in range(len(candidates))]
+    listing = {labels[i]: _candidate_view(post) for i, (_name, post) in enumerate(candidates)}
+    user = ("Several writers produced the same carousel post. Judge them as a senior editor for this brand: "
+            "accuracy to the source, natural Arabic, hook strength, clarity of the slides, and a useful CTA. "
+            "Do not favour length.\n\n"
+            f"Candidates:\n{json.dumps(listing, ensure_ascii=False)}\n\nUse the choose_best tool.")
+    try:
+        verdict = await _call_engine(judge_engine, brand_system, user, JUDGE_TOOL, max_tokens=500)
+        winner = str(verdict.get("winner", "")).strip().upper()[:1]
+        if winner in labels:
+            scores = {str(k).upper(): _as_int(v, 0) for k, v in (verdict.get("scores") or {}).items()}
+            return labels.index(winner), {
+                "method": "judge", "judge": credentials.ENGINES[judge_engine]["label"],
+                "reason": _text(verdict.get("reason"))[:300],
+                "scores": {candidates[i][0]: scores.get(labels[i]) for i in range(len(candidates))},
+            }
+        log.warning("judge returned an unknown winner: %s", verdict)
+    except Exception as exc:  # noqa: BLE001 - a failed judge must not lose good posts
+        log.warning("judge failed, falling back to rules: %s", exc)
+    scores = [heuristic_score(post, expected_slides) for _name, post in candidates]
+    best = max(range(len(candidates)), key=lambda i: scores[i])
+    return best, {"method": "rules", "reason": "اختيار آلي حسب قواعد الجودة (تعذّر عمل الحَكَم)",
+                  "scores": {candidates[i][0]: round(scores[i], 1) for i in range(len(candidates))}}
+
+
+async def _generate_post(system: str, user: str, gen: dict[str, Any]) -> GeneratedPost:
+    """Full post generation: one engine, or several in parallel with a judge."""
+    cfg = credentials.current()
+    engines = credentials.ensemble_engines(cfg) if cfg["ai_mode"] == "ensemble" else []
+    label = lambda n: credentials.ENGINES[n]["label"]  # noqa: E731
+
+    if len(engines) < 2:
+        name = cfg["ai_primary"]
+        post = _parse(await _call_engine(name, system, user, POST_TOOL))
+        post.meta = {"mode": "single", "engine": name, "engine_label": label(name)}
+        return post
+
+    results = await asyncio.gather(*(_call_engine(n, system, user, POST_TOOL) for n in engines),
+                                   return_exceptions=True)
+    candidates: list[tuple[str, GeneratedPost]] = []
+    errors: dict[str, str] = {}
+    for name, res in zip(engines, results):
+        if isinstance(res, BaseException):
+            errors[name] = str(res)[:300]
+            continue
+        try:
+            candidates.append((name, _parse(res)))
+        except Exception as exc:  # noqa: BLE001
+            errors[name] = str(exc)[:300]
+    if not candidates:
+        raise AIError("فشلت كل المحرّكات: " + " | ".join(f"{label(n)}: {e}" for n, e in errors.items()))
+
+    expected = int(gen.get("content_slides", 4))
+    if len(candidates) == 1:
+        name, post = candidates[0]
+        post.meta = {"mode": "ensemble", "engine": name, "engine_label": label(name),
+                     "candidates": [name], "errors": {label(n): e for n, e in errors.items()},
+                     "reason": "المحرّك الوحيد الذي نجح"}
+        return post
+
+    judge = cfg["ai_primary"] if cfg["ai_primary"] in credentials.ready_engines(cfg) else candidates[0][0]
+    best, verdict = await _judge(system, candidates, expected, judge)
+    name, post = candidates[best]
+    post.meta = {"mode": "ensemble", "engine": name, "engine_label": label(name),
+                 "candidates": [n for n, _p in candidates],
+                 "scores": {label(n): v for n, v in verdict["scores"].items()},
+                 "method": verdict["method"], "judge": verdict.get("judge"), "reason": verdict["reason"],
+                 "errors": {label(n): e for n, e in errors.items()}}
+    return post
+
+
+# ============================================================ status & connection test
 async def test_connection() -> dict[str, Any]:
-    """Tiny round-trip used by the dashboard's "test connection" button."""
+    """Round-trip to every ready engine in parallel — powers the "test connection" button."""
     tool = {"name": "ping", "description": "Reply with a short greeting.",
             "input_schema": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}}
-    try:
-        data = await _call_model("You are a helpful assistant. Answer in Arabic.",
-                                 "قل مرحبًا بكلمتين فقط.", tool, max_tokens=60)
-        return {"ok": True, "reply": _text(data.get("text"))[:120], **ai_info()}
-    except Exception as exc:  # noqa: BLE001 - the message is what the user needs
-        return {"ok": False, "error": str(exc)[:400], **ai_info()}
+    names = credentials.ready_engines() or [_primary()]
+
+    async def one(name: str) -> dict[str, Any]:
+        cfg = credentials.engine(name)
+        try:
+            data = await _call_engine(name, "You are a helpful assistant. Answer in Arabic.",
+                                      "قل مرحبًا بكلمتين فقط.", tool, max_tokens=80)
+            return {"engine": name, "label": cfg["label"], "model": cfg["model"], "ok": True,
+                    "reply": _text(data.get("text"))[:120]}
+        except Exception as exc:  # noqa: BLE001 - the message is what the user needs
+            return {"engine": name, "label": cfg["label"], "model": cfg["model"], "ok": False,
+                    "error": str(exc)[:400]}
+
+    results = list(await asyncio.gather(*(one(n) for n in names)))
+    return {"ok": any(r["ok"] for r in results), "engines": results, **ai_info()}
 
 
 def ai_available() -> bool:
-    cfg = credentials.current()
-    if _openai_compatible():
-        return bool(cfg["ai_base_url"] and cfg["ai_model"])
-    return bool(cfg["ai_api_key"])
+    return bool(credentials.ready_engines())
 
 
 def ai_info() -> dict[str, Any]:
     cfg = credentials.current()
-    openai_compatible = _openai_compatible()
-    return {"configured": ai_available(), "provider": "openai_compatible" if openai_compatible else "anthropic",
-            "model": cfg["ai_model"] or ("" if openai_compatible else "claude-sonnet-5"),
-            "base_url": cfg["ai_base_url"] if openai_compatible else "",
-            "source": credentials.source_of("ai_api_key")}
+    primary = cfg["ai_primary"]
+    engine = credentials.engine(primary, cfg)
+    return {"configured": ai_available(), "mode": cfg["ai_mode"], "primary": primary,
+            "provider": "anthropic" if engine["kind"] == "anthropic" else "openai_compatible",
+            "model": engine["model"], "base_url": engine["base_url"] if primary == "custom" else "",
+            "ready": credentials.ready_engines(cfg), "ensemble": credentials.ensemble_engines(cfg),
+            "source": credentials.source_of(f"{primary}_api_key")}
 
 
 async def generate_from_article(brand: BrandContext, gen: dict[str, Any], title: str, body: str,
@@ -354,7 +486,7 @@ async def generate_from_article(brand: BrandContext, gen: dict[str, Any], title:
             "Create the carousel post using the create_post tool.")
     if not ai_available():
         return demo_post(title, body, gen)
-    return _parse(await _call_model(build_system_prompt(brand, gen), user, POST_TOOL))
+    return await _generate_post(build_system_prompt(brand, gen), user, gen)
 
 
 async def generate_from_topic(brand: BrandContext, gen: dict[str, Any], topic: str, notes: str = "") -> GeneratedPost:
@@ -363,7 +495,7 @@ async def generate_from_topic(brand: BrandContext, gen: dict[str, Any], topic: s
             "Relevance should reflect the topic fit. Use the create_post tool.")
     if not ai_available():
         return demo_post(topic, notes, gen)
-    return _parse(await _call_model(build_system_prompt(brand, gen), user, POST_TOOL))
+    return await _generate_post(build_system_prompt(brand, gen), user, gen)
 
 
 async def regenerate_field(brand: BrandContext, gen: dict[str, Any], draft_context: str, field_name: str) -> str:
@@ -402,7 +534,7 @@ def demo_post(title: str, body: str, gen: dict[str, Any]) -> GeneratedPost:
         caption=f"{title}\n\n{sentences[0][:300]}\n\nتواصل معنا لتخطيط رحلتك.",
         hashtags=["#سفر", "#ماليزيا", "#سياحة", "#جسور_للسفر", "#travel"], slides=slides,
         cta="احجز رحلتك القادمة مع جسور للسفر", first_comment="", image_keywords="travel malaysia",
-        badge="news", relevance=8, raw={"demo": True},
+        badge="news", relevance=8, raw={"demo": True}, meta={"mode": "demo"},
     )
 
 

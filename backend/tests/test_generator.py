@@ -87,7 +87,7 @@ def test_anythingllm_retries_without_json_mode_then_on_bad_json(client, anything
     post = asyncio.run(gen_mod.generate_from_topic(BRAND, GEN, "شلالات لنكاوي"))
     assert post.hook == "بينانغ تسرق القلب"
     assert len(calls) == 3
-    assert "not a valid JSON object" in calls[2]["messages"][-1]["content"]
+    assert "not a valid json object" in calls[2]["messages"][-1]["content"]
 
 
 def test_anythingllm_surfaces_server_errors(client, anythingllm, monkeypatch):
@@ -140,8 +140,9 @@ def test_claude_provider_uses_tool_use(client, monkeypatch):
     assert post.hook == "بينانغ تسرق القلب"
     assert captured["tool_choice"] == {"type": "tool", "name": "create_post"}
     assert captured["model"] == "claude-sonnet-5"
-    assert gen_mod.ai_info() == {"configured": True, "provider": "anthropic", "model": "claude-sonnet-5",
-                                 "base_url": "", "source": "environment"}
+    info = gen_mod.ai_info()
+    assert info["configured"] and info["provider"] == "anthropic" and info["model"] == "claude-sonnet-5"
+    assert info["primary"] == "claude" and info["mode"] == "single"
 
 
 def test_ai_info_for_anythingllm(client, anythingllm):
@@ -199,28 +200,33 @@ def test_credentials_saved_from_the_dashboard_are_used(client, monkeypatch):
     assert client.get("/api/status").json()["ai"]["configured"] is False
 
     saved = client.put("/api/settings/credentials", json={
-        "ai_provider": "openai_compatible",
-        "ai_base_url": "https://llm.example.com/api/v1/openai",
-        "ai_model": "jusoor",
-        "ai_api_key": "AK-secret-value",
+        "ai_primary": "custom",
+        "custom_base_url": "https://llm.example.com/api/v1/openai",
+        "custom_model": "jusoor",
+        "custom_api_key": "AK-secret-value",
         "pexels_api_key": "PX-secret",
     }).json()["values"]
-    assert saved["ai_api_key"] == {"set": True, "source": "dashboard", "hint": "…alue"}
-    assert saved["ai_base_url"] == "https://llm.example.com/api/v1/openai"
+    assert saved["custom_api_key"] == {"set": True, "source": "dashboard", "hint": "…alue"}
+    assert saved["custom_base_url"] == "https://llm.example.com/api/v1/openai"
+    assert saved["engines"]["custom"]["ready"] is True
     assert "AK-secret-value" not in str(saved)
 
     status = client.get("/api/status").json()
-    assert status["ai"] == {"configured": True, "provider": "openai_compatible", "model": "jusoor",
-                            "base_url": "https://llm.example.com/api/v1/openai", "source": "dashboard"}
+    assert status["ai"]["configured"] is True and status["ai"]["primary"] == "custom"
+    assert status["ai"]["provider"] == "openai_compatible" and status["ai"]["model"] == "jusoor"
     assert status["images"]["pexels"] is True
-    assert credentials.current()["ai_api_key"] == "AK-secret-value"
+    assert credentials.current()["custom_api_key"] == "AK-secret-value"
 
     # Empty string keeps the stored secret, null clears it
-    client.put("/api/settings/credentials", json={"ai_api_key": "", "ai_model": "jusoor-2"})
-    assert credentials.current()["ai_api_key"] == "AK-secret-value"
-    client.put("/api/settings/credentials", json={"ai_api_key": None})
-    assert credentials.current()["ai_api_key"] == ""
-    assert client.get("/api/settings/credentials").json()["values"]["ai_api_key"]["set"] is False
+    client.put("/api/settings/credentials", json={"custom_api_key": "", "custom_model": "jusoor-2"})
+    assert credentials.current()["custom_api_key"] == "AK-secret-value"
+    client.put("/api/settings/credentials", json={"custom_api_key": None})
+    assert credentials.current()["custom_api_key"] == ""
+
+    # The first version's field names are still accepted
+    client.put("/api/settings/credentials", json={"ai_provider": "anthropic", "ai_api_key": "sk-ant-legacy"})
+    assert credentials.current()["claude_api_key"] == "sk-ant-legacy"
+    assert credentials.current()["ai_primary"] == "claude"
 
     assert client.put("/api/settings/credentials", json={"nope": "x"}).status_code == 400
     client.put("/api/settings/credentials", json={f: None for f in credentials.FIELDS})
@@ -259,7 +265,9 @@ def test_localhost_ai_url_is_explained(client, monkeypatch):
         raise httpx.ConnectError("All connection attempts failed", request=request)
     monkeypatch.setattr(gen_mod.httpx, "AsyncClient", _mock(gen_mod, refuse))
     result = client.post("/api/settings/credentials/test-ai").json()
-    assert result["ok"] is False and "جهازك المحلي" in result["error"]
+    assert result["ok"] is False
+    custom = [e for e in result["engines"] if e["engine"] == "custom"][0]
+    assert "جهازك المحلي" in custom["error"]
     client.put("/api/settings/credentials", json={f: None for f in credentials.FIELDS})
     credentials.refresh()
 

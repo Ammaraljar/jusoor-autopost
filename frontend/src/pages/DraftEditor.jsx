@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, ArrowRight, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, Download, ExternalLink,
+import { AlertTriangle, ArrowRight, Bot, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, Download, ExternalLink,
   ImagePlus, Images, RotateCcw, Save, Send, Sparkles, Trash2, Wand2, X, XCircle } from 'lucide-react';
 import { Button, ErrorBox, Field, Loading, Modal, Spinner, StatusPill, useAction, useLoad } from '../components/ui';
 import { api, mediaUrl } from '../lib/api';
@@ -190,6 +190,8 @@ export default function DraftEditor() {
               )}
             </div>
           </div>
+
+          {d.ai_meta && <AiMeta meta={d.ai_meta} />}
 
           <div className="card card-pad">
             <h3>
@@ -399,5 +401,45 @@ function PublishModal({ draft, onClose, onDone }) {
         </div>
       )}
     </Modal>
+  );
+}
+
+/** Which engine wrote the post — and, in parallel mode, why it won. */
+function AiMeta({ meta }) {
+  const { t } = useI18n();
+  if (meta.mode === 'demo') {
+    return <div className="banner warn small" style={{ margin: 0 }}><Bot size={16} /> {t('demo_text')}</div>;
+  }
+  if (meta.mode !== 'ensemble') {
+    return (
+      <div className="small muted row" style={{ gap: 6 }}>
+        <Bot size={14} /> {t('written_by')}: <b>{meta.engine_label}</b>
+      </div>
+    );
+  }
+  const scores = Object.entries(meta.scores || {});
+  const errors = Object.entries(meta.errors || {});
+  return (
+    <div className="card card-pad stack" style={{ gap: 8 }}>
+      <h3 style={{ margin: 0 }}><Bot size={16} /> {t('ensemble_winner')}: {meta.engine_label}</h3>
+      {scores.length > 0 && (
+        <div className="row">
+          {scores.map(([name, score]) => (
+            <span key={name} className={`pill ${name === meta.engine_label ? 'ok' : ''}`}>{name} {score ?? '—'}/10</span>
+          ))}
+        </div>
+      )}
+      {meta.reason && (
+        <div className="small">
+          {meta.method === 'judge' ? <>{t('judged_by')} <b>{meta.judge}</b>: </> : null}
+          {meta.method === 'rules' ? t('by_rules') : meta.reason}
+        </div>
+      )}
+      {errors.length > 0 && (
+        <div className="xs" style={{ color: 'var(--warn)' }}>
+          {t('engine_errors')}: {errors.map(([n, e]) => `${n} — ${e}`).join(' · ')}
+        </div>
+      )}
+    </div>
   );
 }

@@ -155,6 +155,7 @@ class Draft(Base):
     cta: Mapped[str] = mapped_column(Text, default="")
     image_keywords: Mapped[str] = mapped_column(Text, default="")
     relevance: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ai_meta: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)   # engine / ensemble verdict
     badge: Mapped[str] = mapped_column(String(30), default="news")
     status: Mapped[str] = mapped_column(String(20), default="generating", index=True)
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -227,8 +228,30 @@ engine = _make_engine()
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 
+# Columns added after the first release: (table, column, SQL type). create_all() never alters
+# existing tables, so these are added in place on start-up.
+_ADDED_COLUMNS = [
+    ("drafts", "ai_meta", "JSON"),
+]
+
+
+def _migrate() -> None:
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    with engine.begin() as conn:
+        for table, column, sql_type in _ADDED_COLUMNS:
+            if table not in tables:
+                continue
+            existing = {c["name"] for c in inspector.get_columns(table)}
+            if column not in existing:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {sql_type}"))
+
+
 def init_db() -> None:
     Base.metadata.create_all(engine)
+    _migrate()
 
 
 @contextmanager

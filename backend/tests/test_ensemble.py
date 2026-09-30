@@ -1,0 +1,173 @@
+"""Parallel generation: Gemini + DeepSeek write at the same time, a judge picks the best post."""
+import asyncio
+import json
+
+import httpx
+import pytest
+
+from app.services import credentials
+from app.services import generator as gen_mod
+from app.services.generator import BrandContext
+
+BRAND = BrandContext(name="JUSOOR Travel", handle="@jusoortravel")
+GEN = {"language": "ar", "tone": "friendly", "content_type": "news", "platform": "instagram", "content_slides": 2}
+
+
+def post(hook, slides=2):
+    return {"relevance": 9, "hook": hook, "subtitle": "سطر", "caption": "نص المنشور " * 30,
+            "hashtags": ["سفر", "ماليزيا", "لنكاوي", "عائلة", "travel"],
+            "slides": [{"heading": f"عنوان {i}", "body": "نص"} for i in range(slides)],
+            "cta": "احجز معنا", "first_comment": "", "image_keywords": "langkawi", "badge": "news"}
+
+
+def chat(content):
+    return httpx.Response(200, json={"choices": [{"message": {"role": "assistant", "content": content}}]})
+
+
+@pytest.fixture
+def two_engines(client, monkeypatch):
+    client.put("/api/settings/credentials", json={
+        "ai_mode": "ensemble", "ai_primary": "gemini", "ai_ensemble": "gemini,deepseek",
+        "gemini_api_key": "AIza-test-gemini", "deepseek_api_key": "sk-test-deepseek",
+    })
+    yield
+    client.put("/api/settings/credentials", json={f: None for f in credentials.FIELDS})
+    credentials.refresh()
+
+
+def install(monkeypatch, handler):
+    real = httpx.AsyncClient
+
+    def factory(*a, **kw):
+        kw["transport"] = httpx.MockTransport(handler)
+        return real(*a, **kw)
+    monkeypatch.setattr(gen_mod.httpx, "AsyncClient", factory)
+
+
+def test_both_engines_write_and_the_judge_picks(client, two_engines, monkeypatch):
+    seen = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        host = request.url.host
+        seen.append((host, body["model"], request.headers["Authorization"]))
+        prompt = body["messages"][-1]["content"]
+        assert "json" in prompt                       # DeepSeek JSON mode requirement
+        if "choose_best" in prompt or "Candidates" in prompt:
+            return chat(json.dumps({"winner": "B", "scores": {"A": 6, "B": 9},
+                                    "reason": "عنوان أقوى ولغة أوضح"}, ensure_ascii=False))
+        hook = "نسخة Gemini" if host == "generativelanguage.googleapis.com" else "نسخة DeepSeek"
+        return chat(json.dumps(post(hook), ensure_ascii=False))
+
+    install(monkeypatch, handler)
+    result = asyncio.run(gen_mod.generate_from_topic(BRAND, GEN, "شلالات لنكاوي"))
+
+    assert result.hook == "نسخة DeepSeek"                     # B = deepseek won
+    assert result.meta["mode"] == "ensemble" and result.meta["engine"] == "deepseek"
+    assert result.meta["method"] == "judge" and result.meta["judge"] == "Gemini"
+    assert result.meta["scores"] == {"Gemini": 6, "DeepSeek": 9}
+    assert result.meta["reason"] == "عنوان أقوى ولغة أوضح"
+
+    hosts = [h for h, _m, _a in seen]
+    assert hosts.count("generativelanguage.googleapis.com") == 2   # writer + judge
+    assert hosts.count("api.deepseek.com") == 1
+    auth = {h: a for h, _m, a in seen}
+    assert auth["api.deepseek.com"] == "Bearer sk-test-deepseek"
+    models = {h: m for h, m, _a in seen}
+    assert models["api.deepseek.com"] == "deepseek-flash"
+    assert models["generativelanguage.googleapis.com"] == "gemini-3.8-flash"
+
+
+def test_one_engine_failing_does_not_stop_the_post(client, two_engines, monkeypatch):
+    def handler(request):
+        if request.url.host == "api.deepseek.com":
+            return httpx.Response(402, json={"error": "Insufficient Balance"})
+        return chat(json.dumps(post("نسخة Gemini"), ensure_ascii=False))
+
+    install(monkeypatch, handler)
+    result = asyncio.run(gen_mod.generate_from_topic(BRAND, GEN, "موضوع"))
+    assert result.hook == "نسخة Gemini"
+    assert result.meta["engine"] == "gemini" and "DeepSeek" in result.meta["errors"]
+    assert "الرصيد" in result.meta["errors"]["DeepSeek"]
+
+
+def test_judge_failure_falls_back_to_quality_rules(client, two_engines, monkeypatch):
+    def handler(request):
+        prompt = json.loads(request.content)["messages"][-1]["content"]
+        if "Candidates" in prompt:
+            return httpx.Response(500, text="judge down")
+        if request.url.host == "api.deepseek.com":
+            weak = post("عنوان طويل جدا جدا جدا جدا جدا جدا جدا جدا جدا جدا جدا جدا", slides=1)
+            weak["hashtags"] = ["سفر"]
+            return chat(json.dumps(weak, ensure_ascii=False))
+        return chat(json.dumps(post("عنوان قصير وقوي"), ensure_ascii=False))
+
+    install(monkeypatch, handler)
+    result = asyncio.run(gen_mod.generate_from_topic(BRAND, GEN, "موضوع"))
+    assert result.hook == "عنوان قصير وقوي"
+    assert result.meta["method"] == "rules"
+
+
+def test_all_engines_failing_gives_one_clear_error(client, two_engines, monkeypatch):
+    install(monkeypatch, lambda r: httpx.Response(401, text="bad key"))
+    with pytest.raises(gen_mod.AIError) as err:
+        asyncio.run(gen_mod.generate_from_topic(BRAND, GEN, "موضوع"))
+    assert "Gemini" in str(err.value) and "DeepSeek" in str(err.value)
+
+
+def test_ensemble_verdict_is_stored_on_the_draft(client, two_engines, monkeypatch, fake_network):
+    def handler(request):
+        prompt = json.loads(request.content)["messages"][-1]["content"]
+        if "Candidates" in prompt:
+            return chat('{"winner": "A", "scores": {"A": 8, "B": 7}, "reason": "أدق"}')
+        return chat(json.dumps(post("منشور"), ensure_ascii=False))
+
+    install(monkeypatch, handler)
+    created = client.post("/api/drafts/manual", json={"topic": "أفضل وقت لزيارة بينانغ"}).json()
+    assert created["ok"]
+    drafts = client.get("/api/drafts?status=all").json()
+    d = client.get(f"/api/drafts/{drafts[0]['id']}").json()
+    assert d["ai_meta"]["mode"] == "ensemble" and d["ai_meta"]["engine"] == "gemini"
+    assert d["ai_meta"]["reason"] == "أدق"
+    client.delete(f"/api/drafts/{d['id']}")
+
+
+def test_single_mode_uses_only_the_primary(client, monkeypatch):
+    client.put("/api/settings/credentials", json={"ai_mode": "single", "ai_primary": "deepseek",
+                                                  "deepseek_api_key": "sk-x", "gemini_api_key": "AIza-y"})
+    hosts = []
+
+    def handler(request):
+        hosts.append(request.url.host)
+        return chat(json.dumps(post("واحد"), ensure_ascii=False))
+
+    install(monkeypatch, handler)
+    result = asyncio.run(gen_mod.generate_from_topic(BRAND, GEN, "موضوع"))
+    assert hosts == ["api.deepseek.com"] and result.meta == {"mode": "single", "engine": "deepseek",
+                                                              "engine_label": "DeepSeek"}
+    client.put("/api/settings/credentials", json={f: None for f in credentials.FIELDS})
+    credentials.refresh()
+
+
+def test_ensemble_warnings(client):
+    client.put("/api/settings/credentials", json={"ai_mode": "ensemble", "ai_ensemble": "gemini,deepseek",
+                                                  "gemini_api_key": "AQ.not-a-gemini-key"})
+    warnings = client.get("/api/settings/credentials").json()["values"]["warnings"]
+    assert any("محرّكين" in w for w in warnings)          # only one engine ready
+    assert any("AIza" in w for w in warnings)             # key format hint
+    client.put("/api/settings/credentials", json={f: None for f in credentials.FIELDS})
+    credentials.refresh()
+
+
+def test_migration_adds_new_column_to_an_old_database(tmp_path, monkeypatch):
+    """A database created by the previous release gets the new column on start-up."""
+    from sqlalchemy import create_engine, inspect, text
+
+    from app import db as db_mod
+    old = create_engine(f"sqlite:///{tmp_path}/old.db")
+    with old.begin() as conn:
+        conn.execute(text("CREATE TABLE drafts (id INTEGER PRIMARY KEY, hook TEXT)"))
+    monkeypatch.setattr(db_mod, "engine", old)
+    db_mod._migrate()
+    assert "ai_meta" in {c["name"] for c in inspect(old).get_columns("drafts")}
+    db_mod._migrate()   # idempotent

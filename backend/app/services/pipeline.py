@@ -199,6 +199,7 @@ def _apply_post(draft: Draft, post: generator.GeneratedPost) -> None:
     draft.hashtags = " ".join(post.hashtags)
     draft.first_comment, draft.cta = post.first_comment, post.cta
     draft.image_keywords, draft.badge, draft.relevance = post.image_keywords, post.badge, post.relevance
+    draft.ai_meta = post.meta or None
     draft.slides.clear()
     items = [("cover", post.hook, post.subtitle)] + [("content", s["heading"], s["body"]) for s in post.slides] \
         + [("cta", post.cta, "")]

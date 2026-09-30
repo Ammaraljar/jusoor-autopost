@@ -4,14 +4,14 @@ import { Button, Field, Spinner, useAction, useLoad } from './ui';
 import { api } from '../lib/api';
 import { useI18n } from '../lib/i18n';
 
-const SECRET_FIELDS = [
+const ENGINE_ORDER = ['claude', 'gemini', 'deepseek', 'custom'];
+const PUBLISH_KEYS = [
   { field: 'pexels_api_key', label: 'stock_photos', hint: 'pexels.com/api' },
   { field: 'buffer_api_key', label: 'Buffer', hint: 'publish.buffer.com' },
   { field: 'meta_access_token', label: 'Meta (Facebook / Instagram)', hint: 'developers.facebook.com' },
   { field: 'uploadpost_api_key', label: 'upload-post.com', hint: 'upload-post.com' },
 ];
 
-/** Status chip for a write-only secret. */
 function KeyState({ state }) {
   const { t } = useI18n();
   if (!state?.set) return <span className="pill" style={{ alignSelf: 'flex-start' }}>{t('key_missing')}</span>;
@@ -22,45 +22,52 @@ function KeyState({ state }) {
   );
 }
 
+function initialForm(v) {
+  return {
+    ai_mode: v.ai_mode || 'single',
+    ai_primary: v.ai_primary || 'claude',
+    ensemble: (v.ai_ensemble || '').split(',').map((x) => x.trim()).filter(Boolean),
+    claude_model: v.claude_model || '', gemini_model: v.gemini_model || '',
+    deepseek_model: v.deepseek_model || '', custom_model: v.custom_model || '',
+    custom_base_url: v.custom_base_url || '',
+    secrets: {},
+  };
+}
+
 export default function KeysCard({ onSaved }) {
   const { t } = useI18n();
   const creds = useLoad(() => api.get('/api/settings/credentials'), []);
   const [form, setForm] = useState(null);
-  const [busy, run] = useAction();
   const [test, setTest] = useState(null);
+  const [busy, run] = useAction();
 
-  useEffect(() => {
-    if (creds.data) {
-      const v = creds.data.values;
-      setForm({ ai_provider: v.ai_provider || 'anthropic', ai_base_url: v.ai_base_url || '',
-                ai_model: v.ai_model || '', secrets: {} });
-    }
-  }, [creds.data]);
-
+  useEffect(() => { if (creds.data) setForm(initialForm(creds.data.values)); }, [creds.data]);
   if (!form) return <div className="card card-pad"><Spinner /></div>;
+
   const values = creds.data.values;
-  const openaiCompatible = form.ai_provider === 'openai_compatible';
+  const engines = values.engines || {};
+  const ensembleMode = form.ai_mode === 'ensemble';
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const setSecret = (field, value) => setForm((f) => ({ ...f, secrets: { ...f.secrets, [field]: value } }));
+  const toggleEnsemble = (name) => setForm((f) => ({
+    ...f, ensemble: f.ensemble.includes(name) ? f.ensemble.filter((n) => n !== name) : [...f.ensemble, name],
+  }));
+
+  const payload = () => ({
+    ai_mode: form.ai_mode, ai_primary: form.ai_primary, ai_ensemble: form.ensemble.join(','),
+    claude_model: form.claude_model, gemini_model: form.gemini_model, deepseek_model: form.deepseek_model,
+    custom_model: form.custom_model, custom_base_url: form.custom_base_url, ...form.secrets,
+  });
+  const initial = initialForm(values);
+  const dirty = JSON.stringify({ ...form, secrets: {} }) !== JSON.stringify(initial)
+    || Object.values(form.secrets).some(Boolean);
 
   const save = () => run('save', async () => {
-    const payload = { ai_provider: form.ai_provider, ai_base_url: form.ai_base_url, ai_model: form.ai_model,
-                      ...form.secrets };
-    const res = await api.put('/api/settings/credentials', payload);
+    const res = await api.put('/api/settings/credentials', payload());
     creds.setData({ ...creds.data, values: res.values });
-    setForm((f) => ({ ...f, secrets: {} }));
+    setTest(null);
     onSaved?.();
   }, t('saved'));
-
-  const dirty = form && creds.data && (
-    form.ai_provider !== (creds.data.values.ai_provider || 'anthropic')
-    || form.ai_base_url !== (creds.data.values.ai_base_url || '')
-    || form.ai_model !== (creds.data.values.ai_model || '')
-    || Object.values(form.secrets).some(Boolean));
-
-  const runTest = () => run('test', async () => {
-    setTest(null);
-    setTest(await api.post('/api/settings/credentials/test-ai'));
-  });
 
   const clear = (field) => run(`clear-${field}`, async () => {
     const res = await api.put('/api/settings/credentials', { [field]: null });
@@ -68,8 +75,13 @@ export default function KeysCard({ onSaved }) {
     onSaved?.();
   }, t('saved'));
 
-  const secretRow = ({ field, label, hint }) => (
-    <Field key={field} label={t(label) === label ? label : t(label)} hint={hint}>
+  const runTest = () => run('test', async () => {
+    setTest(null);
+    setTest(await api.post('/api/settings/credentials/test-ai'));
+  });
+
+  const secretInput = (field) => (
+    <>
       <div className="row" style={{ flexWrap: 'nowrap', gap: 8 }}>
         <input className="input ltr" type="password" autoComplete="new-password" placeholder="••••••••"
           value={form.secrets[field] ?? ''} onChange={(e) => setSecret(field, e.target.value)} />
@@ -79,8 +91,40 @@ export default function KeysCard({ onSaved }) {
         )}
       </div>
       <KeyState state={values[field]} />
-    </Field>
+    </>
   );
+
+  const engineBlock = (name) => {
+    const info = engines[name] || {};
+    return (
+      <div key={name} className={`target ${info.ready ? 'on' : ''}`}>
+        <div className="row" style={{ marginBottom: 10 }}>
+          <b>{info.label}</b>
+          <span className={`pill ${info.ready ? 'ok' : ''}`}>{info.ready ? t('ready') : t('not_ready')}</span>
+          <div className="spacer" />
+          {ensembleMode && (
+            <label className="check small">
+              <input type="checkbox" checked={form.ensemble.includes(name)} onChange={() => toggleEnsemble(name)} />
+              {t('participates')}
+            </label>
+          )}
+        </div>
+        <div className="stack" style={{ gap: 10 }}>
+          {name === 'custom' && (
+            <Field label={t('base_url')} hint="https://…/api/v1/openai">
+              <input className="input ltr" value={form.custom_base_url}
+                onChange={(e) => set('custom_base_url', e.target.value)} />
+            </Field>
+          )}
+          <Field label={t('model')} hint={name === 'custom' ? 'workspace slug' : info.default_model}>
+            <input className="input ltr" value={form[`${name}_model`]} placeholder={info.default_model}
+              onChange={(e) => set(`${name}_model`, e.target.value)} />
+          </Field>
+          <Field label={t('api_key')} hint={info.key_hint}>{secretInput(`${name}_api_key`)}</Field>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="card card-pad stack">
@@ -89,62 +133,50 @@ export default function KeysCard({ onSaved }) {
         <p className="small muted" style={{ marginTop: -8 }}>{t('keys_sub')}</p>
       </div>
 
-      <b className="small">{t('ai_engine')}</b>
-      <Field label={t('provider')}>
-        <select className="select" value={form.ai_provider}
-          onChange={(e) => setForm((f) => ({ ...f, ai_provider: e.target.value }))}>
-          <option value="anthropic">{t('anthropic')}</option>
-          <option value="openai_compatible">{t('openai_compatible')}</option>
-        </select>
-      </Field>
-      {openaiCompatible && (
-        <div className="grid grid-2">
-          <Field label={t('base_url')} hint="https://…/api/v1/openai">
-            <input className="input ltr" value={form.ai_base_url}
-              onChange={(e) => setForm((f) => ({ ...f, ai_base_url: e.target.value }))} />
-          </Field>
-          <Field label={t('model')} hint="workspace slug">
-            <input className="input ltr" value={form.ai_model}
-              onChange={(e) => setForm((f) => ({ ...f, ai_model: e.target.value }))} />
-          </Field>
-        </div>
-      )}
-      {!openaiCompatible && (
-        <Field label={t('model')} hint="claude-sonnet-5">
-          <input className="input ltr" value={form.ai_model} placeholder="claude-sonnet-5"
-            onChange={(e) => setForm((f) => ({ ...f, ai_model: e.target.value }))} />
+      <div className="grid grid-2">
+        <Field label={t('ai_mode')}>
+          <select className="select" value={form.ai_mode} onChange={(e) => set('ai_mode', e.target.value)}>
+            <option value="single">{t('mode_single')}</option>
+            <option value="ensemble">{t('mode_ensemble')}</option>
+          </select>
         </Field>
-      )}
-      {secretRow({ field: 'ai_api_key', label: 'api_key',
-                   hint: openaiCompatible ? 'AnythingLLM API key' : 'console.anthropic.com → sk-ant-…' })}
+        <Field label={ensembleMode ? t('primary_ensemble') : t('primary_single')}>
+          <select className="select" value={form.ai_primary} onChange={(e) => set('ai_primary', e.target.value)}>
+            {ENGINE_ORDER.map((n) => <option key={n} value={n}>{engines[n]?.label || n}</option>)}
+          </select>
+        </Field>
+      </div>
+
+      <b className="small">{t('engines')}</b>
+      <div className="target-grid">{ENGINE_ORDER.map(engineBlock)}</div>
 
       {(values.warnings || []).map((w) => (
         <div key={w} className="banner warn small" style={{ margin: 0 }}><AlertTriangle size={16} /> {w}</div>
       ))}
 
       <div className="row">
-        <Button size="sm" icon={PlugZap} busy={busy === 'test'} disabled={dirty} onClick={runTest}>
-          {t('test_connection')}
-        </Button>
+        <Button variant="primary" icon={Save} busy={busy === 'save'} disabled={!dirty} onClick={save}>{t('save')}</Button>
+        <Button icon={PlugZap} busy={busy === 'test'} disabled={dirty} onClick={runTest}>{t('test_connection')}</Button>
         {dirty && <span className="xs muted">{t('save_first')}</span>}
       </div>
-      {test && (
-        <div className={`banner ${test.ok ? 'ok' : 'danger'} small`} style={{ margin: 0 }}>
-          {test.ok ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+      {test && (test.engines || []).map((r) => (
+        <div key={r.engine} className={`banner ${r.ok ? 'ok' : 'danger'} small`} style={{ margin: 0 }}>
+          {r.ok ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
           <div>
-            <b>{test.ok ? t('connection_ok') : t('connection_failed')}</b>
-            <div>{test.ok ? `${test.model} — ${test.reply}` : test.error}</div>
+            <b>{r.label}</b> <span className="code">{r.model}</span> — {r.ok ? t('connection_ok') : t('connection_failed')}
+            <div>{r.ok ? r.reply : r.error}</div>
           </div>
         </div>
-      )}
+      ))}
 
       <div className="divider" />
       <b className="small">{t('publishers_keys')}</b>
-      {SECRET_FIELDS.map(secretRow)}
-
+      {PUBLISH_KEYS.map(({ field, label, hint }) => (
+        <Field key={field} label={t(label) === label ? label : t(label)} hint={hint}>{secretInput(field)}</Field>
+      ))}
       <p className="xs muted">{t('key_hint')}</p>
       <div>
-        <Button variant="primary" icon={Save} busy={busy === 'save'} onClick={save}>{t('save')}</Button>
+        <Button variant="primary" icon={Save} busy={busy === 'save'} disabled={!dirty} onClick={save}>{t('save')}</Button>
       </div>
     </div>
   );

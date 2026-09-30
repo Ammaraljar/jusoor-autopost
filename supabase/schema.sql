@@ -138,6 +138,7 @@ CREATE TABLE IF NOT EXISTS drafts (
 	cta TEXT NOT NULL, 
 	image_keywords TEXT NOT NULL, 
 	relevance INTEGER, 
+	ai_meta JSON, 
 	badge VARCHAR(30) NOT NULL, 
 	status VARCHAR(20) NOT NULL, 
 	scheduled_at TIMESTAMP WITH TIME ZONE, 

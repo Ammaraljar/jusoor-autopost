@@ -38,9 +38,7 @@ async def health(check: bool = True):
         problems.append("SUPABASE_SERVICE_ROLE_KEY غير مضبوط — رفع صور المنشورات سيفشل")
     if not storage.is_publicly_reachable():
         problems.append("روابط الصور غير عامة — النشر على Meta أو Buffer سيفشل")
-    problems.extend(w for w in credentials.ai_warnings() if "مفتاح Claude غير مضبوط" not in w)
-    if not generator.ai_available():
-        problems.append("لا يوجد محرّك ذكاء اصطناعي مضبوط — أضف المفتاح من الإعدادات، وإلا فسيولّد النظام نصوصًا تجريبية")
+    problems.extend(credentials.ai_warnings())
     return {
         "ok": not problems,
         "environment": s.environment,
@@ -108,7 +106,7 @@ async def test_ai():
 @router.put("/settings/credentials", dependencies=[RequireUser])
 def write_credentials(body: dict, db: Session = Depends(get_db)):
     """Save keys. An empty secret keeps the current one; null removes it."""
-    unknown = [k for k in body if k not in credentials.FIELDS]
+    unknown = [k for k in body if k not in credentials.FIELDS and k not in credentials.LEGACY_FIELDS]
     if unknown:
         raise HTTPException(400, f"حقول غير معروفة: {', '.join(unknown)}")
     return {"values": credentials.save(db, body)}

@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     # Legacy / Claude-specific names (still supported)
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-5"
+    # Extra engines (all optional — the dashboard can set them too)
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-3.8-flash"
+    deepseek_api_key: str = ""
+    deepseek_model: str = "deepseek-flash"
+    ai_mode: str = "single"             # single | ensemble
+    ai_ensemble: str = "gemini,deepseek"
 
     @property
     def is_openai_compatible(self) -> bool:
