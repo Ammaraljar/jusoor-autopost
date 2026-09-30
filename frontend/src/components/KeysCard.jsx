@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { KeyRound, Save, Trash2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, KeyRound, PlugZap, Save, Trash2, XCircle } from 'lucide-react';
 import { Button, Field, Spinner, useAction, useLoad } from './ui';
 import { api } from '../lib/api';
 import { useI18n } from '../lib/i18n';
@@ -27,6 +27,7 @@ export default function KeysCard({ onSaved }) {
   const creds = useLoad(() => api.get('/api/settings/credentials'), []);
   const [form, setForm] = useState(null);
   const [busy, run] = useAction();
+  const [test, setTest] = useState(null);
 
   useEffect(() => {
     if (creds.data) {
@@ -49,6 +50,17 @@ export default function KeysCard({ onSaved }) {
     setForm((f) => ({ ...f, secrets: {} }));
     onSaved?.();
   }, t('saved'));
+
+  const dirty = form && creds.data && (
+    form.ai_provider !== (creds.data.values.ai_provider || 'anthropic')
+    || form.ai_base_url !== (creds.data.values.ai_base_url || '')
+    || form.ai_model !== (creds.data.values.ai_model || '')
+    || Object.values(form.secrets).some(Boolean));
+
+  const runTest = () => run('test', async () => {
+    setTest(null);
+    setTest(await api.post('/api/settings/credentials/test-ai'));
+  });
 
   const clear = (field) => run(`clear-${field}`, async () => {
     const res = await api.put('/api/settings/credentials', { [field]: null });
@@ -105,6 +117,26 @@ export default function KeysCard({ onSaved }) {
       )}
       {secretRow({ field: 'ai_api_key', label: 'api_key',
                    hint: openaiCompatible ? 'AnythingLLM API key' : 'console.anthropic.com → sk-ant-…' })}
+
+      {(values.warnings || []).map((w) => (
+        <div key={w} className="banner warn small" style={{ margin: 0 }}><AlertTriangle size={16} /> {w}</div>
+      ))}
+
+      <div className="row">
+        <Button size="sm" icon={PlugZap} busy={busy === 'test'} disabled={dirty} onClick={runTest}>
+          {t('test_connection')}
+        </Button>
+        {dirty && <span className="xs muted">{t('save_first')}</span>}
+      </div>
+      {test && (
+        <div className={`banner ${test.ok ? 'ok' : 'danger'} small`} style={{ margin: 0 }}>
+          {test.ok ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+          <div>
+            <b>{test.ok ? t('connection_ok') : t('connection_failed')}</b>
+            <div>{test.ok ? `${test.model} — ${test.reply}` : test.error}</div>
+          </div>
+        </div>
+      )}
 
       <div className="divider" />
       <b className="small">{t('publishers_keys')}</b>

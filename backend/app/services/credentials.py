@@ -65,6 +65,36 @@ def source_of(field: str) -> str:
     return "environment" if getattr(s, FIELDS[field][1], "") else "unset"
 
 
+_LOCAL_HOSTS = ("localhost", "127.0.0.1", "0.0.0.0", "::1", "host.docker.internal")
+
+
+def ai_warnings(values: dict[str, str] | None = None) -> list[str]:
+    """Settings that cannot work from a hosted server — explained in plain Arabic."""
+    from urllib.parse import urlparse
+
+    v = values or current()
+    provider = (v.get("ai_provider") or "anthropic").lower()
+    out: list[str] = []
+    if provider in ("openai_compatible", "openai", "anythingllm"):
+        url = (v.get("ai_base_url") or "").strip()
+        host = (urlparse(url).hostname or "").lower() if url else ""
+        if not url:
+            out.append("رابط خادم الذكاء الاصطناعي فارغ")
+        elif host in _LOCAL_HOSTS or host.startswith(("192.168.", "10.")) or host.endswith(".local"):
+            out.append(f"الرابط {url} يشير إلى جهازك المحلي، والخادم على الإنترنت لا يستطيع الوصول إليه. "
+                       "استخدم رابطًا عامًا يبدأ بـ https:// أو اختر Claude API")
+        elif url.rstrip("/").endswith("/api/v1"):
+            out.append("رابط AnythingLLM المتوافق مع OpenAI ينتهي عادةً بـ /api/v1/openai")
+        model = (v.get("ai_model") or "").lower()
+        if not model:
+            out.append("اسم النموذج فارغ — في AnythingLLM يكون اسم مساحة العمل (workspace slug)")
+        elif model.startswith("claude-"):
+            out.append(f"النموذج «{v.get('ai_model')}» اسم نموذج Claude، أما AnythingLLM فيحتاج اسم مساحة العمل")
+    elif not v.get("ai_api_key"):
+        out.append("مفتاح Claude غير مضبوط")
+    return out
+
+
 def public_view() -> dict[str, Any]:
     """Safe representation for the dashboard: secrets become a status, never a value."""
     values = current()
@@ -75,6 +105,7 @@ def public_view() -> dict[str, Any]:
                           "hint": f"…{values[field][-4:]}" if values[field] else ""}
         else:
             out[field] = values[field]
+    out["warnings"] = ai_warnings(values)
     return out
 
 

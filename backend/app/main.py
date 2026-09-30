@@ -5,7 +5,8 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -33,6 +34,20 @@ async def lifespan(app: FastAPI):
 settings = get_settings()
 app = FastAPI(title=settings.app_name, lifespan=lifespan,
               docs_url="/api/docs" if settings.environment != "production" else None, redoc_url=None)
+
+
+@app.middleware("http")
+async def json_errors(request: Request, call_next):
+    """Turn crashes into JSON *inside* the CORS layer, so the browser shows the real message
+    instead of a misleading CORS error."""
+    try:
+        return await call_next(request)
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("app").exception("unhandled error on %s", request.url.path)
+        return JSONResponse(status_code=500, content={"detail": f"خطأ داخلي في الخادم: {str(exc)[:300]}"})
+
+
+# Added after the error middleware so CORS wraps it (the last middleware added is the outermost).
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origin_list,
                    allow_origin_regex=settings.cors_origin_regex or None, allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])

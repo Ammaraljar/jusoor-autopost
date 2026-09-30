@@ -94,7 +94,7 @@ def test_anythingllm_surfaces_server_errors(client, anythingllm, monkeypatch):
     monkeypatch.setattr(anythingllm, "ai_json_mode", False)
     monkeypatch.setattr(gen_mod.httpx, "AsyncClient",
                         _mock(gen_mod, lambda r: httpx.Response(401, text="Invalid API key")))
-    with pytest.raises(RuntimeError, match="401"):
+    with pytest.raises(RuntimeError, match="رفض المفتاح"):
         asyncio.run(gen_mod.generate_from_topic(BRAND, GEN, "موضوع"))
 
 
@@ -241,3 +241,54 @@ def test_publishers_read_keys_from_the_dashboard(client, monkeypatch):
     assert all(get_publisher(n).configured() for n in ("buffer", "meta", "uploadpost"))
     client.put("/api/settings/credentials", json={f: None for f in credentials.FIELDS})
     credentials.refresh()
+
+
+def test_localhost_ai_url_is_explained(client, monkeypatch):
+    """The exact mistake from production: AnythingLLM on the user's laptop, server on the internet."""
+    from app.services import credentials
+    client.put("/api/settings/credentials", json={
+        "ai_provider": "openai_compatible", "ai_base_url": "http://localhost:3001/api/v1",
+        "ai_model": "claude-sonnet-5", "ai_api_key": "AK"})
+    warnings = client.get("/api/settings/credentials").json()["values"]["warnings"]
+    assert any("جهازك المحلي" in w for w in warnings)
+    assert any("مساحة العمل" in w for w in warnings)
+    problems = client.get("/api/health").json()["problems"]
+    assert any("جهازك المحلي" in p for p in problems)
+
+    def refuse(request):
+        raise httpx.ConnectError("All connection attempts failed", request=request)
+    monkeypatch.setattr(gen_mod.httpx, "AsyncClient", _mock(gen_mod, refuse))
+    result = client.post("/api/settings/credentials/test-ai").json()
+    assert result["ok"] is False and "جهازك المحلي" in result["error"]
+    client.put("/api/settings/credentials", json={f: None for f in credentials.FIELDS})
+    credentials.refresh()
+
+
+def test_regenerate_failure_is_a_clean_error_with_cors(client, monkeypatch):
+    """An AI failure must return JSON with CORS headers — not a crash the browser reports as CORS."""
+    from app.db import Draft, Slide, session_scope
+    with session_scope() as db:
+        d = Draft(hook="h", caption="c " * 30, status="rejected", origin="manual")
+        d.slides.append(Slide(position=0, kind="cover", heading="h", body="b"))
+        db.add(d)
+        db.flush()
+        did = d.id
+
+    async def boom(*a, **kw):
+        raise gen_mod.AIError("تعذّر الوصول إلى خادم الذكاء الاصطناعي")
+    monkeypatch.setattr(gen_mod, "regenerate_field", boom)
+    r = client.post(f"/api/drafts/{did}/regenerate", json={"field": "hook"},
+                    headers={"Origin": "http://localhost:5173"})
+    assert r.status_code == 502
+    assert "تعذّر الوصول" in r.json()["detail"]
+    client.delete(f"/api/drafts/{did}")
+
+
+def test_unexpected_crash_still_returns_json(client, monkeypatch):
+    from app.routes import system
+    def explode():
+        raise ValueError("kaboom")
+    monkeypatch.setattr(system.jobs, "state", explode)
+    r = client.get("/api/jobs", headers={"Origin": "http://localhost:5173"})
+    assert r.status_code == 500 and "kaboom" in r.json()["detail"]
+    assert r.headers.get("access-control-allow-origin") == "http://localhost:5173"

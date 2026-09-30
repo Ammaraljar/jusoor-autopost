@@ -38,6 +38,7 @@ async def health(check: bool = True):
         problems.append("SUPABASE_SERVICE_ROLE_KEY غير مضبوط — رفع صور المنشورات سيفشل")
     if not storage.is_publicly_reachable():
         problems.append("روابط الصور غير عامة — النشر على Meta أو Buffer سيفشل")
+    problems.extend(w for w in credentials.ai_warnings() if "مفتاح Claude غير مضبوط" not in w)
     if not generator.ai_available():
         problems.append("لا يوجد محرّك ذكاء اصطناعي مضبوط — أضف المفتاح من الإعدادات، وإلا فسيولّد النظام نصوصًا تجريبية")
     return {
@@ -96,6 +97,12 @@ def read_credentials():
     """Keys and AI provider settings. Secrets come back as a status, never as a value."""
     return {"values": credentials.public_view(),
             "providers": {"ai": ["anthropic", "openai_compatible"]}}
+
+
+@router.post("/settings/credentials/test-ai", dependencies=[RequireUser])
+async def test_ai():
+    """Round-trip to the configured AI engine — powers the "test connection" button."""
+    return await generator.test_connection()
 
 
 @router.put("/settings/credentials", dependencies=[RequireUser])

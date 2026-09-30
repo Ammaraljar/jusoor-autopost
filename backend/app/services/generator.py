@@ -163,14 +163,42 @@ def _parse(data: dict[str, Any]) -> GeneratedPost:
     return post
 
 
+class AIError(RuntimeError):
+    """A readable, user-facing failure of the AI provider."""
+
+
 async def _call_claude(system: str, user: str, tool: dict[str, Any], max_tokens: int = 3000) -> dict[str, Any]:
     """Anthropic tool use — the model can only answer with a valid tool input."""
+    import anthropic
     from anthropic import AsyncAnthropic
 
     s = get_settings()
     cfg = credentials.current()
+    if not cfg["ai_api_key"]:
+        raise AIError("مفتاح Claude غير مضبوط — أضفه من الإعدادات ← المفاتيح والاتصالات")
     client = AsyncAnthropic(api_key=cfg["ai_api_key"], timeout=s.ai_timeout_seconds)
-    msg = await client.messages.create(
+    try:
+        msg = await _create_claude_message(client, s, cfg, system, user, tool, max_tokens)
+    except anthropic.AuthenticationError as exc:
+        raise AIError("مفتاح Claude مرفوض — تأكد من نسخه كاملًا من console.anthropic.com") from exc
+    except anthropic.PermissionDeniedError as exc:
+        raise AIError("المفتاح لا يملك صلاحية — تحقق من رصيد الحساب في console.anthropic.com") from exc
+    except anthropic.NotFoundError as exc:
+        raise AIError(f"النموذج «{cfg['ai_model']}» غير موجود — جرّب claude-sonnet-5") from exc
+    except anthropic.RateLimitError as exc:
+        raise AIError("تجاوزت حد الاستخدام أو نفد الرصيد — راجع Billing في console.anthropic.com") from exc
+    except anthropic.APIConnectionError as exc:
+        raise AIError("تعذّر الاتصال بخوادم Anthropic — أعد المحاولة بعد قليل") from exc
+    except anthropic.APIStatusError as exc:
+        raise AIError(f"رد غير متوقع من Claude ({exc.status_code}): {str(exc)[:200]}") from exc
+    for block in msg.content:
+        if block.type == "tool_use":
+            return dict(block.input)
+    raise AIError("Claude لم يُعد مخرجات منظّمة")
+
+
+async def _create_claude_message(client, s, cfg, system, user, tool, max_tokens):
+    return await client.messages.create(
         model=cfg["ai_model"] or "claude-sonnet-5",
         max_tokens=max_tokens,
         system=system,
@@ -178,10 +206,6 @@ async def _call_claude(system: str, user: str, tool: dict[str, Any], max_tokens:
         tool_choice={"type": "tool", "name": tool["name"]},
         messages=[{"role": "user", "content": user}],
     )
-    for block in msg.content:
-        if block.type == "tool_use":
-            return dict(block.input)
-    raise RuntimeError("Claude did not return structured output")
 
 
 def extract_json(text: str) -> dict[str, Any]:
@@ -229,7 +253,7 @@ async def _call_openai_compatible(system: str, user: str, tool: dict[str, Any],
     s = get_settings()
     cfg = credentials.current()
     if not cfg["ai_base_url"]:
-        raise RuntimeError("رابط خادم الذكاء الاصطناعي غير مضبوط")
+        raise AIError("رابط خادم الذكاء الاصطناعي غير مضبوط")
     url = cfg["ai_base_url"].rstrip("/") + "/chat/completions"
     headers = {"Authorization": f"Bearer {cfg['ai_api_key']}", "Content-Type": "application/json"}
     messages = [{"role": "system", "content": system}, {"role": "user", "content": _schema_prompt(user, tool)}]
@@ -242,7 +266,18 @@ async def _call_openai_compatible(system: str, user: str, tool: dict[str, Any],
                                        "max_tokens": max_tokens, "temperature": 0.6, "stream": False}
             if json_mode:
                 payload["response_format"] = {"type": "json_object"}
-            resp = await client.post(url, json=payload, headers=headers)
+            try:
+                resp = await client.post(url, json=payload, headers=headers)
+            except httpx.ConnectError as exc:
+                warnings = [w for w in credentials.ai_warnings(cfg) if "جهازك المحلي" in w]
+                raise AIError(warnings[0] if warnings else
+                              f"تعذّر الوصول إلى خادم الذكاء الاصطناعي على {cfg['ai_base_url']}") from exc
+            except httpx.TimeoutException as exc:
+                raise AIError(f"انتهت مهلة الاتصال بخادم الذكاء الاصطناعي ({s.ai_timeout_seconds} ثانية)") from exc
+            if resp.status_code in (401, 403):
+                raise AIError("خادم الذكاء الاصطناعي رفض المفتاح — تحقق من مفتاح AnythingLLM")
+            if resp.status_code == 404:
+                raise AIError(f"الرابط {url} غير موجود — في AnythingLLM ينتهي الرابط بـ /api/v1/openai")
             if resp.status_code >= 400:
                 body = resp.text[:300]
                 if json_mode:
@@ -250,7 +285,7 @@ async def _call_openai_compatible(system: str, user: str, tool: dict[str, Any],
                     log.warning("AI server rejected json mode (%s), retrying without it", resp.status_code)
                     json_mode = False
                     continue
-                raise RuntimeError(f"AI HTTP {resp.status_code}: {body}")
+                raise AIError(f"خادم الذكاء الاصطناعي أعاد خطأ {resp.status_code}: {body}")
             try:
                 data = resp.json()
             except ValueError as exc:
@@ -272,7 +307,7 @@ async def _call_openai_compatible(system: str, user: str, tool: dict[str, Any],
                     {"role": "user", "content": "Your previous reply was not a valid JSON object "
                                                 f"({last_error}). Return ONLY the JSON object, nothing else."},
                 ]
-    raise RuntimeError(f"AI did not return valid JSON after 3 attempts: {last_error}")
+    raise AIError(f"النموذج لم يُعد JSON صالحًا بعد 3 محاولات: {last_error}")
 
 
 def _openai_compatible() -> bool:
@@ -283,6 +318,18 @@ async def _call_model(system: str, user: str, tool: dict[str, Any], max_tokens: 
     if _openai_compatible():
         return await _call_openai_compatible(system, user, tool, max_tokens)
     return await _call_claude(system, user, tool, max_tokens)
+
+
+async def test_connection() -> dict[str, Any]:
+    """Tiny round-trip used by the dashboard's "test connection" button."""
+    tool = {"name": "ping", "description": "Reply with a short greeting.",
+            "input_schema": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}}
+    try:
+        data = await _call_model("You are a helpful assistant. Answer in Arabic.",
+                                 "قل مرحبًا بكلمتين فقط.", tool, max_tokens=60)
+        return {"ok": True, "reply": _text(data.get("text"))[:120], **ai_info()}
+    except Exception as exc:  # noqa: BLE001 - the message is what the user needs
+        return {"ok": False, "error": str(exc)[:400], **ai_info()}
 
 
 def ai_available() -> bool:

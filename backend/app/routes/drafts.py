@@ -169,8 +169,11 @@ async def regenerate_slide(draft_id: int, slide_id: int, db: Session = Depends(g
     s = _slide(d, slide_id)
     brand = pipeline._brand_for(db, d.brand_id)
     gen = {**app_settings.get_section(db, "generation"), "language": d.language, "tone": d.tone}
-    new = await generator.regenerate_slide(pipeline.brand_context(brand), gen, generator.draft_context(d),
-                                           s.heading, s.body)
+    try:
+        new = await generator.regenerate_slide(pipeline.brand_context(brand), gen, generator.draft_context(d),
+                                               s.heading, s.body)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"فشل توليد النص: {exc}") from exc
     s.heading, s.body = new["heading"], new["body"]
     db.commit()
     await pipeline.render_draft(d.id, [s.position])
@@ -208,7 +211,11 @@ async def regenerate_text(draft_id: int, body: RegenField, background: Backgroun
     d = _get(db, draft_id)
     brand = pipeline._brand_for(db, d.brand_id)
     gen = {**app_settings.get_section(db, "generation"), "language": d.language, "tone": d.tone}
-    text = await generator.regenerate_field(pipeline.brand_context(brand), gen, generator.draft_context(d), body.field)
+    try:
+        text = await generator.regenerate_field(pipeline.brand_context(brand), gen, generator.draft_context(d),
+                                                body.field)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"فشل توليد النص: {exc}") from exc
     setattr(d, body.field, text)
     positions = []
     for s in d.slides:
