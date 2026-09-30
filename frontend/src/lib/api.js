@@ -31,9 +31,6 @@ async function request(method, path, body, { raw = false } = {}) {
   } catch (err) {
     throw new ApiError('تعذّر الاتصال بالخادم', 0);
   }
-  if (res.status === 401 && supabase) {
-    await supabase.auth.signOut();
-  }
   if (!res.ok) {
     let message = `HTTP ${res.status}`;
     try {
@@ -41,6 +38,12 @@ async function request(method, path, body, { raw = false } = {}) {
       message = typeof data.detail === 'string' ? data.detail
         : Array.isArray(data.detail) ? data.detail.map((d) => d.msg).join('، ') : message;
     } catch { /* not json */ }
+    if (res.status === 401 && supabase) {
+      // The server rejected the session: sign out, but keep the reason for the login screen
+      // instead of looping silently.
+      try { sessionStorage.setItem('auth-error', message); } catch { /* ignore */ }
+      await supabase.auth.signOut();
+    }
     throw new ApiError(message, res.status);
   }
   if (raw) return res;

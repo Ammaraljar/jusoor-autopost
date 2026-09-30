@@ -66,6 +66,44 @@ class Settings(BaseSettings):
     scheduler_enabled: bool = True
 
     @property
+    def supabase_base(self) -> str:
+        """Project URL without any path or trailing slash (people often paste .../rest/v1/)."""
+        raw = (self.supabase_url or "").strip().rstrip("/")
+        if not raw:
+            return ""
+        if not raw.startswith(("http://", "https://")):
+            raw = "https://" + raw
+        from urllib.parse import urlparse
+        parts = urlparse(raw)
+        return f"{parts.scheme}://{parts.netloc}"
+
+    @property
+    def anon_key_kind(self) -> str:
+        """What kind of Supabase key SUPABASE_ANON_KEY holds — used by the health check."""
+        key = (self.supabase_anon_key or "").strip()
+        if not key:
+            return "missing"
+        if key.startswith("sb_publishable_"):
+            return "publishable"
+        if key.startswith("sb_secret_") or key.startswith("service_role"):
+            return "secret_key_wrong"
+        if key.startswith("eyJ"):
+            import base64
+            import json as _json
+            try:
+                payload = key.split(".")[1]
+                data = _json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+                role = data.get("role", "")
+            except Exception:  # noqa: BLE001
+                return "jwt_unreadable"
+            if role == "anon":
+                return "anon"
+            if role == "service_role":
+                return "secret_key_wrong"
+            return f"jwt_role_{role or 'unknown'}"
+        return "unknown"
+
+    @property
     def allowed_email_list(self) -> list[str]:
         return [e.strip().lower() for e in self.allowed_emails.split(",") if e.strip()]
 

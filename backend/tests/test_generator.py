@@ -147,3 +147,36 @@ def test_ai_info_for_anythingllm(client, anythingllm):
     info = gen_mod.ai_info()
     assert info["provider"] == "openai_compatible" and info["configured"] is True
     assert info["base_url"].endswith("/api/v1/openai") and info["model"] == "jusoor-workspace"
+
+
+def test_health_reports_supabase_misconfiguration(client, monkeypatch):
+    """The public /api/health must name the broken variable instead of staying silent."""
+    from app.config import get_settings
+    s = get_settings()
+    monkeypatch.setattr(s, "auth_disabled", False)
+    monkeypatch.setattr(s, "supabase_url", "https://proj.supabase.co/rest/v1/")
+    monkeypatch.setattr(s, "supabase_anon_key", "sb_secret_abc")
+    body = client.get("/api/health").json()
+    assert body["ok"] is False
+    assert body["auth"]["supabase_url"] == "https://proj.supabase.co"   # path stripped
+    assert body["auth"]["anon_key"] == "secret_key_wrong"
+    assert any("SUPABASE_ANON_KEY" in p for p in body["problems"])
+
+
+def test_health_flags_missing_url(client, monkeypatch):
+    from app.config import get_settings
+    s = get_settings()
+    monkeypatch.setattr(s, "auth_disabled", False)
+    monkeypatch.setattr(s, "supabase_url", "")
+    body = client.get("/api/health").json()
+    assert any("SUPABASE_URL" in p for p in body["problems"])
+
+
+def test_protected_route_explains_server_misconfiguration(client, monkeypatch):
+    from app.config import get_settings
+    s = get_settings()
+    monkeypatch.setattr(s, "auth_disabled", False)
+    monkeypatch.setattr(s, "supabase_url", "https://proj.supabase.co")
+    monkeypatch.setattr(s, "supabase_anon_key", "")
+    r = client.get("/api/drafts/counts")
+    assert r.status_code == 500 and "SUPABASE_ANON_KEY" in r.json()["detail"]

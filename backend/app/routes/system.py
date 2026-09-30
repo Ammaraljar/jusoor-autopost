@@ -7,7 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..auth import RequireUser, current_user
+from ..auth import RequireUser, check_supabase_key, current_user
 from ..config import get_settings
 from ..db import Article, Draft, PublishLog, Source, get_db, utcnow
 from ..publishers import REGISTRY, get_publisher
@@ -18,8 +18,40 @@ router = APIRouter(prefix="/api", tags=["system"])
 
 
 @router.get("/health")
-def health():
-    return {"ok": True}
+async def health(check: bool = True):
+    """Public setup diagnostics — booleans and host names only, never keys or secrets.
+
+    Open https://<backend>/api/health after deploying: it names any misconfigured variable.
+    """
+    s = get_settings()
+    auth_check = await check_supabase_key() if (check and not s.auth_disabled) else None
+    problems: list[str] = []
+    if auth_check and not auth_check.get("ok"):
+        problems.append(auth_check.get("error", "إعداد Supabase غير صحيح"))
+    if not s.allowed_email_list and not s.auth_disabled:
+        problems.append("ALLOWED_EMAILS فارغ — أي حساب في مشروع Supabase يستطيع الدخول")
+    if not s.supabase_service_role_key and s.storage_backend == "supabase":
+        problems.append("SUPABASE_SERVICE_ROLE_KEY غير مضبوط — رفع صور المنشورات سيفشل")
+    if not storage.is_publicly_reachable():
+        problems.append("روابط الصور غير عامة — النشر على Meta أو Buffer سيفشل")
+    if not generator.ai_available():
+        problems.append("لا يوجد محرّك ذكاء اصطناعي مضبوط — سيولّد النظام نصوصًا تجريبية")
+    return {
+        "ok": not problems,
+        "environment": s.environment,
+        "auth": {
+            "supabase_url": s.supabase_base or None,
+            "anon_key": s.anon_key_kind,
+            "service_role_key": "set" if s.supabase_service_role_key else "missing",
+            "allowed_emails": len(s.allowed_email_list),
+            "auth_disabled": s.auth_disabled,
+            "supabase_check": auth_check,
+        },
+        "storage": {"backend": s.storage_backend, "public": storage.is_publicly_reachable()},
+        "ai": generator.ai_info(),
+        "database": s.database_url.split("@")[-1].split("?")[0] if "@" in s.database_url else s.database_url,
+        "problems": problems,
+    }
 
 
 @router.get("/me")

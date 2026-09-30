@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { LogIn } from 'lucide-react';
 import { Button, Field } from '../components/ui';
 import { useAuth } from '../lib/auth';
@@ -10,6 +10,17 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [serverError, setServerError] = useState('');
+
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem('auth-error');
+      if (stored) {
+        setServerError(stored);
+        sessionStorage.removeItem('auth-error');
+      }
+    } catch { /* ignore */ }
+  }, []);
   const [busy, setBusy] = useState(false);
 
   const submit = async (e) => {
@@ -40,6 +51,7 @@ export default function Login() {
           <input className="input ltr" type="password" required autoComplete="current-password" value={password}
             onChange={(e) => setPassword(e.target.value)} />
         </Field>
+        {serverError && <div className="banner warn">{serverError}</div>}
         {error && <div className="banner danger">{error}</div>}
         <Button variant="primary" type="submit" busy={busy} icon={LogIn}>{t('sign_in')}</Button>
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => setLang(lang === 'ar' ? 'en' : 'ar')}>
