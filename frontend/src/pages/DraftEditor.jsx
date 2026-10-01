@@ -207,10 +207,7 @@ export default function DraftEditor() {
             ))}
           </div>
 
-          <div className="card card-pad">
-            <h3>{t('caption_preview')}</h3>
-            <div className="caption-preview">{d.caption_preview}</div>
-          </div>
+          <PlatformPosts draft={d} locked={locked} onChange={apply} />
 
           {(d.original_title || d.source_url) && (
             <div className="card card-pad">
@@ -326,6 +323,82 @@ function RejectModal({ draft, onClose, onDone }) {
   );
 }
 
+const PLATFORM_ORDER = ['instagram', 'facebook', 'linkedin', 'x', 'threads', 'tiktok'];
+
+/** One post per platform: its own text and its own images (carousel or a single image). */
+function PlatformPosts({ draft, locked, onChange }) {
+  const { t } = useI18n();
+  const variants = draft.variants || {};
+  const names = PLATFORM_ORDER.filter((p) => variants[p]);
+  const [tab, setTab] = useState(names[0] || 'instagram');
+  const [text, setText] = useState('');
+  const [edited, setEdited] = useState(false);
+  const [busy, run] = useAction();
+  const v = variants[tab];
+
+  useEffect(() => { setText(v?.text || ''); setEdited(false); }, [tab, v?.text]);
+  if (!names.length) return null;
+
+  const slides = draft.slides || [];
+  const shown = v.format === 'carousel' ? slides : slides.filter((s) => (v.slides || [0]).includes(s.position));
+  const over = text.length > v.limit;
+  const save = () => run('save-v', async () => {
+    onChange(await api.patch(`/api/drafts/${draft.id}/variants/${tab}`, { text }));
+  }, t('saved'));
+  const pickImage = (pos) => run('img-v', async () => {
+    onChange(await api.patch(`/api/drafts/${draft.id}/variants/${tab}`, { slides: [pos] }));
+  });
+  const regenerate = () => run('regen-v', async () => {
+    onChange(await api.post(`/api/drafts/${draft.id}/variants/regenerate`));
+  }, t('done'));
+
+  return (
+    <div className="card card-pad stack">
+      <div className="row">
+        <h3 style={{ margin: 0 }}><Send size={16} /> {t('platform_posts')}</h3>
+        <div className="spacer" />
+        <Button size="sm" icon={Wand2} busy={busy === 'regen-v'} disabled={locked} onClick={regenerate}>{t('regen_platforms')}</Button>
+      </div>
+      <p className="xs muted" style={{ margin: 0 }}>
+        {draft.variants_generated ? t('platform_posts_hint') : t('platform_posts_derived')}
+      </p>
+      <div className="tabs" style={{ flexWrap: 'wrap' }}>
+        {names.map((p) => (
+          <button key={p} className={`tab ${tab === p ? 'active' : ''}`} onClick={() => setTab(p)}>
+            {variants[p].label}
+            <span className="n">{variants[p].format === 'carousel' ? `${slides.length} 🖼` : '1 🖼'}</span>
+          </button>
+        ))}
+      </div>
+      <div className="xs muted">
+        {v.format === 'carousel' ? t('fmt_carousel') : t('fmt_single')}
+      </div>
+      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        {(v.format === 'carousel' ? shown : slides).map((s) => {
+          const on = v.format === 'carousel' || (v.slides || [0]).includes(s.position);
+          return s.image_url ? (
+            <button key={s.id} type="button" className="btn-ghost" disabled={v.format === 'carousel' || locked}
+              title={v.format === 'single' ? t('use_this_image') : ''} onClick={() => pickImage(s.position)}
+              style={{ padding: 0, border: on ? '3px solid var(--gold)' : '3px solid transparent', borderRadius: 10,
+                opacity: on ? 1 : 0.45, cursor: v.format === 'single' ? 'pointer' : 'default', background: 'none' }}>
+              <img src={mediaUrl(s.image_url)} alt="" style={{ width: 64, height: 80, objectFit: 'cover', borderRadius: 7, display: 'block' }} />
+            </button>
+          ) : null;
+        })}
+      </div>
+      <textarea className="textarea" dir="auto" rows={v.limit <= 500 ? 4 : 9} value={text} disabled={locked}
+        onChange={(e) => { setText(e.target.value); setEdited(true); }} />
+      <div className="row">
+        <span className="xs" style={{ color: over ? 'var(--danger)' : 'var(--muted)' }}>{text.length} / {v.limit}</span>
+        <div className="spacer" />
+        <Button size="sm" variant="primary" icon={Save} busy={busy === 'save-v'} disabled={!edited || over || locked} onClick={save}>
+          {t('save')}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function PublishModal({ draft, onClose, onDone }) {
   const { t } = useI18n();
   const status = useLoad(() => api.get('/api/status'), []);
@@ -375,6 +448,13 @@ function PublishModal({ draft, onClose, onDone }) {
                 <div className="row" style={{ marginBottom: 8 }}>
                   <b className="ltr">{{ buffer: 'Buffer', meta: 'Meta (Facebook / Instagram)', uploadpost: 'upload-post.com' }[name]}</b>
                   <span className={`pill ${info.configured ? 'ok' : ''}`}>{info.configured ? t('configured') : t('not_configured')}</span>
+                  <div className="spacer" />
+                  {info.configured && (
+                    <button type="button" className="btn btn-sm btn-ghost"
+                      onClick={() => setTargets((cur) => ({ ...cur, [name]: (cur[name] || []).length === info.platforms.length ? [] : [...info.platforms] }))}>
+                      {t('all_platforms')}
+                    </button>
+                  )}
                 </div>
                 <div className="row">
                   {info.platforms.map((p) => (
@@ -388,6 +468,21 @@ function PublishModal({ draft, onClose, onDone }) {
             ))}
           </div>
           {!chosen.length && <div className="small muted">{t('pick_platform')}</div>}
+          {chosen.length > 0 && (
+            <div className="stack" style={{ gap: 4 }}>
+              <div className="bold small">{t('will_publish')}</div>
+              {[...new Set(chosen.flatMap((c) => c.platforms))].map((p) => {
+                const v = draft.variants?.[p];
+                return (
+                  <div key={p} className="xs row" style={{ gap: 6 }}>
+                    <b style={{ minWidth: 80 }}>{v?.label || p}</b>
+                    <span className="muted">{v?.format === 'single' ? t('one_image') : `${t('carousel')} ${draft.slides?.length || 0}`}</span>
+                    <span className="muted clamp-2" dir="auto" style={{ flex: 1 }}>{(v?.text || '').slice(0, 90)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <div className="tabs" style={{ alignSelf: 'flex-start' }}>
             <button className={`tab ${mode === 'now' ? 'active' : ''}`} onClick={() => setMode('now')}>{t('publish_now')}</button>
             <button className={`tab ${mode === 'later' ? 'active' : ''}`} onClick={() => setMode('later')}>{t('publish_later')}</button>

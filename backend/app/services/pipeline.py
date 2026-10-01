@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import Article, Brand, CalendarItem, Draft, Slide, Source, session_scope, utcnow
-from . import app_settings, generator, images, scraper, storage
+from . import app_settings, generator, images, scraper, storage, variants
 from . import palette as colours
 from .renderer import BrandStyle, SlideSpec, renderer
 
@@ -176,6 +176,7 @@ async def draft_from_article(article_id: int) -> int | None:
             draft.status = "rejected"
             draft.reject_reason = f"صلة منخفضة بجمهور السفر ({post.relevance}/10): {post.relevance_reason}"
             return draft_id
+    await make_variants(draft_id)
     await render_draft(draft_id)
     return draft_id
 
@@ -203,6 +204,7 @@ async def draft_from_calendar(item_id: int) -> int | None:
         return draft_id
     with session_scope() as db:
         _apply_post(db.get(Draft, draft_id), post)
+    await make_variants(draft_id)
     await render_draft(draft_id)
     return draft_id
 
@@ -218,6 +220,31 @@ def _apply_post(draft: Draft, post: generator.GeneratedPost) -> None:
         + [("cta", post.cta, "")]
     for pos, (kind, heading, body) in enumerate(items):
         draft.slides.append(Slide(position=pos, kind=kind, heading=heading, body=body))
+
+
+def _snapshot(draft: Draft):
+    """Detached copy of what the platform-text prompt needs."""
+    from types import SimpleNamespace
+    slides = [SimpleNamespace(position=s.position, kind=s.kind, heading=s.heading, body=s.body) for s in draft.slides]
+    return SimpleNamespace(hook=draft.hook, subtitle=draft.subtitle, caption=draft.caption, hashtags=draft.hashtags,
+                           cta=draft.cta, origin=draft.origin, source_name=draft.source_name,
+                           language=draft.language, slides=slides)
+
+
+async def make_variants(draft_id: int) -> None:
+    """Write one post per platform (text + image set) for a draft."""
+    with session_scope() as db:
+        draft = db.get(Draft, draft_id)
+        if draft is None or not draft.slides:
+            return
+        brand = _brand_for(db, draft.brand_id)
+        gen = app_settings.get_section(db, "generation")
+        ctx, snap = brand_context(brand), _snapshot(draft)
+    texts = await variants.generate_texts(ctx, {**gen, "language": snap.language}, snap)
+    with session_scope() as db:
+        draft = db.get(Draft, draft_id)
+        if draft is not None:
+            draft.variants = variants.finalize(draft, texts, gen.get("credit_source", True), draft.variants)
 
 
 def _fail(draft_id: int, message: str) -> None:

@@ -8,7 +8,7 @@ from sqlalchemy import select
 from ..db import CalendarItem, Draft, PublishLog, session_scope, utcnow
 from ..publishers import get_publisher
 from ..publishers.base import PlatformResult, PublishRequest
-from . import app_settings, qa, storage
+from . import app_settings, qa, storage, variants
 from .pipeline import _brand_for, compose_caption
 
 log = logging.getLogger(__name__)
@@ -33,10 +33,19 @@ async def publish_draft(draft_id: int) -> dict:
             return {"ok": False, "error": draft.error}
         brand = _brand_for(db, draft.brand_id)
         targets = draft.publish_targets or []
-        req_base = dict(draft_id=draft.id, caption=compose_caption(draft, gen.get("credit_source", True)),
-                        image_urls=[s.image_url for s in draft.slides],
-                        image_keys=[s.image_key for s in draft.slides],
-                        brand_config=brand.publish_config or {},
+        credit = gen.get("credit_source", True)
+        slides = sorted(draft.slides, key=lambda s: s.position)
+        # Each platform gets its own post: its own text and its own images (carousel or a single image)
+        per_platform: dict[str, dict] = {}
+        for target in targets:
+            for platform in target.get("platforms") or []:
+                if platform in per_platform:
+                    continue
+                text, positions = variants.for_publish(draft, platform, credit)
+                chosen = [slides[i] for i in positions if i < len(slides)] or slides[:1]
+                per_platform[platform] = {"caption": text, "image_urls": [s.image_url for s in chosen],
+                                          "image_keys": [s.image_key for s in chosen]}
+        req_base = dict(draft_id=draft.id, brand_config=brand.publish_config or {},
                         first_comment=draft.first_comment if pub.get("first_comment_enabled") else "",
                         title=draft.hook)
         draft.status, draft.error = "publishing", None
@@ -49,7 +58,10 @@ async def publish_draft(draft_id: int) -> dict:
             publisher = get_publisher(provider)
             if not publisher.configured():
                 raise RuntimeError(f"{provider} غير مُعدّ (مفتاح API مفقود)")
-            results = await publisher.publish(PublishRequest(platforms=platforms, **req_base))
+            results = []
+            for platform in platforms:
+                results += await publisher.publish(PublishRequest(platforms=[platform], **per_platform[platform],
+                                                                  **req_base))
         except Exception as exc:  # noqa: BLE001
             log.exception("publish failed")
             results = [PlatformResult(p, False, error=str(exc)[:500]) for p in platforms]

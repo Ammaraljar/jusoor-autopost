@@ -94,9 +94,11 @@ def test_publish_due_marks_partial_success(client, monkeypatch):
     assert d["status"] == "published"
     assert "facebook" in d["error"]
     assert {l["platform"] for l in d["logs"]} == {"instagram", "facebook"}
-    req = FakePublisher.calls[-1]
-    assert len(req.image_urls) == 6 and all(u.startswith("https://autopost.example.com/media/") for u in req.image_urls)
-    assert "#" in req.caption
+    by_platform = {r.platforms[0]: r for r in FakePublisher.calls[-2:]}
+    ig, fb = by_platform["instagram"], by_platform["facebook"]
+    assert len(ig.image_urls) == 6 and all(u.startswith("https://autopost.example.com/media/") for u in ig.image_urls)
+    assert len(fb.image_urls) == 1                     # Facebook: one image, its own text
+    assert "#" in ig.caption
 
 
 def test_calendar_and_campaign_flow(client, fake_network):

@@ -158,7 +158,8 @@ class Draft(Base):
     image_keywords: Mapped[str] = mapped_column(Text, default="")
     relevance: Mapped[int | None] = mapped_column(Integer, nullable=True)
     ai_meta: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)   # engine / ensemble verdict
-    palette: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)   # colours taken from the photo
+    palette: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)   # brand colour set of this post
+    variants: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)  # per-platform text + images
     badge: Mapped[str] = mapped_column(String(30), default="news")
     status: Mapped[str] = mapped_column(String(20), default="generating", index=True)
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -236,6 +237,7 @@ SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 _ADDED_COLUMNS = [
     ("drafts", "ai_meta", "JSON"),
     ("drafts", "palette", "JSON"),
+    ("drafts", "variants", "JSON"),
     ("brands", "color_mode", "VARCHAR(20)"),
     ("brands", "logo_backdrop", "VARCHAR(20)"),
 ]

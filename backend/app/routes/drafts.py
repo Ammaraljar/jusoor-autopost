@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from ..auth import RequireUser
 from ..db import Draft, PublishLog, Slide, get_db, utcnow
 from ..publishers import REGISTRY
-from ..services import app_settings, generator, pipeline, publishing, qa, storage
+from ..services import app_settings, generator, pipeline, publishing, qa, storage, variants
 
 router = APIRouter(prefix="/api/drafts", tags=["drafts"], dependencies=[RequireUser])
 STATUSES = ["generating", "pending_review", "approved", "scheduled", "publishing", "published", "failed", "rejected"]
@@ -45,6 +45,9 @@ def _full(db: Session, d: Draft) -> dict[str, Any]:
     return {**d.to_dict(), "slides": [s.to_dict() for s in d.slides],
             "qa": qa.run_qa(d, d.slides, gen.get("credit_source", True)),
             "caption_preview": pipeline.compose_caption(d, gen.get("credit_source", True)),
+            "variants": d.variants or (variants.finalize(d, variants.fallback_texts(d), gen.get("credit_source", True))
+                                       if d.slides else {}),
+            "variants_generated": bool(d.variants),
             "logs": [l.to_dict() for l in logs]}
 
 
@@ -135,6 +138,48 @@ def bulk(body: BulkBody, db: Session = Depends(get_db)):
             d.status, d.scheduled_at = "approved", None
         done += 1
     return {"ok": True, "done": done, "skipped": skipped}
+
+
+class VariantPatch(BaseModel):
+    text: str | None = None
+    slides: list[int] | None = None       # single-image platforms: which slide to post
+
+
+@router.patch("/{draft_id}/variants/{platform}")
+def update_variant(draft_id: int, platform: str, body: VariantPatch, db: Session = Depends(get_db)):
+    """Edit one platform's post (its text, or which image a single-image platform uses)."""
+    d = _get(db, draft_id)
+    if platform not in variants.PLATFORM_SPECS:
+        raise HTTPException(404, "منصة غير معروفة")
+    gen = app_settings.get_section(db, "generation")
+    current = dict(d.variants or variants.finalize(d, variants.fallback_texts(d), gen.get("credit_source", True)))
+    v = dict(current.get(platform) or {})
+    spec = variants.PLATFORM_SPECS[platform]
+    if body.text is not None:
+        if len(body.text) > spec["limit"]:
+            raise HTTPException(400, f"النص يتجاوز حد {spec['label']} ({spec['limit']} حرف)")
+        v["text"] = body.text
+    if body.slides is not None and spec["format"] == "single":
+        valid = [i for i in body.slides if 0 <= i < len(d.slides)]
+        v["slides"] = valid[:1] or [0]
+    current[platform] = {**v, "format": spec["format"], "limit": spec["limit"], "label": spec["label"]}
+    d.variants = current
+    return _full(db, d)
+
+
+@router.post("/{draft_id}/variants/regenerate")
+async def regenerate_variants(draft_id: int, db: Session = Depends(get_db)):
+    """Rewrite every platform's text from the current post (after editing the main text or slides)."""
+    d = _get(db, draft_id)
+    if not d.slides:
+        raise HTTPException(409, "المنشور بلا شرائح بعد")
+    db.commit()
+    try:
+        await pipeline.make_variants(draft_id)
+    except generator.AIError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    db.expire_all()
+    return _full(db, _get(db, draft_id))
 
 
 @router.get("/{draft_id}")
