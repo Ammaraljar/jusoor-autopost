@@ -1,6 +1,7 @@
 """End-to-end pipeline: sources -> articles -> AI drafts -> rendered slides."""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import uuid
@@ -288,9 +289,10 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
     backgrounds = []
     if needs_bg:
         needed = max(1, sum(1 for s in slides if s[1] != "cta"))
-        backgrounds = images.collect_backgrounds(article_image, keywords, mode, needed)
+        # Network calls run in a worker thread so the server keeps answering while photos download
+        backgrounds = await asyncio.to_thread(images.collect_backgrounds, article_image, keywords, mode, needed)
         if not backgrounds and mode != "source" and article_image:
-            backgrounds = images.collect_backgrounds(article_image, keywords, "source", 1)
+            backgrounds = await asyncio.to_thread(images.collect_backgrounds, article_image, keywords, "source", 1)
 
     # Colours: always a JUSOOR identity set (navy + gold shades), chosen once per post so all
     # slides match — it suits the cover photo and differs from the previous posts.
@@ -300,7 +302,7 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
             cover_bytes = backgrounds[0]["bytes"] if backgrounds else None
             if cover_bytes is None:
                 cover_url = next((s[5] for s in slides if s[1] == "cover" and s[5]), None)
-                cover_bytes = images.download_image(cover_url) if cover_url else None
+                cover_bytes = await asyncio.to_thread(images.download_image, cover_url) if cover_url else None
             palette_to_store = colours.pick_variant(cover_bytes, _recent_variants(draft_id),
                                                     brand_navy, brand_gold, seed=draft_id)
         style.palette = palette_to_store
@@ -316,12 +318,16 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
             if positions is not None and pos not in positions and not needs_bg:
                 continue
             bg = None
-            if backgrounds:
+            if bg_url and not refresh_backgrounds:
+                # keep the slide's own photo (e.g. one the user uploaded)
+                data = await asyncio.to_thread(images.download_image, bg_url)
+                bg = {"url": bg_url, "bytes": data, "hash": hashlib.sha1(data).hexdigest()} if data else None
+            if bg is None and backgrounds:
                 bg = backgrounds[0] if kind in ("cover", "cta") else backgrounds[bg_index % len(backgrounds)]
                 if kind == "content":
                     bg_index += 1
-            elif bg_url:
-                data = images.download_image(bg_url)
+            elif bg is None and bg_url:
+                data = await asyncio.to_thread(images.download_image, bg_url)
                 bg = {"url": bg_url, "bytes": data, "hash": hashlib.sha1(data).hexdigest()} if data else None
             spec = SlideSpec(kind=kind, heading=heading, body=body, position=pos, total=total,
                              background=bg["bytes"] if bg else None,

@@ -8,27 +8,40 @@ import logging
 import httpx
 from PIL import Image
 
-from . import credentials
+from . import credentials, storage
 from .scraper import HEADERS
 
 log = logging.getLogger(__name__)
 MIN_WIDTH = 600
 
 
+def normalise(data: bytes, min_width: int = MIN_WIDTH) -> bytes | None:
+    """Any supported image → RGB JPEG (max 2000px), honouring the phone's rotation."""
+    from PIL import ImageOps
+    img = Image.open(io.BytesIO(data))
+    img = ImageOps.exif_transpose(img)
+    if img.width < min_width:
+        return None
+    img = img.convert("RGB")
+    if img.width > 2000 or img.height > 2000:
+        img.thumbnail((2000, 2000))
+    out = io.BytesIO()
+    img.save(out, "JPEG", quality=88)
+    return out.getvalue()
+
+
 def download_image(url: str) -> bytes | None:
-    """Download and normalise an image to JPEG; returns None when unusable."""
+    """Download and normalise an image to JPEG; returns None when unusable.
+
+    Our own media (e.g. a photo the user uploaded) is read straight from storage: asking our own
+    server over HTTP while it is busy rendering would wait on itself until the timeout."""
     try:
+        key = storage.own_key(url)
+        if key:
+            return normalise(storage.read_bytes(key), min_width=1)
         resp = httpx.get(url, headers=HEADERS, timeout=30, follow_redirects=True)
         resp.raise_for_status()
-        img = Image.open(io.BytesIO(resp.content))
-        if img.width < MIN_WIDTH:
-            return None
-        img = img.convert("RGB")
-        if img.width > 2000:
-            img.thumbnail((2000, 2000))
-        out = io.BytesIO()
-        img.save(out, "JPEG", quality=88)
-        return out.getvalue()
+        return normalise(resp.content)
     except Exception as exc:  # noqa: BLE001
         log.warning("image download failed %s: %s", url, exc)
         return None

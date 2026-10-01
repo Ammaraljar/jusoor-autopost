@@ -275,13 +275,17 @@ async def upload_background(draft_id: int, slide_id: int, file: UploadFile = Fil
                             db: Session = Depends(get_db)):
     d = _get(db, draft_id)
     s = _slide(d, slide_id)
-    if file.content_type not in ("image/jpeg", "image/png", "image/webp"):
-        raise HTTPException(400, "الصيغة المسموحة: JPG أو PNG أو WEBP")
     data = await file.read()
-    if len(data) > 10 * 1024 * 1024:
-        raise HTTPException(400, "الحد الأقصى 10 ميغابايت")
+    if len(data) > 15 * 1024 * 1024:
+        raise HTTPException(400, "الحد الأقصى 15 ميغابايت")
+    from ..services import images
+    try:
+        jpeg = images.normalise(data, min_width=1)         # any phone photo → upright JPEG
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, "تعذّر قراءة الصورة — استخدم JPG أو PNG أو WEBP "
+                                 "(صور HEIC من الآيفون: صدّرها كـ JPG أولًا)") from exc
     key = f"uploads/bg-{d.id}-{uuid.uuid4().hex[:8]}.jpg"
-    s.background_url = storage.save_bytes(key, data, file.content_type)
+    s.background_url = storage.save_bytes(key, jpeg, "image/jpeg")
     db.commit()
     await pipeline.render_draft(d.id, [s.position])
     db.expire_all()

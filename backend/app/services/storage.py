@@ -73,6 +73,21 @@ def public_url(key: str) -> str:
     return f"{s.public_base_url.rstrip('/')}/media/{key}"
 
 
+def own_key(url: str | None) -> str | None:
+    """The storage key when a URL points at our own media (so it can be read without HTTP)."""
+    if not url:
+        return None
+    s = get_settings()
+    prefixes = [f"{s.public_base_url.rstrip('/')}/media/", "/media/"]
+    if s.supabase_url:
+        prefixes.append(f"{s.supabase_url.rstrip('/')}/storage/v1/object/public/{s.supabase_bucket}/")
+    for prefix in prefixes:
+        if url.startswith(prefix):
+            key = url[len(prefix):].split("?")[0]
+            return key or None
+    return None
+
+
 def is_publicly_reachable() -> bool:
     """True when stored media URLs can be fetched by Meta/Buffer servers."""
     s = get_settings()
