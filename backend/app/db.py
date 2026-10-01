@@ -160,6 +160,7 @@ class Draft(Base):
     ai_meta: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)   # engine / ensemble verdict
     palette: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)   # brand colour set of this post
     variants: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)  # per-platform text + images
+    cover_thumb_url: Mapped[str | None] = mapped_column(String(800), nullable=True)  # small cover for lists
     badge: Mapped[str] = mapped_column(String(30), default="news")
     status: Mapped[str] = mapped_column(String(20), default="generating", index=True)
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -220,12 +221,24 @@ def _make_engine():
         path = url.replace("sqlite:///", "")
         if path and path != ":memory:":
             os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-        kwargs["connect_args"] = {"check_same_thread": False}
+        kwargs["connect_args"] = {"check_same_thread": False, "timeout": 30}
     elif url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+psycopg://", 1)
     elif url.startswith("postgresql://"):
         url = url.replace("postgresql://", "postgresql+psycopg://", 1)
-    return create_engine(url, **kwargs)
+    eng = create_engine(url, **kwargs)
+    if url.startswith("sqlite"):
+        from sqlalchemy import event
+
+        @event.listens_for(eng, "connect")
+        def _sqlite_pragmas(dbapi_conn, _record):  # noqa: ANN001
+            # WAL lets the dashboard read while the collector writes; NORMAL sync is safe with WAL.
+            cur = dbapi_conn.cursor()
+            cur.execute("PRAGMA journal_mode=WAL")
+            cur.execute("PRAGMA synchronous=NORMAL")
+            cur.execute("PRAGMA busy_timeout=30000")
+            cur.close()
+    return eng
 
 
 engine = _make_engine()
@@ -238,6 +251,7 @@ _ADDED_COLUMNS = [
     ("drafts", "ai_meta", "JSON"),
     ("drafts", "palette", "JSON"),
     ("drafts", "variants", "JSON"),
+    ("drafts", "cover_thumb_url", "VARCHAR(800)"),
     ("brands", "color_mode", "VARCHAR(20)"),
     ("brands", "logo_backdrop", "VARCHAR(20)"),
 ]

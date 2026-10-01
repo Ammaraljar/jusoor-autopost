@@ -30,13 +30,21 @@ def _get(db: Session, draft_id: int) -> Draft:
     return d
 
 
+def _iso(value):
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.isoformat()
+
+
 def _summary(d: Draft) -> dict[str, Any]:
-    cover = d.slides[0].image_url if d.slides else None
+    cover = d.cover_thumb_url or (d.slides[0].image_url if d.slides else None)
     return {"id": d.id, "status": d.status, "hook": d.hook or d.original_title, "source": d.source_name,
             "origin": d.origin, "cover_url": cover, "slides": len(d.slides), "brand_id": d.brand_id,
             "campaign_id": d.campaign_id, "relevance": d.relevance, "error": d.error,
-            "scheduled_at": d.to_dict()["scheduled_at"], "published_at": d.to_dict()["published_at"],
-            "original_published_at": d.to_dict()["original_published_at"], "created_at": d.to_dict()["created_at"]}
+            "scheduled_at": _iso(d.scheduled_at), "published_at": _iso(d.published_at),
+            "original_published_at": _iso(d.original_published_at), "created_at": _iso(d.created_at)}
 
 
 def _full(db: Session, d: Draft) -> dict[str, Any]:
@@ -64,7 +72,8 @@ def list_drafts(status: str = "pending_review", brand_id: int | None = None, cam
     if q:
         like = f"%{q}%"
         query = query.where(or_(Draft.hook.ilike(like), Draft.original_title.ilike(like), Draft.caption.ilike(like)))
-    query = query.order_by(Draft.created_at.desc()).limit(min(limit, 300)).offset(offset)
+    from sqlalchemy.orm import selectinload
+    query = query.options(selectinload(Draft.slides)).order_by(Draft.created_at.desc()).limit(min(limit, 300)).offset(offset)
     return [_summary(d) for d in db.scalars(query)]
 
 

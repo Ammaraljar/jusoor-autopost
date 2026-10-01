@@ -52,9 +52,24 @@ app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origin_list,
                    allow_origin_regex=settings.cors_origin_regex or None, allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])
 
+# Compress JSON (draft lists, articles) — much faster on mobile connections
+from fastapi.middleware.gzip import GZipMiddleware  # noqa: E402
+app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+
+class CachedStatic(StaticFiles):
+    """Media keys are unique (a new name on every render), so browsers may cache them for good."""
+
+    async def get_response(self, path, scope):  # noqa: ANN001
+        resp = await super().get_response(path, scope)
+        if resp.status_code == 200:
+            resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return resp
+
+
 for r in (system.router, auth_routes.router, drafts.router, sources.router, planning.router, brands.router):
     app.include_router(r)
 
 if settings.storage_backend == "local":
     os.makedirs(settings.media_dir, exist_ok=True)
-    app.mount("/media", StaticFiles(directory=settings.media_dir), name="media")
+    app.mount("/media", CachedStatic(directory=settings.media_dir), name="media")

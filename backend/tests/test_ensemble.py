@@ -407,3 +407,38 @@ def test_invalid_model_is_replaced_by_one_the_account_has(client, monkeypatch):
         assert r["models"] == ["mistral-small-2603", "mistral-medium-2604", "mistral-medium-latest"]
     finally:
         client.put("/api/settings/credentials", json={"mistral_model": None})
+
+
+def test_gemini_and_cloudflare_route_correctly(client, monkeypatch):
+    seen = []
+
+    def handler(request):
+        if request.url.path.endswith("/models/search"):
+            return httpx.Response(200, json={"result": [{"name": "@cf/meta/llama-3.3-70b-instruct-fp8-fast"},
+                                                        {"name": "@cf/openai/whisper"}]})
+        seen.append((request.url.host, request.url.path, json.loads(request.content)["model"],
+                     request.headers["authorization"]))
+        return chat(json.dumps(post("x"), ensure_ascii=False))
+
+    install(monkeypatch, handler)
+    client.put("/api/settings/credentials", json={"gemini_api_key": "AQ.test", "cloudflare_api_key": "cfat_test",
+                                                  "cloudflare_account_id": "706cc3b3131fd3024430c003191d4360"})
+    try:
+        for name in ("gemini", "cloudflare"):
+            asyncio.run(gen_mod._call_openai_compatible(credentials.engine(name), "s", "u", gen_mod.POST_TOOL))
+        assert seen[0][:3] == ("generativelanguage.googleapis.com", "/v1beta/openai/chat/completions",
+                               "gemini-flash-latest")
+        assert seen[1][0] == "api.cloudflare.com"
+        assert seen[1][1] == "/client/v4/accounts/706cc3b3131fd3024430c003191d4360/ai/v1/chat/completions"
+        assert seen[1][3] == "Bearer cfat_test"
+        gen_mod._MODEL_CACHE.clear()
+        models = asyncio.run(gen_mod.list_models("cloudflare", fresh=True))
+        assert models == ["@cf/meta/llama-3.3-70b-instruct-fp8-fast"]
+        view = client.get("/api/settings/credentials").json()["values"]
+        assert view["engines"]["cloudflare"]["ready"] and view["engines"]["cloudflare"]["extra"][0]["field"] == "cloudflare_account_id"
+        # without an Account ID Cloudflare is not used
+        client.put("/api/settings/credentials", json={"cloudflare_account_id": None})
+        assert "cloudflare" not in credentials.ready_engines()
+    finally:
+        client.put("/api/settings/credentials", json={"gemini_api_key": None, "cloudflare_api_key": None,
+                                                      "cloudflare_account_id": None})

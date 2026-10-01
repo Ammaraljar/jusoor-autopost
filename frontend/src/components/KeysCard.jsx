@@ -4,7 +4,8 @@ import { Button, Field, Spinner, useAction, useLoad } from './ui';
 import { api } from '../lib/api';
 import { useI18n } from '../lib/i18n';
 
-const ENGINE_ORDER = ['mistral', 'openrouter', 'groq'];
+const ENGINE_ORDER = ['gemini', 'mistral', 'groq', 'cloudflare', 'openrouter'];
+const EXTRA_FIELDS = ['cloudflare_account_id'];
 const MODEL_FIELDS = ENGINE_ORDER.map((n) => `${n}_model`);
 const PUBLISH_KEYS = [
   { field: 'pexels_api_key', label: 'stock_photos', hint: 'pexels.com/api' },
@@ -30,6 +31,7 @@ function initialForm(v) {
     ai_mode: v.ai_mode || 'single',
     ai_primary: v.ai_primary || 'mistral',
     ...Object.fromEntries(MODEL_FIELDS.map((f) => [f, v[f] || ''])),
+    ...Object.fromEntries(EXTRA_FIELDS.map((f) => [f, v[f] || ''])),
     secrets: {},
   };
 }
@@ -55,13 +57,15 @@ export default function KeysCard({ onSaved }) {
   const setSecret = (field, value) => setForm((f) => ({ ...f, secrets: { ...f.secrets, [field]: value } }));
 
   // An engine is active when it has a saved key, or a key typed in this form
-  const hasKey = (n) => Boolean(values[`${n}_api_key`]?.set || (form.secrets[`${n}_api_key`] || '').trim());
+  const hasKey = (n) => Boolean(values[`${n}_api_key`]?.set || (form.secrets[`${n}_api_key`] || '').trim())
+    && (engines[n]?.extra || []).every((x) => (form[x.field] || '').trim());
   const active = ENGINE_ORDER.filter(hasKey);
   const primary = active.includes(form.ai_primary) ? form.ai_primary : (active[0] || form.ai_primary);
 
   const payload = () => ({
     ai_mode: form.ai_mode, ai_primary: primary,
     ...Object.fromEntries(MODEL_FIELDS.map((f) => [f, form[f]])),
+    ...Object.fromEntries(EXTRA_FIELDS.map((f) => [f, (form[f] || '').trim()])),
     ...form.secrets,
   });
   const initial = initialForm(values);
@@ -136,6 +140,11 @@ export default function KeysCard({ onSaved }) {
         </div>
         {info.free && <p className="xs muted" style={{ margin: '0 0 10px' }}>{info.free}</p>}
         <div className="stack" style={{ gap: 10 }}>
+          {(info.extra || []).map((x) => (
+            <Field key={x.field} label={x.label} hint={x.hint}>
+              <input className="input ltr" value={form[x.field] || ''} onChange={(e) => set(x.field, e.target.value)} />
+            </Field>
+          ))}
           <Field label={t('api_key')}>
             <>
               <div className="row" style={{ flexWrap: 'nowrap', gap: 8 }}>

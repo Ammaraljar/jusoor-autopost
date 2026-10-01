@@ -25,11 +25,37 @@ from ..config import get_settings
 from ..db import AppSetting, session_scope
 
 SETTINGS_KEY = "credentials"
-VERSION = "3.4-upload-fix"
+VERSION = "3.5-fast-gemini-cloudflare"
 
 # Each engine carries what its own environment needs: suggested models, the key's format,
 # where to get the key, and request tweaks applied in generator._tune_payload().
 ENGINES: dict[str, dict[str, Any]] = {
+    "gemini": {
+        "label": "Google Gemini", "kind": "openai",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "default_model": "gemini-flash-latest",
+        "models": [
+            {"id": "gemini-flash-latest", "note": "سريع وممتاز بالعربية — آخر إصدار Flash تلقائيًا"},
+            {"id": "gemini-flash-lite-latest", "note": "الأسرع والأخف"},
+            {"id": "gemini-pro-latest", "note": "الأعلى جودة — أبطأ وحدوده المجانية أقل"},
+        ],
+        "key_url": "https://aistudio.google.com/apikey", "key_prefix": "", "key_placeholder": "AIza… أو AQ.…",
+        "free": "خطة مجانية من Google AI Studio بحدود في الدقيقة واليوم",
+    },
+    "cloudflare": {
+        "label": "Cloudflare Workers AI", "kind": "openai",
+        "base_url": "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1",
+        "default_model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+        "models": [
+            {"id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast", "note": "متعدد اللغات وسريع"},
+            {"id": "@cf/meta/llama-4-scout-17b-16e-instruct", "note": "أحدث وأخف"},
+        ],
+        "key_url": "https://dash.cloudflare.com/profile/api-tokens", "key_prefix": "",
+        "key_placeholder": "API Token بصلاحية Workers AI",
+        "free": "10,000 وحدة مجانية يوميًا (Neurons)",
+        "extra": [{"field": "cloudflare_account_id", "label": "Account ID",
+                   "hint": "من لوحة Cloudflare ← الصفحة الرئيسية للحساب (32 حرفًا)"}],
+    },
     "mistral": {
         "label": "Mistral", "kind": "openai", "base_url": "https://api.mistral.ai/v1",
         "default_model": "mistral-small-latest",
@@ -62,7 +88,7 @@ ENGINES: dict[str, dict[str, Any]] = {
         "free": "خطة مجانية بحدود في الدقيقة واليوم",
     },
 }
-ENGINE_ORDER = ("mistral", "groq", "openrouter")   # preference when no primary is chosen
+ENGINE_ORDER = ("gemini", "mistral", "groq", "cloudflare", "openrouter")   # preference when no primary is chosen
 
 # field -> (is_secret, env fallback attribute on Settings)
 FIELDS: dict[str, tuple[bool, str]] = {
@@ -75,6 +101,11 @@ FIELDS: dict[str, tuple[bool, str]] = {
     "openrouter_model": (False, "openrouter_model"),
     "groq_api_key": (True, "groq_api_key"),
     "groq_model": (False, "groq_model"),
+    "gemini_api_key": (True, "gemini_api_key"),
+    "gemini_model": (False, "gemini_model"),
+    "cloudflare_api_key": (True, "cloudflare_api_key"),
+    "cloudflare_account_id": (False, "cloudflare_account_id"),
+    "cloudflare_model": (False, "cloudflare_model"),
     "pexels_api_key": (True, "pexels_api_key"),
     "buffer_api_key": (True, "buffer_api_key"),
     "meta_access_token": (True, "meta_access_token"),
@@ -154,12 +185,15 @@ def source_of(field: str) -> str:
 def engine(name: str, values: dict[str, str] | None = None) -> dict[str, str]:
     v = values or current()
     meta = ENGINES[name]
-    return {"name": name, "label": meta["label"], "kind": meta["kind"], "base_url": meta["base_url"],
+    base_url = meta["base_url"].replace("{account_id}", (v.get("cloudflare_account_id") or "").strip())
+    return {"name": name, "label": meta["label"], "kind": meta["kind"], "base_url": base_url,
             "api_key": v.get(f"{name}_api_key", ""),
             "model": v.get(f"{name}_model", "") or meta["default_model"]}
 
 
 def _ready(name: str, values: dict[str, str]) -> bool:
+    if name == "cloudflare" and not (values.get("cloudflare_account_id") or "").strip():
+        return False
     return name in ENGINES and bool(values.get(f"{name}_api_key"))
 
 
@@ -186,7 +220,7 @@ def ai_warnings(values: dict[str, str] | None = None) -> list[str]:
     v = values or current()
     out: list[str] = []
     if not ready_engines(v):
-        out.append("لا يوجد محرّك ذكاء اصطناعي جاهز — أضف مفتاح Mistral أو OpenRouter أو Groq")
+        out.append("لا يوجد محرّك ذكاء اصطناعي جاهز — أضف مفتاح Gemini أو Mistral أو Groq أو Cloudflare أو OpenRouter")
     if v.get("ai_mode") == "ensemble" and len(ensemble_engines(v)) == 1:
         out.append("وضع التوازي يحتاج مفتاحين على الأقل — يعمل حاليًا بمحرّك واحد")
 
@@ -198,6 +232,11 @@ def ai_warnings(values: dict[str, str] | None = None) -> list[str]:
     or_key = v.get("openrouter_api_key", "")
     if or_key and not or_key.startswith("sk-or-"):
         out.append("مفاتيح OpenRouter تبدأ عادةً بـ sk-or- — تأكد من نسخ المفتاح كاملًا")
+    if v.get("cloudflare_api_key") and not (v.get("cloudflare_account_id") or "").strip():
+        out.append("Cloudflare يحتاج Account ID بجانب المفتاح")
+    acc = (v.get("cloudflare_account_id") or "").strip()
+    if acc and not re.fullmatch(r"[0-9a-fA-F]{32}", acc):
+        out.append("Account ID في Cloudflare يتكوّن عادةً من 32 حرفًا (أرقام وحروف a-f)")
     groq_key = v.get("groq_api_key", "")
     if groq_key and not groq_key.startswith("gsk_"):
         out.append("مفاتيح Groq تبدأ عادةً بـ gsk_ — تأكد من نسخ المفتاح كاملًا")
@@ -221,7 +260,7 @@ def public_view() -> dict[str, Any]:
                              "models": ENGINES[name]["models"], "key_url": ENGINES[name]["key_url"],
                              "key_prefix": ENGINES[name]["key_prefix"],
                              "key_placeholder": ENGINES[name]["key_placeholder"],
-                             "free": ENGINES[name]["free"]}
+                             "free": ENGINES[name]["free"], "extra": ENGINES[name].get("extra", [])}
                       for name in ENGINE_ORDER}
     out["ready"] = ready_engines(values)
     out["version"] = VERSION

@@ -61,6 +61,24 @@ def brand_style(brand: Brand, language: str) -> BrandStyle:
 
 
 # ---------------------------------------------------------------- collecting
+def _fetch_pages(items: list, source) -> dict:
+    """Fetch the article pages that are needed, 6 at a time. url → ScrapedArticle | Exception."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    need = [i for i in items if source.kind != "rss" or len(i.body) < 400 or not i.image_url]
+    if not need:
+        return {}
+
+    def get(item):
+        try:
+            return item.url, scraper.fetch_article(item.url, source.body_selector)
+        except Exception as exc:  # noqa: BLE001
+            return item.url, exc
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        return dict(pool.map(get, need))
+
+
 def collect_source(source_id: int) -> dict:
     """Fetch new articles for one source and store them (status=new)."""
     with session_scope() as db:
@@ -81,30 +99,35 @@ def collect_source(source_id: int) -> dict:
                 known = set(db.scalars(select(Article.url).where(Article.url.in_(listing.links))))
                 candidates = [scraper.ScrapedArticle(url=u) for u in listing.links if u not in known]
             source.last_http_status = status
+            # Download the article pages in parallel first (network), then store them (database)
+            wanted = []
+            for item in candidates:
+                if len(wanted) >= source.max_items_per_run * 2:
+                    break
+                if not db.scalar(select(Article.id).where(Article.url == item.url)):
+                    wanted.append(item)
+            pages = _fetch_pages(wanted, source)
+            candidates = wanted
             for item in candidates:
                 if created >= source.max_items_per_run:
                     break
                 if db.scalar(select(Article.id).where(Article.url == item.url)):
                     continue
                 art = item
-                if source.kind != "rss" or len(item.body) < 400:
-                    try:
-                        art = scraper.fetch_article(item.url, source.body_selector)
+                page = pages.get(item.url)
+                needs_page = source.kind != "rss" or len(item.body) < 400
+                if isinstance(page, Exception) or (needs_page and page is None):
+                    log.warning("article fetch failed %s: %s", item.url, page)
+                    if len(item.body) < 250:     # RSS text is enough when the page itself is blocked
+                        continue
+                elif page is not None:
+                    if needs_page:
+                        art = page
                         art.title = art.title or item.title
                         art.image_url = art.image_url or item.image_url
                         art.published_at = art.published_at or item.published_at
-                    except Exception as exc:  # noqa: BLE001
-                        log.warning("article fetch failed %s: %s", item.url, exc)
-                        if len(item.body) < 250:     # RSS text is enough when the page itself is blocked
-                            continue
-                        art = item
-                if not art.image_url and source.kind == "rss":
-                    # Every article must come with its photo: look on the article page itself
-                    try:
-                        page = scraper.fetch_article(art.url, source.body_selector)
-                        art.image_url = page.image_url
-                    except Exception as exc:  # noqa: BLE001
-                        log.info("no image page for %s: %s", art.url, exc)
+                    elif not art.image_url:
+                        art.image_url = page.image_url   # every article must come with its photo
                 status_value, note = "new", None
                 if not art.image_url:
                     status_value, note = "skipped", "المقال بلا صورة"
@@ -263,6 +286,22 @@ def _recent_variants(draft_id: int, limit: int = 3) -> list[str]:
     return [p.get("variant") for p in rows if isinstance(p, dict) and p.get("variant")][:limit]
 
 
+def _save_thumb(key: str, jpeg: bytes) -> str | None:
+    """Small cover for the review grid (≈25 KB instead of ≈300 KB)."""
+    try:
+        from io import BytesIO
+
+        from PIL import Image
+        img = Image.open(BytesIO(jpeg))
+        img.thumbnail((400, 500))
+        out = BytesIO()
+        img.convert("RGB").save(out, "JPEG", quality=78, optimize=True)
+        return storage.save_bytes(key.replace(".jpg", "-thumb.jpg"), out.getvalue())
+    except Exception as exc:  # noqa: BLE001
+        log.warning("thumbnail failed: %s", exc)
+        return None
+
+
 async def render_draft(draft_id: int, positions: list[int] | None = None, refresh_backgrounds: bool = False) -> None:
     """(Re)render slide images. positions=None renders all slides."""
     with session_scope() as db:
@@ -312,6 +351,7 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
 
     total = len(slides)
     results: dict[int, dict] = {}
+    thumb_url = None
     try:
         bg_index = 0
         for slide_id, kind, heading, body, pos, bg_url, old_key in slides:
@@ -338,7 +378,9 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
                                  bg["bytes"] if bg else None, logo_placement, rtl))
             jpeg = await renderer.render(spec, style)
             key = f"generated/draft-{draft_id}-s{pos}-{uuid.uuid4().hex[:8]}.jpg"
-            url = storage.save_bytes(key, jpeg)
+            url = await asyncio.to_thread(storage.save_bytes, key, jpeg)
+            if pos == 0:
+                thumb_url = await asyncio.to_thread(_save_thumb, key, jpeg)
             if old_key:
                 storage.delete(old_key)
             results[slide_id] = {"image_key": key, "image_url": url, "width": 1080, "height": 1350,
@@ -358,6 +400,8 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
         if prev_status in ("generating", "failed"):
             draft.status, draft.error = "pending_review", None
         draft.palette = palette_to_store
+        if thumb_url:
+            draft.cover_thumb_url = thumb_url
         draft.updated_at = utcnow()
 
 
@@ -367,8 +411,15 @@ async def run_collection_cycle(source_ids: list[int] | None = None) -> dict:
         sched = app_settings.get_section(db, "scheduler")
     ids = source_ids if source_ids is not None else due_sources()
     summary = {"sources": 0, "new_articles": 0, "drafts": 0, "errors": []}
-    for sid in ids:
-        res = collect_source(sid)
+    # Sources are fetched in worker threads, several at a time: the dashboard stays responsive
+    # and a slow site no longer holds up the others.
+    gate = asyncio.Semaphore(4)
+
+    async def one_source(sid: int) -> tuple[int, dict]:
+        async with gate:
+            return sid, await asyncio.to_thread(collect_source, sid)
+
+    for sid, res in await asyncio.gather(*(one_source(i) for i in ids)):
         summary["sources"] += 1
         summary["new_articles"] += res.get("new_articles", 0)
         if not res.get("ok"):
@@ -378,9 +429,18 @@ async def run_collection_cycle(source_ids: list[int] | None = None) -> dict:
         if source_ids is not None:
             q = q.where(Article.source_id.in_(source_ids))
         pending = list(db.scalars(q.limit(int(sched.get("max_drafts_per_run", 10)))))
-    for aid in pending:
-        if await draft_from_article(aid):
-            summary["drafts"] += 1
+    # Write up to 3 posts at the same time (AI calls and image downloads overlap)
+    draft_gate = asyncio.Semaphore(3)
+
+    async def one_draft(aid: int) -> bool:
+        async with draft_gate:
+            try:
+                return bool(await draft_from_article(aid))
+            except Exception:  # noqa: BLE001
+                log.exception("drafting failed for article %s", aid)
+                return False
+
+    summary["drafts"] = sum(await asyncio.gather(*(one_draft(a) for a in pending)))
     return summary
 
 

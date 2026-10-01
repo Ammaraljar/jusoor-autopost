@@ -221,13 +221,16 @@ _SKIP_WORDS = ("embed", "ocr", "moderation", "voxtral", "whisper", "tts", "guard
 def _is_invalid_model(resp: httpx.Response) -> bool:
     text = resp.text.lower()
     return "model" in text and any(w in text for w in ("invalid", "not found", "does not exist", "not exist",
-                                                       "no endpoints", "unknown", "decommissioned"))
+                                                       "no endpoints", "unknown", "decommissioned",
+                                                       "no such", "no route"))
 
 
 def _chat_models(name: str, payload: dict[str, Any]) -> list[str]:
     ids: list[str] = []
     for item in payload.get("data") or []:
-        mid = str(item.get("id") or "")
+        mid = str(item.get("id") or item.get("name") or "")
+        if mid.startswith("models/"):          # Gemini lists "models/gemini-…"
+            mid = mid[len("models/"):]
         if not mid:
             continue
         caps = item.get("capabilities") or {}
@@ -243,6 +246,9 @@ def _chat_models(name: str, payload: dict[str, Any]) -> list[str]:
         ids.append(mid)
     if name == "openrouter":
         ids.insert(0, "openrouter/free")
+    if name == "gemini":
+        ids = [i for i in ids if i.startswith("gemini") and "tts" not in i and "image" not in i
+               and "embedding" not in i and "live" not in i] or ids
     return list(dict.fromkeys(ids))
 
 
@@ -257,9 +263,11 @@ async def list_models(name: str, client: httpx.AsyncClient | None = None, fresh:
         raise AIError(f"أضف مفتاح {cfg['label']} أولًا ثم احفظ")
     own = client is None
     client = client or httpx.AsyncClient(timeout=30)
+    models_url = cfg["base_url"].rstrip("/") + "/models"
+    if name == "cloudflare":     # Workers AI lists its catalogue on a different path
+        models_url = cfg["base_url"].rsplit("/ai/", 1)[0] + "/ai/models/search?task=Text%20Generation&per_page=100"
     try:
-        resp = await client.get(cfg["base_url"].rstrip("/") + "/models",
-                                headers={"Authorization": f"Bearer {cfg['api_key']}"})
+        resp = await client.get(models_url, headers={"Authorization": f"Bearer {cfg['api_key']}"})
     except httpx.HTTPError as exc:
         raise AIError(f"{cfg['label']}: تعذّر جلب قائمة النماذج ({exc})") from exc
     finally:
@@ -269,7 +277,10 @@ async def list_models(name: str, client: httpx.AsyncClient | None = None, fresh:
         raise AIError(f"{cfg['label']} رفض المفتاح — تأكد من المفتاح")
     if resp.status_code >= 400:
         raise AIError(f"{cfg['label']}: تعذّر جلب قائمة النماذج (خطأ {resp.status_code})")
-    ids = _chat_models(name, resp.json())
+    body = resp.json()
+    if name == "cloudflare":
+        body = {"data": [{"id": m.get("name")} for m in (body.get("result") or [])]}
+    ids = _chat_models(name, body)
     _MODEL_CACHE[name] = (time.time(), ids)
     return ids
 
@@ -321,6 +332,8 @@ def _tune_payload(cfg: dict[str, str], payload: dict[str, Any]) -> None:
         payload["max_tokens"] = max(payload["max_tokens"], 8000)
     elif name == "mistral":
         payload["temperature"] = min(payload["temperature"], 0.5)   # steadier JSON on Mistral
+    elif name == "gemini":
+        payload["max_tokens"] = max(payload["max_tokens"], 6000)     # thinking tokens count too
     elif name == "openrouter":
         payload["max_tokens"] = max(payload["max_tokens"], 4000)
         if "response_format" in payload:
@@ -440,7 +453,7 @@ async def _call_with_fallback(system: str, user: str, tool: dict[str, Any],
     """Primary engine first; if it fails, the next ready engine takes over."""
     order = credentials.fallback_order()
     if not order:
-        raise AIError("لا يوجد محرّك ذكاء اصطناعي جاهز — أضف مفتاح Mistral أو OpenRouter أو Groq "
+        raise AIError("لا يوجد محرّك ذكاء اصطناعي جاهز — أضف مفتاح Gemini أو Mistral أو Groq أو Cloudflare أو OpenRouter "
                       "من الإعدادات ← المفاتيح والاتصالات")
     errors: dict[str, str] = {}
     for name in order:
@@ -661,7 +674,7 @@ def demo_post(title: str, body: str, gen: dict[str, Any]) -> GeneratedPost:
     sentences = [s.strip() for s in re.split(r"(?<=[.!?؟])\s+", body or "") if s.strip()] or [title]
     slides = [{"heading": f"النقطة {i + 1}", "body": sentences[i % len(sentences)][:180]} for i in range(n)]
     return GeneratedPost(
-        hook=(title or "منشور تجريبي")[:80], subtitle="نسخة تجريبية — أضف مفتاح Mistral أو OpenRouter أو Groq لتوليد محتوى حقيقي",
+        hook=(title or "منشور تجريبي")[:80], subtitle="نسخة تجريبية — أضف مفتاح Gemini أو Mistral أو Groq أو Cloudflare أو OpenRouter لتوليد محتوى حقيقي",
         caption=f"{title}\n\n{sentences[0][:300]}\n\nتواصل معنا لتخطيط رحلتك.",
         hashtags=["#سفر", "#ماليزيا", "#سياحة", "#جسور_للسفر", "#travel"], slides=slides,
         cta="احجز رحلتك القادمة مع جسور للسفر", first_comment="", image_keywords="travel malaysia",

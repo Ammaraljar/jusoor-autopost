@@ -42,8 +42,13 @@ class Settings(BaseSettings):
     openrouter_model: str = "openrouter/free"   # free router; any ":free" model id also works
     groq_api_key: str = ""
     groq_model: str = "openai/gpt-oss-120b"
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-flash-latest"
+    cloudflare_api_key: str = ""
+    cloudflare_account_id: str = ""
+    cloudflare_model: str = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
     ai_mode: str = "single"                 # single (with automatic fallback) | ensemble
-    ai_ensemble: str = "mistral,groq,openrouter"
+    ai_ensemble: str = "gemini,mistral,groq,cloudflare,openrouter"
     ai_primary: str = ""                    # mistral | openrouter | groq (judge + quick edits)
 
     # Images
