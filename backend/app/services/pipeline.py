@@ -79,22 +79,60 @@ def _fetch_pages(items: list, source) -> dict:
         return dict(pool.map(get, need))
 
 
-def collect_source(source_id: int) -> dict:
-    """Fetch new articles for one source and store them (status=new)."""
+def _in_window(published: datetime | None, window: dict | None) -> bool:
+    if not window or published is None:
+        return True
+    day = published.astimezone(timezone.utc).date()
+    if window.get("date_from") and day < window["date_from"]:
+        return False
+    if window.get("date_to") and day > window["date_to"]:
+        return False
+    return True
+
+
+def _feed_pages(source, limit: int, window: dict | None) -> tuple[list, int | None]:
+    """RSS items; for a past period, also older feed pages (WordPress: ?paged=2, 3…)."""
+    items, status = scraper.fetch_feed(source.feed_url, limit=limit)
+    date_from = (window or {}).get("date_from")
+    page = 2
+    while date_from and items and page <= 8:
+        dated = [i.published_at for i in items if i.published_at]
+        if not dated or min(dated).date() <= date_from:
+            break
+        sep = "&" if "?" in source.feed_url else "?"
+        try:
+            more, _ = scraper.fetch_feed(f"{source.feed_url}{sep}paged={page}", limit=limit)
+        except Exception:  # noqa: BLE001 - the feed has no older pages
+            break
+        known = {i.url for i in items}
+        more = [m for m in more if m.url not in known]
+        if not more:
+            break
+        items += more
+        page += 1
+    return items, status
+
+
+def collect_source(source_id: int, window: dict | None = None) -> dict:
+    """Fetch new articles for one source and store them (status=new).
+
+    window = {"date_from", "date_to", "max_items"}: only articles published in that period."""
     with session_scope() as db:
         source = db.get(Source, source_id)
         if source is None:
             return {"ok": False, "error": "source not found"}
         sched = app_settings.get_section(db, "scheduler")
         max_age = timedelta(days=int(sched.get("max_article_age_days", 3)))
+        programs = (source.purpose or "news") == "programs"
+        per_run = int((window or {}).get("max_items") or source.max_items_per_run)
         source.last_checked_at = utcnow()
         created = 0
         try:
             if source.kind == "rss" and source.feed_url:
-                items, status = scraper.fetch_feed(source.feed_url, limit=source.max_items_per_run * 3)
-                candidates = items
+                items, status = _feed_pages(source, per_run * 3, window)
+                candidates = [i for i in items if _in_window(i.published_at, window)]
             else:
-                listing = scraper.discover_links(source, limit=source.max_items_per_run * 3)
+                listing = scraper.discover_links(source, limit=per_run * 3)
                 status = listing.http_status
                 known = set(db.scalars(select(Article.url).where(Article.url.in_(listing.links))))
                 candidates = [scraper.ScrapedArticle(url=u) for u in listing.links if u not in known]
@@ -102,14 +140,14 @@ def collect_source(source_id: int) -> dict:
             # Download the article pages in parallel first (network), then store them (database)
             wanted = []
             for item in candidates:
-                if len(wanted) >= source.max_items_per_run * 2:
+                if len(wanted) >= per_run * 2:
                     break
                 if not db.scalar(select(Article.id).where(Article.url == item.url)):
                     wanted.append(item)
             pages = _fetch_pages(wanted, source)
             candidates = wanted
             for item in candidates:
-                if created >= source.max_items_per_run:
+                if created >= per_run:
                     break
                 if db.scalar(select(Article.id).where(Article.url == item.url)):
                     continue
@@ -129,11 +167,14 @@ def collect_source(source_id: int) -> dict:
                     elif not art.image_url:
                         art.image_url = page.image_url   # every article must come with its photo
                 status_value, note = "new", None
-                if not art.image_url:
+                if not art.image_url and not programs:      # programs use stock photos, not the source's
                     status_value, note = "skipped", "المقال بلا صورة"
                 elif len(art.body) < 250:
                     status_value, note = "skipped", "نص المقال قصير جدًا"
-                elif art.published_at and utcnow() - art.published_at > max_age:
+                elif window and not _in_window(art.published_at, window):
+                    status_value, note = "skipped", "خارج الفترة المطلوبة"
+                elif (not window and not programs and art.published_at
+                      and utcnow() - art.published_at > max_age):
                     status_value, note = "skipped", "المقال أقدم من الحد المسموح"
                 elif db.scalar(select(Article.id).where(Article.fingerprint == art.fingerprint)):
                     status_value, note = "skipped", "مقال مكرر"
@@ -175,12 +216,20 @@ async def draft_from_article(article_id: int) -> int | None:
             return None
         source = db.get(Source, art.source_id) if art.source_id else None
         brand = _brand_for(db, source.brand_id if source else None)
-        gen = app_settings.get_section(db, "generation")
+        gen = dict(app_settings.get_section(db, "generation"))
+        programs = bool(source and (source.purpose or "news") == "programs")
+        if source and source.dialect:
+            gen["dialect"] = source.dialect
+        if programs:
+            gen.update(purpose="programs", content_type="promotional")
         draft = Draft(brand_id=brand.id, source_id=art.source_id, article_id=art.id, origin="source",
                       source_name=source.name if source else "", source_url=art.url,
-                      original_title=art.title, original_body=art.body, original_image_url=art.image_url,
+                      original_title=art.title, original_body=art.body,
+                      # a programme from another company is re-designed with stock photos, never theirs
+                      original_image_url=None if programs else art.image_url,
                       original_published_at=art.published_at, language=gen["language"], tone=gen["tone"],
-                      content_type=gen["content_type"], platform=gen["platform"], status="generating")
+                      content_type="program" if programs else gen["content_type"], platform=gen["platform"],
+                      dialect=gen.get("dialect"), status="generating")
         db.add(draft)
         art.status = "drafted"
         db.flush()
@@ -205,6 +254,46 @@ async def draft_from_article(article_id: int) -> int | None:
     return draft_id
 
 
+async def dialect_copy(src_id: int, dialect: str) -> int | None:
+    """Same post for another market: rewritten in another Arabic dialect, same photos."""
+    with session_scope() as db:
+        src = db.get(Draft, src_id)
+        if src is None:
+            return None
+        brand = _brand_for(db, src.brand_id)
+        gen = {**app_settings.get_section(db, "generation"), "language": "ar", "tone": src.tone,
+               "content_type": src.content_type if src.content_type != "program" else "promotional",
+               "platform": src.platform, "dialect": dialect,
+               **({"purpose": "programs"} if src.content_type == "program" else {})}
+        copy = Draft(brand_id=src.brand_id, source_id=src.source_id, campaign_id=src.campaign_id, origin=src.origin,
+                     source_name=src.source_name, source_url=src.source_url, original_title=src.original_title,
+                     original_body=src.original_body, original_image_url=src.original_image_url,
+                     original_published_at=src.original_published_at, language="ar", tone=src.tone,
+                     content_type=src.content_type, platform=src.platform, dialect=dialect, status="generating")
+        db.add(copy)
+        db.flush()
+        new_id = copy.id
+        photos = {s.position: s.background_url for s in src.slides}
+        ctx, origin = brand_context(brand), src.origin
+        title, body, source_name = src.original_title, src.original_body, src.source_name
+    try:
+        if origin == "source":
+            post = await generator.generate_from_article(ctx, gen, title, body, source_name)
+        else:
+            post = await generator.generate_from_topic(ctx, gen, title, body)
+    except Exception as exc:  # noqa: BLE001
+        _fail(new_id, f"فشل توليد النص: {exc}")
+        return new_id
+    with session_scope() as db:
+        draft = db.get(Draft, new_id)
+        _apply_post(draft, post)
+        db.flush()
+        for s in draft.slides:
+            s.background_url = photos.get(s.position)
+    await asyncio.gather(make_variants(new_id), render_draft(new_id))
+    return new_id
+
+
 async def draft_from_calendar(item_id: int) -> int | None:
     with session_scope() as db:
         item = db.get(CalendarItem, item_id)
@@ -213,9 +302,12 @@ async def draft_from_calendar(item_id: int) -> int | None:
         brand = _brand_for(db, item.brand_id)
         gen = {**app_settings.get_section(db, "generation"), "content_type": item.content_type,
                "platform": item.platform}
+        if getattr(item, "dialect", None):
+            gen["dialect"] = item.dialect
         draft = Draft(brand_id=brand.id, campaign_id=item.campaign_id, calendar_item_id=item.id, origin="calendar",
                       original_title=item.topic, original_body=item.notes, language=gen["language"],
-                      tone=gen["tone"], content_type=item.content_type, platform=item.platform, status="generating")
+                      tone=gen["tone"], content_type=item.content_type, platform=item.platform,
+                      dialect=gen.get("dialect"), status="generating")
         db.add(draft)
         db.flush()
         item.draft_id = draft.id
@@ -264,7 +356,8 @@ async def make_variants(draft_id: int) -> None:
         brand = _brand_for(db, draft.brand_id)
         gen = app_settings.get_section(db, "generation")
         ctx, snap = brand_context(brand), _snapshot(draft)
-    texts = await variants.generate_texts(ctx, {**gen, "language": snap.language}, snap)
+        dialect = draft.dialect or gen.get("dialect")
+    texts = await variants.generate_texts(ctx, {**gen, "language": snap.language, "dialect": dialect}, snap)
     with session_scope() as db:
         draft = db.get(Draft, draft_id)
         if draft is not None:
@@ -324,7 +417,7 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
         keywords, article_image = draft.image_keywords, draft.original_image_url
         credit = draft.source_name if (draft.origin == "source" and gen.get("credit_source", True)) else ""
         badge = draft.badge
-        mode = gen.get("image_source", "auto")
+        mode = "pexels" if draft.content_type == "program" else gen.get("image_source", "auto")
         prev_status = draft.status
         color_mode = brand.color_mode or "auto"
         stored_palette = draft.palette
@@ -432,7 +525,7 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
         draft.updated_at = utcnow()
 
 
-async def run_collection_cycle(source_ids: list[int] | None = None) -> dict:
+async def run_collection_cycle(source_ids: list[int] | None = None, window: dict | None = None) -> dict:
     """Collect from due sources, then draft new articles."""
     with session_scope() as db:
         sched = app_settings.get_section(db, "scheduler")
@@ -444,7 +537,7 @@ async def run_collection_cycle(source_ids: list[int] | None = None) -> dict:
 
     async def one_source(sid: int) -> tuple[int, dict]:
         async with gate:
-            return sid, await asyncio.to_thread(collect_source, sid)
+            return sid, await asyncio.to_thread(collect_source, sid, window)
 
     for sid, res in await asyncio.gather(*(one_source(i) for i in ids)):
         summary["sources"] += 1
@@ -455,7 +548,10 @@ async def run_collection_cycle(source_ids: list[int] | None = None) -> dict:
         q = select(Article.id).where(Article.status == "new").order_by(Article.published_at.desc().nullslast())
         if source_ids is not None:
             q = q.where(Article.source_id.in_(source_ids))
-        pending = list(db.scalars(q.limit(int(sched.get("max_drafts_per_run", 10)))))
+        limit = int(sched.get("max_drafts_per_run", 10))
+        if window and window.get("max_items"):
+            limit = min(max(limit, int(window["max_items"]) * max(len(ids), 1)), 60)
+        pending = list(db.scalars(q.limit(limit)))
     # Write up to 3 posts at the same time (AI calls and image downloads overlap)
     draft_gate = asyncio.Semaphore(3)
 

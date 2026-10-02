@@ -1,6 +1,7 @@
 """News source management."""
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -43,6 +44,8 @@ class SourceIn(BaseModel):
     link_selector: str | None = None
     link_pattern: str | None = None
     body_selector: str | None = None
+    purpose: str = Field("news", pattern="^(news|programs)$")
+    dialect: str | None = None
     category: str = "travel"
     country: str = ""
     language: str = "en"
@@ -63,6 +66,8 @@ class SourcePatch(BaseModel):
     link_selector: str | None = None
     link_pattern: str | None = None
     body_selector: str | None = None
+    purpose: str | None = Field(None, pattern="^(news|programs)$")
+    dialect: str | None = None
     category: str | None = None
     country: str | None = None
     language: str | None = None
@@ -225,13 +230,22 @@ def test_source(source_id: int, db: Session = Depends(get_db)):
     return scraper.test_source(s)
 
 
+class ScrapeBody(BaseModel):
+    date_from: date | None = None
+    date_to: date | None = None
+    max_items: int | None = Field(None, ge=1, le=50)
+
+
 @router.post("/{source_id}/scrape")
-async def scrape_now(source_id: int, background: BackgroundTasks, db: Session = Depends(get_db)):
+async def scrape_now(source_id: int, background: BackgroundTasks, body: ScrapeBody | None = None,
+                     db: Session = Depends(get_db)):
     if not db.get(Source, source_id):
         raise HTTPException(404, "المصدر غير موجود")
     if jobs.busy:
         raise HTTPException(409, "توجد عملية سحب قيد التنفيذ")
-    background.add_task(jobs.run_collection, [source_id])
+    body = body or ScrapeBody()
+    window = body.model_dump() if (body.date_from or body.date_to or body.max_items) else None
+    background.add_task(jobs.run_collection, [source_id], window)
     return {"ok": True, "started": True}
 
 

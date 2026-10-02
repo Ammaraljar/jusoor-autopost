@@ -48,6 +48,11 @@ export default function SettingsPage() {
                   {opts.tones.map((o) => <option key={o}>{o}</option>)}
                 </select>
               </Field>
+              <Field label={t('dialect')} hint={t('dialect_hint')}>
+                <select className="select" value={g.dialect || 'msa'} onChange={(e) => set('generation', 'dialect', e.target.value)}>
+                  {['msa', 'gulf', 'maghreb', 'algeria'].map((o) => <option key={o} value={o}>{t(`dialect_${o}`)}</option>)}
+                </select>
+              </Field>
               <Field label={t('content_type')}>
                 <select className="select" value={g.content_type} onChange={(e) => set('generation', 'content_type', e.target.value)}>
                   {opts.content_types.map((o) => <option key={o}>{o}</option>)}
@@ -178,6 +183,7 @@ export default function SettingsPage() {
 
         <div className="stack">
           <KeysCard onSaved={() => status.reload(true)} />
+          <BackupCard />
 
           <div className="card card-pad stack">
             <h3>{t('system')}</h3>
@@ -189,6 +195,7 @@ export default function SettingsPage() {
             <StatusLine icon={HardDrive} ok={st.storage.public} label={`${t('storage')} (${st.storage.backend})`}
               detail={st.storage.public ? t('public_ok') : t('public_missing')} />
             <StatusLine icon={PlugZap} ok={st.images.pexels} warn label="Pexels" detail={st.images.pexels ? t('configured') : 'PEXELS_API_KEY'} />
+            <StatusLine icon={PlugZap} ok={st.images.pixabay} warn label="Pixabay" detail={st.images.pixabay ? t('configured') : 'PIXABAY_API_KEY'} />
           </div>
 
           <div className="card card-pad stack">
@@ -249,6 +256,42 @@ function StatusLine({ icon: Icon, ok, warn, label, detail }) {
         <div className="xs muted">{detail}</div>
       </div>
       {ok ? <CheckCircle2 size={18} color={color} /> : <AlertTriangle size={18} color={color} />}
+    </div>
+  );
+}
+
+
+function BackupCard() {
+  const { t } = useI18n();
+  const [busy, run] = useAction();
+  const download = () => run('bk', async () => {
+    const data = await api.get('/api/backup');
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `jusoor-autopost-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+  const restore = (file) => run('rs', async () => {
+    const res = await api.post('/api/backup/restore', JSON.parse(await file.text()));
+    return res;
+  }, t('restore_done'));
+  return (
+    <div className="card card-pad stack">
+      <h3>{t('backup_title')}</h3>
+      <p className="xs muted" style={{ margin: 0 }}>{t('backup_hint')}</p>
+      <div className="row">
+        <Button busy={busy === 'bk'} onClick={download}>{t('backup_download')}</Button>
+        <label className="btn" style={{ cursor: 'pointer' }}>
+          {busy === 'rs' ? '…' : t('backup_restore')}
+          <input type="file" accept="application/json" hidden onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) restore(f);
+            e.target.value = '';
+          }} />
+        </label>
+      </div>
     </div>
   );
 }

@@ -74,6 +74,11 @@ export const api = {
   patch: (p, b) => request('PATCH', p, b),
   put: (p, b) => request('PUT', p, b),
   del: (p) => request('DELETE', p),
+  uploadMany: (p, files) => {
+    const fd = new FormData();
+    [...files].forEach((f) => fd.append('files', f));
+    return request('POST', p, fd);
+  },
   upload: (p, file, extra = {}) => {
     const fd = new FormData();
     fd.append('file', file);

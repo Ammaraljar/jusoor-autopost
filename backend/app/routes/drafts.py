@@ -41,7 +41,7 @@ def _iso(value):
 def _summary(d: Draft) -> dict[str, Any]:
     cover = d.cover_thumb_url or (d.slides[0].image_url if d.slides else None)
     return {"id": d.id, "status": d.status, "hook": d.hook or d.original_title, "source": d.source_name,
-            "origin": d.origin, "cover_url": cover, "slides": len(d.slides), "brand_id": d.brand_id,
+            "origin": d.origin, "cover_url": cover, "content_type": d.content_type, "dialect": d.dialect, "slides": len(d.slides), "brand_id": d.brand_id,
             "campaign_id": d.campaign_id, "relevance": d.relevance, "error": d.error,
             "scheduled_at": _iso(d.scheduled_at), "published_at": _iso(d.published_at),
             "original_published_at": _iso(d.original_published_at), "created_at": _iso(d.created_at)}
@@ -89,6 +89,7 @@ def counts(db: Session = Depends(get_db)):
 class ManualDraft(BaseModel):
     topic: str = Field(min_length=3)
     notes: str = ""
+    dialect: str | None = None
     brand_id: int | None = None
     content_type: str = "travel"
     platform: str = "instagram"
@@ -98,7 +99,8 @@ class ManualDraft(BaseModel):
 async def create_manual(body: ManualDraft, background: BackgroundTasks, db: Session = Depends(get_db)):
     from ..db import CalendarItem
     item = CalendarItem(brand_id=body.brand_id, date=datetime.now(timezone.utc).date(), topic=body.topic,
-                        notes=body.notes, content_type=body.content_type, platform=body.platform)
+                        notes=body.notes, content_type=body.content_type, platform=body.platform,
+                        dialect=body.dialect or None)
     db.add(item)
     db.commit()
     background.add_task(pipeline.draft_from_calendar, item.id)
@@ -237,6 +239,21 @@ def schedule_draft(draft_id: int, body: ScheduleBody, db: Session = Depends(get_
     return _full(db, d)
 
 
+class DialectBody(BaseModel):
+    dialect: str = Field(pattern="^(msa|gulf|maghreb|algeria)$")
+
+
+@router.post("/{draft_id}/dialect-copy")
+async def make_dialect_copy(draft_id: int, body: DialectBody, background: BackgroundTasks,
+                            db: Session = Depends(get_db)):
+    """A copy of the post for another market (Gulf, Maghreb, Algeria…), with the same photos."""
+    d = _get(db, draft_id)
+    if d.language != "ar":
+        raise HTTPException(400, "اللهجات متاحة للمنشورات العربية فقط")
+    background.add_task(pipeline.dialect_copy, d.id, body.dialect)
+    return {"ok": True, "started": True}
+
+
 @router.get("/{draft_id}")
 def get_draft(draft_id: int, db: Session = Depends(get_db)):
     return _full(db, _get(db, draft_id))
@@ -312,7 +329,8 @@ async def regenerate_slide(draft_id: int, slide_id: int, db: Session = Depends(g
     d = _get(db, draft_id)
     s = _slide(d, slide_id)
     brand = pipeline._brand_for(db, d.brand_id)
-    gen = {**app_settings.get_section(db, "generation"), "language": d.language, "tone": d.tone}
+    gen = {**app_settings.get_section(db, "generation"), "language": d.language, "tone": d.tone,
+           **({"dialect": d.dialect} if d.dialect else {})}
     try:
         new = await generator.regenerate_slide(pipeline.brand_context(brand), gen, generator.draft_context(d),
                                                s.heading, s.body)
@@ -347,6 +365,34 @@ async def upload_background(draft_id: int, slide_id: int, file: UploadFile = Fil
     return _full(db, _get(db, draft_id))
 
 
+@router.post("/{draft_id}/backgrounds")
+async def upload_backgrounds(draft_id: int, files: list[UploadFile] = File(...), db: Session = Depends(get_db)):
+    """Several photos from the user's computer, spread over all slides in order (repeated if fewer)."""
+    d = _get(db, draft_id)
+    if not d.slides:
+        raise HTTPException(409, "المنشور بلا شرائح بعد")
+    if len(files) > 20:
+        raise HTTPException(400, "الحد الأقصى 20 صورة في المرة الواحدة")
+    from ..services import images
+    urls = []
+    for f in files:
+        data = await f.read()
+        if len(data) > 15 * 1024 * 1024:
+            raise HTTPException(400, f"{f.filename}: الحد الأقصى 15 ميغابايت للصورة")
+        try:
+            jpeg = images.normalise(data, min_width=1)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(400, f"{f.filename}: تعذّر قراءة الصورة — استخدم JPG أو PNG أو WEBP") from exc
+        key = f"uploads/bg-{d.id}-{uuid.uuid4().hex[:8]}.jpg"
+        urls.append(storage.save_bytes(key, jpeg, "image/jpeg"))
+    for i, s in enumerate(sorted(d.slides, key=lambda x: x.position)):
+        s.background_url = urls[i % len(urls)]
+    db.commit()
+    await pipeline.render_draft(d.id)
+    db.expire_all()
+    return _full(db, _get(db, draft_id))
+
+
 class RegenField(BaseModel):
     field: str
 
@@ -358,7 +404,8 @@ async def regenerate_text(draft_id: int, body: RegenField, background: Backgroun
         raise HTTPException(400, "حقل غير مدعوم")
     d = _get(db, draft_id)
     brand = pipeline._brand_for(db, d.brand_id)
-    gen = {**app_settings.get_section(db, "generation"), "language": d.language, "tone": d.tone}
+    gen = {**app_settings.get_section(db, "generation"), "language": d.language, "tone": d.tone,
+           **({"dialect": d.dialect} if d.dialect else {})}
     try:
         text = await generator.regenerate_field(pipeline.brand_context(brand), gen, generator.draft_context(d),
                                                 body.field)
@@ -385,7 +432,9 @@ async def regenerate_all(draft_id: int, background: BackgroundTasks, db: Session
     d = _get(db, draft_id)
     brand = pipeline._brand_for(db, d.brand_id)
     gen = {**app_settings.get_section(db, "generation"), "language": d.language, "tone": d.tone,
-           "content_type": d.content_type, "platform": d.platform}
+           **({"dialect": d.dialect} if d.dialect else {}),
+           "content_type": d.content_type, "platform": d.platform,
+           **({"purpose": "programs", "content_type": "promotional"} if d.content_type == "program" else {})}
     ctx = pipeline.brand_context(brand)
     origin, title, text, source_name = d.origin, d.original_title, d.original_body, d.source_name
     d.status = "generating"

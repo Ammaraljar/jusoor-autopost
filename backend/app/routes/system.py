@@ -1,8 +1,9 @@
 """Settings, provider status, jobs and statistics."""
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -70,7 +71,8 @@ def status():
     s = get_settings()
     return {
         "ai": generator.ai_info(),
-        "images": {"pexels": bool(credentials.current()["pexels_api_key"])},
+        "images": {"pexels": bool(credentials.current()["pexels_api_key"]),
+                   "pixabay": bool(credentials.current().get("pixabay_api_key"))},
         "storage": {"backend": s.storage_backend, "public": storage.is_publicly_reachable()},
         "providers": {name: {"configured": cls().configured(), "platforms": list(cls.platforms)}
                       for name, cls in REGISTRY.items()},
@@ -138,12 +140,30 @@ async def run_now(background: BackgroundTasks):
     return {"ok": True, "started": True}
 
 
+class ScrapeWindow(BaseModel):
+    date_from: date | None = None       # only articles published in this period
+    date_to: date | None = None
+    max_items: int | None = Field(None, ge=1, le=50)     # per source
+    source_ids: list[int] | None = None
+    purpose: str | None = None          # news | programs
+
+
 @router.post("/scrape/run-all", dependencies=[RequireUser])
-async def run_all(background: BackgroundTasks, db: Session = Depends(get_db)):
+async def run_all(background: BackgroundTasks, body: ScrapeWindow | None = None, db: Session = Depends(get_db)):
     if jobs.busy:
         raise HTTPException(409, "توجد عملية سحب قيد التنفيذ")
-    ids = list(db.scalars(select(Source.id).where(Source.enabled.is_(True))))
-    background.add_task(jobs.run_collection, ids)
+    body = body or ScrapeWindow()
+    if body.date_from and body.date_to and body.date_from > body.date_to:
+        raise HTTPException(400, "تاريخ البداية بعد تاريخ النهاية")
+    q = select(Source.id).where(Source.enabled.is_(True))
+    if body.source_ids:
+        q = select(Source.id).where(Source.id.in_(body.source_ids))
+    if body.purpose:
+        q = q.where(Source.purpose == body.purpose)
+    ids = list(db.scalars(q))
+    window = {"date_from": body.date_from, "date_to": body.date_to, "max_items": body.max_items} \
+        if (body.date_from or body.date_to or body.max_items) else None
+    background.add_task(jobs.run_collection, ids, window)
     return {"ok": True, "started": True, "sources": len(ids)}
 
 
@@ -168,3 +188,54 @@ def stats(days: int = 30, db: Session = Depends(get_db)):
     return {"days": days, "articles": articles, "by_status": by_status, "by_platform": by_platform,
             "by_source": by_source,
             "approval_rate": round(100 * (reviewed - by_status.get("rejected", 0)) / reviewed) if reviewed else None}
+
+
+# ------------------------------------------------------------------ backup
+_SOURCE_FIELDS = ("name", "kind", "base_url", "feed_url", "listing_urls", "link_selector", "link_pattern",
+                  "body_selector", "purpose", "dialect", "category", "country", "language", "priority", "enabled",
+                  "check_interval_minutes", "max_items_per_run")
+_BRAND_FIELDS = ("name", "handle", "website", "voice", "colors", "font_family", "logo_placement", "card_style",
+                 "color_mode", "logo_backdrop", "cta_text", "publish_config", "is_default")
+
+
+@router.get("/backup", dependencies=[RequireUser])
+def export_backup(db: Session = Depends(get_db)):
+    """Everything needed to rebuild the setup elsewhere — never the API keys."""
+    from ..db import Brand, Campaign
+    return {
+        "app": "jusoor-autopost", "version": credentials.VERSION, "exported_at": utcnow().isoformat(),
+        "settings": {k: app_settings.get_section(db, k) for k in ("generation", "scheduler", "publishing")},
+        "sources": [{f: getattr(s, f) for f in _SOURCE_FIELDS} for s in db.scalars(select(Source))],
+        "brands": [{f: getattr(b, f) for f in _BRAND_FIELDS} for b in db.scalars(select(Brand))],
+        "campaigns": [{k: v for k, v in c.to_dict().items() if k not in ("id", "created_at")}
+                      for c in db.scalars(select(Campaign))],
+    }
+
+
+@router.post("/backup/restore", dependencies=[RequireUser])
+def restore_backup(body: dict, db: Session = Depends(get_db)):
+    """Restore settings and add missing sources / campaigns from a backup file (nothing is deleted)."""
+    from ..db import Campaign
+    if body.get("app") != "jusoor-autopost":
+        raise HTTPException(400, "هذا ليس ملف نسخة احتياطية من النظام")
+    for section, values in (body.get("settings") or {}).items():
+        if section in ("generation", "scheduler", "publishing") and isinstance(values, dict):
+            app_settings.update_section(db, section, values)
+    names = set(db.scalars(select(Source.name)))
+    added = 0
+    for item in body.get("sources") or []:
+        if item.get("name") and item["name"] not in names:
+            db.add(Source(**{f: item[f] for f in _SOURCE_FIELDS if f in item}))
+            added += 1
+    camp_names = set(db.scalars(select(Campaign.name)))
+    camps = 0
+    for item in body.get("campaigns") or []:
+        if item.get("name") and item["name"] not in camp_names:
+            allowed = {c.key for c in Campaign.__table__.columns} - {"id", "created_at"}
+            values = {k: v for k, v in item.items() if k in allowed}
+            for k in ("start_date", "end_date"):
+                if isinstance(values.get(k), str):
+                    values[k] = date.fromisoformat(values[k][:10])
+            db.add(Campaign(**values))
+            camps += 1
+    return {"ok": True, "sources_added": added, "campaigns_added": camps}

@@ -136,10 +136,32 @@ export default function DraftEditor() {
               onClick={() => act('newbg', () => api.post(`/api/drafts/${d.id}/render`, { refresh_backgrounds: true }))}>
               {t('new_images')}
             </Button>
+            <label className={`btn btn-sm ${locked ? 'disabled' : ''}`} style={{ cursor: locked ? 'default' : 'pointer' }}
+              title={t('upload_many_hint')}>
+              {busy === 'many' ? <Spinner size={14} /> : <ImagePlus size={15} />} {t('upload_many')}
+              <input type="file" accept="image/*" multiple hidden disabled={locked}
+                onChange={(e) => {
+                  const files = e.target.files;
+                  if (files?.length) act('many', () => api.uploadMany(`/api/drafts/${d.id}/backgrounds`, files), t('saved'));
+                  e.target.value = '';
+                }} />
+            </label>
             <Button size="sm" icon={Wand2} busy={busy === 'render'} disabled={locked}
               onClick={() => act('render', () => api.post(`/api/drafts/${d.id}/render`, { refresh_backgrounds: false }))}>
               {t('rerender')}
             </Button>
+            {d.language === 'ar' && (
+              <select className="select" style={{ width: 'auto', height: 32, fontSize: 13 }} value=""
+                onChange={(e) => {
+                  const dialect = e.target.value;
+                  if (dialect) run('dcopy', () => api.post(`/api/drafts/${d.id}/dialect-copy`, { dialect }), t('dialect_copy_started'));
+                }}>
+                <option value="">{t('dialect_copy')}</option>
+                {['gulf', 'maghreb', 'algeria', 'msa'].filter((x) => x !== (d.dialect || 'msa')).map((x) => (
+                  <option key={x} value={x}>{t(`dialect_${x}`)}</option>
+                ))}
+              </select>
+            )}
             <Button size="sm" icon={Download} busy={busy === 'dl'}
               onClick={() => run('dl', () => api.download(`/api/drafts/${d.id}/download`, `post-${d.id}.zip`))}>
               {t('download')}

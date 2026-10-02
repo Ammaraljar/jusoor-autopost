@@ -79,9 +79,32 @@ def search_openverse(query: str, count: int = 8, page: int = 1) -> list[dict]:
         return []
 
 
+def search_pixabay(query: str, count: int = 8, page: int = 1) -> list[dict]:
+    """Pixabay (free licence, no attribution required)."""
+    key = credentials.current().get("pixabay_api_key")
+    if not key or not query:
+        return []
+    try:
+        resp = httpx.get("https://pixabay.com/api/",
+                         params={"key": key, "q": query[:100], "image_type": "photo", "orientation": "vertical",
+                                 "per_page": max(3, min(count, 50)), "page": page, "safesearch": "true",
+                                 "min_width": 1000},
+                         timeout=20)
+        resp.raise_for_status()
+        return [{"url": h.get("largeImageURL") or h.get("webformatURL"), "credit": ""}
+                for h in resp.json().get("hits", []) if h.get("largeImageURL") or h.get("webformatURL")]
+    except Exception as exc:  # noqa: BLE001
+        log.warning("pixabay search failed: %s", exc)
+        return []
+
+
 def stock_photos(keywords: str, count: int, page: int = 1) -> list[dict]:
-    """Pexels when a key is set, otherwise (or in addition) Openverse."""
-    found = search_pexels(keywords, count=count, page=page)
+    """Pexels + Pixabay (when their keys are set), mixed for variety; Openverse when still short."""
+    pexels = search_pexels(keywords, count=count, page=page)
+    pixabay = search_pixabay(keywords, count=count, page=page)
+    found: list[dict] = []
+    for i in range(max(len(pexels), len(pixabay))):        # interleave the two libraries
+        found += [x[i] for x in (pexels, pixabay) if i < len(x)]
     if len(found) < count:
         found += search_openverse(keywords, count=count, page=page)
     return found

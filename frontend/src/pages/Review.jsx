@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { CalendarClock, Check, ChevronDown, ChevronLeft, Images, Lightbulb, RefreshCw, RotateCcw, Search, Sparkles, Trash2, X } from 'lucide-react';
 import { BulkBar, Button, Empty, ErrorBox, Field, Modal, PageHead, SelectAll, Spinner, StatusPill, useAction, useLoad, useSelection } from '../components/ui';
 import { api, mediaUrl } from '../lib/api';
+import ScrapeModal from '../components/ScrapeModal';
 import { dayBucket, fmtDate, relative } from '../lib/format';
 import { useI18n } from '../lib/i18n';
 
@@ -18,6 +19,7 @@ export default function Review() {
   const [query, setQuery] = useState('');
   const [collapsed, setCollapsed] = useState({});
   const [showManual, setShowManual] = useState(false);
+  const [showScrape, setShowScrape] = useState(false);
   const [busy, run] = useAction();
 
   useEffect(() => {
@@ -72,7 +74,7 @@ export default function Review() {
     <>
       <PageHead title={t('review_title')} sub={t('review_sub')}>
         <Button icon={Lightbulb} onClick={() => setShowManual(true)}>{t('new_post')}</Button>
-        <Button variant="primary" icon={RefreshCw} busy={busy === 'scrape' || jobs.data?.running} onClick={scrape}>
+        <Button variant="primary" icon={RefreshCw} busy={busy === 'scrape' || jobs.data?.running} onClick={() => setShowScrape(true)}>
           {t('run_scrape')}
         </Button>
       </PageHead>
@@ -137,6 +139,7 @@ export default function Review() {
         </section>
       ))}
 
+      {showScrape && <ScrapeModal onClose={() => setShowScrape(false)} onStarted={() => jobs.reload(true)} />}
       {showManual && <ManualModal onClose={() => setShowManual(false)} onDone={() => drafts.reload(true)} />}
     </>
   );
@@ -155,6 +158,12 @@ function DraftCard({ d, picked, onPick }) {
         {d.cover_url ? <img src={mediaUrl(d.cover_url)} alt="" loading="lazy" /> : <Sparkles size={34} />}
         <StatusPill status={d.status} />
         {d.slides > 0 && <span className="count"><Images size={12} /> {d.slides}</span>}
+        {(d.content_type === 'program' || (d.dialect && d.dialect !== 'msa')) && (
+          <span className="tags-corner">
+            {d.content_type === 'program' && <span className="pill gold">{t('program')}</span>}
+            {d.dialect && d.dialect !== 'msa' && <span className="pill info">{t(`dialect_${d.dialect}`)}</span>}
+          </span>
+        )}
       </div>
       <div className="body">
         <div className="title clamp-2" dir="auto">{d.hook || '…'}</div>
@@ -175,12 +184,13 @@ function ManualModal({ onClose, onDone }) {
   const { t } = useI18n();
   const [topic, setTopic] = useState('');
   const [notes, setNotes] = useState('');
+  const [dialect, setDialect] = useState('');
   const [busy, run] = useAction();
   const brands = useLoad(() => api.get('/api/brands'), []);
   const [brandId, setBrandId] = useState('');
 
   const submit = () => run('go', async () => {
-    await api.post('/api/drafts/manual', { topic, notes, brand_id: brandId ? Number(brandId) : null });
+    await api.post('/api/drafts/manual', { topic, notes, brand_id: brandId ? Number(brandId) : null, dialect: dialect || null });
     onDone();
     onClose();
   }, t('started'));
@@ -201,6 +211,12 @@ function ManualModal({ onClose, onDone }) {
         </Field>
         <Field label={t('notes')}>
           <textarea className="textarea" value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </Field>
+        <Field label={t('dialect')}>
+          <select className="select" value={dialect} onChange={(e) => setDialect(e.target.value)}>
+            <option value="">{t('dialect_default')}</option>
+            {['msa', 'gulf', 'maghreb', 'algeria'].map((x) => <option key={x} value={x}>{t(`dialect_${x}`)}</option>)}
+          </select>
         </Field>
         {brands.data?.length > 1 && (
           <Field label={t('brand')}>

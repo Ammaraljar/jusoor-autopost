@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { Download, FlaskConical, ImageOff, List, Pause, Pencil, Play, Plus, RefreshCw, Rss, Sparkles, Trash2 } from 'lucide-react';
 import { BulkBar, Button, Empty, ErrorBox, Field, Loading, Modal, PageHead, SelectAll, StatusPill, useAction, useLoad, useSelection } from '../components/ui';
 import { api } from '../lib/api';
+import ScrapeModal from '../components/ScrapeModal';
 import { fmtDateTime, relative } from '../lib/format';
 import { useI18n } from '../lib/i18n';
 
 const EMPTY = {
   name: '', kind: 'website', base_url: '', feed_url: '', listing_urls: [], link_pattern: '', link_selector: '',
-  body_selector: '', category: 'travel', country: 'Malaysia', language: 'en', priority: 5, enabled: true,
+  body_selector: '', purpose: 'news', dialect: '', category: 'travel', country: 'Malaysia', language: 'en', priority: 5, enabled: true,
   check_interval_minutes: 120, max_items_per_run: 5, brand_id: null,
 };
 
@@ -18,6 +19,7 @@ export default function Sources() {
   const [editing, setEditing] = useState(null);
   const [articlesFor, setArticlesFor] = useState(null);
   const [testResult, setTestResult] = useState(null);
+  const [scrapeFor, setScrapeFor] = useState(null);
   const [busy, run] = useAction();
   const sel = useSelection(sources.data);
 
@@ -84,7 +86,11 @@ export default function Sources() {
                     <div className="bold">{s.name}</div>
                     <div className="xs muted code">{(s.kind === 'rss' ? s.feed_url : (s.listing_urls?.[0] || s.base_url))}</div>
                   </td>
-                  <td><span className="pill">{s.kind === 'rss' ? 'RSS' : t('website')}</span></td>
+                  <td>
+                    <span className="pill">{s.kind === 'rss' ? 'RSS' : t('website')}</span>{' '}
+                    {s.purpose === 'programs' && <span className="pill gold">{t('purpose_programs')}</span>}
+                    {s.dialect && <span className="pill info">{t(`dialect_${s.dialect}`)}</span>}
+                  </td>
                   <td>
                     <StatusPill status={s.health} label={t(`health_${s.health}`)} />
                     {s.last_error && <div className="xs clamp-2" style={{ color: 'var(--danger)', maxWidth: 220 }}>{s.last_error}</div>}
@@ -102,7 +108,7 @@ export default function Sources() {
                   <td>
                     <div className="row" style={{ flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
                       <Button size="sm" icon={FlaskConical} busy={busy === `test-${s.id}`} onClick={() => test(s)}>{t('test')}</Button>
-                      <Button size="sm" icon={RefreshCw} busy={busy === `scrape-${s.id}`} onClick={() => scrape(s)}>{t('scrape_now')}</Button>
+                      <Button size="sm" icon={RefreshCw} onClick={() => setScrapeFor(s)}>{t('scrape_now')}</Button>
                       <button className="btn btn-sm btn-ghost icon-btn" title={t('view_articles')} onClick={() => setArticlesFor(s)}><List size={15} /></button>
                       <button className="btn btn-sm btn-ghost icon-btn" title={t('edit')} onClick={() => setEditing({ ...EMPTY, ...s })}><Pencil size={15} /></button>
                       <button className="btn btn-sm btn-danger btn-ghost icon-btn" title={t('delete')} onClick={() => remove(s)}><Trash2 size={15} /></button>
@@ -116,6 +122,7 @@ export default function Sources() {
       )}
 
       {editing && <SourceModal initial={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); sources.reload(true); }} />}
+      {scrapeFor && <ScrapeModal source={scrapeFor} onClose={() => setScrapeFor(null)} onStarted={() => sources.reload(true)} />}
       {testResult && <TestModal result={testResult} onClose={() => setTestResult(null)} />}
       {articlesFor && <ArticlesModal source={articlesFor} onClose={() => setArticlesFor(null)} />}
     </>
@@ -134,7 +141,7 @@ function SourceModal({ initial, onClose, onSaved }) {
     const out = {};
     Object.keys(EMPTY).forEach((k) => { out[k] = f[k]; });
     out.listing_urls = f.listing_text.split('\n').map((x) => x.trim()).filter(Boolean);
-    ['feed_url', 'link_pattern', 'link_selector', 'body_selector'].forEach((k) => { out[k] = out[k] || null; });
+    ['feed_url', 'link_pattern', 'link_selector', 'body_selector', 'dialect'].forEach((k) => { out[k] = out[k] || null; });
     out.priority = Number(out.priority);
     out.check_interval_minutes = Number(out.check_interval_minutes);
     out.max_items_per_run = Number(out.max_items_per_run);
@@ -200,6 +207,20 @@ function SourceModal({ initial, onClose, onSaved }) {
         <Field label={t('body_selector')} hint="div.story-body">
           <input className="input code" value={f.body_selector || ''} onChange={(e) => set('body_selector', e.target.value)} />
         </Field>
+        <div className="grid grid-2">
+          <Field label={t('source_purpose')} hint={f.purpose === 'programs' ? t('programs_hint') : ''}>
+            <select className="select" value={f.purpose || 'news'} onChange={(e) => set('purpose', e.target.value)}>
+              <option value="news">{t('purpose_news')}</option>
+              <option value="programs">{t('purpose_programs')}</option>
+            </select>
+          </Field>
+          <Field label={t('dialect')}>
+            <select className="select" value={f.dialect || ''} onChange={(e) => set('dialect', e.target.value)}>
+              <option value="">{t('dialect_default')}</option>
+              {['msa', 'gulf', 'maghreb', 'algeria'].map((x) => <option key={x} value={x}>{t(`dialect_${x}`)}</option>)}
+            </select>
+          </Field>
+        </div>
         <div className="grid grid-3">
           <Field label={t('category')}><input className="input" value={f.category} onChange={(e) => set('category', e.target.value)} /></Field>
           <Field label={t('country')}><input className="input" value={f.country} onChange={(e) => set('country', e.target.value)} /></Field>

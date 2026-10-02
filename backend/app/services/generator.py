@@ -81,8 +81,52 @@ class BrandContext:
     cta_text: str = ""
 
 
+# Arabic varieties for the target markets. The post must sound native to that audience.
+DIALECTS: dict[str, dict[str, str]] = {
+    "msa": {"label": "فصحى مبسّطة", "audience": "Arab travellers in general",
+            "guide": "Modern Standard Arabic, simple, warm and easy to read — understood across the Arab world."},
+    "gulf": {"label": "خليجي", "audience": "travellers from Saudi Arabia, UAE, Kuwait, Qatar, Bahrain and Oman",
+             "guide": "Write in natural Gulf (Khaleeji) Arabic as Saudi/Emirati/Kuwaiti families speak on social "
+                      "media: e.g. وايد، حيل، مرة، يا هلا، عساكم، تونّسون، الحين، شي، وش رايكم، بتحصلون. Warm, "
+                      "family- and luxury-oriented, generous hospitality vibe. Keep it readable; avoid heavy slang."},
+    "maghreb": {"label": "مغاربي (مغربي)", "audience": "travellers from Morocco and the wider Maghreb",
+                "guide": "Write in light Moroccan Darija that any Maghrebi reader understands: e.g. بزاف، دابا، "
+                         "واش، مزيان، غادي، ديال، فين، شحال، بغيتو. A few common French words are natural "
+                         "(voyage, promo, programme). Friendly and lively; keep facts and names clear."},
+    "algeria": {"label": "جزائري", "audience": "travellers from Algeria",
+                "guide": "Write in natural Algerian Darja as used on Algerian social media: e.g. بزاف، واش، راكم، "
+                         "نتاع، صح، ياسر، شحال، روحو، كاين، مليح، وقيلا. Some French words are natural "
+                         "(voyage, hôtel, programme). Warm, direct and fun; keep facts and names clear."},
+}
+
+
+def dialect_rules(dialect: str | None) -> str:
+    d = DIALECTS.get(dialect or "msa", DIALECTS["msa"])
+    return (f"- Arabic variety: {d['guide']} Hashtags may stay in standard Arabic/English.\n"
+            f"- The readers are {d['audience']}: pick angles, examples and benefits that matter to them "
+            "(flights from their region, family travel, halal food, visas, budget, weather) when the source supports it.")
+
+
+PROGRAM_RULES = """
+This source is a TOUR PROGRAMME / PACKAGE published by another company. Turn it into a promotional carousel for
+a programme that {brand} offers:
+- Never mention the other company, its name, phone, website or prices.
+- Hook = destination + duration + the strongest promise (e.g. "٥ أيام بين كوالالمبور ولنكاوي").
+- Content slides, in this order: highlights / day-by-day summary (group days if many) / what is included /
+  why book with {brand}. Only include items that appear in the source; do not invent hotels, flights or prices.
+- If a price appears, do NOT copy it: say the price is available on request.
+- CTA: invite followers to message {brand} on WhatsApp/DM to book or customise the programme.
+- badge = "offer". Relevance = how attractive and complete this programme is for the audience (0-10).
+- image_keywords: the main destination(s) in English, for stock photos."""
+
+
 def build_system_prompt(brand: BrandContext, gen: dict[str, Any]) -> str:
     lang = LANG_NAMES.get(gen.get("language", "ar"), "Arabic")
+    extra = ""
+    if gen.get("language", "ar") == "ar":
+        extra += "\n" + dialect_rules(gen.get("dialect"))
+    if gen.get("purpose") == "programs":
+        extra += "\n" + PROGRAM_RULES.format(brand=brand.name)
     return f"""You are the senior social media editor for {brand.name} ({brand.handle}), a premium travel brand.
 Brand voice: {brand.voice or 'sophisticated, warm, trustworthy and inspiring'}.
 Target audience: {gen.get('audience') or 'Arab travellers'}.
@@ -98,7 +142,7 @@ Rules:
 - Never output placeholder text such as "لا يوجد" or "N/A". If there is no good first comment, return an empty string.
 - Produce exactly {int(gen.get('content_slides', 4))} content slides that tell a clear story (what / why it matters / tips / how to go).
 - The CTA should invite followers to contact or book with {brand.name}{(' — ' + brand.cta_text) if brand.cta_text else ''}.
-- Score relevance honestly: general culture or politics with no travel angle should score low (0-4)."""
+- Score relevance honestly: general culture or politics with no travel angle should score low (0-4).{extra}"""
 
 
 def _normalise_hashtags(tags: Any) -> list[str]:

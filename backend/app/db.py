@@ -70,6 +70,8 @@ class Source(Base):
     link_selector: Mapped[str | None] = mapped_column(String(300), nullable=True)
     link_pattern: Mapped[str | None] = mapped_column(String(300), nullable=True)
     body_selector: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    purpose: Mapped[str] = mapped_column(String(20), default="news")   # news | programs (tour packages)
+    dialect: Mapped[str | None] = mapped_column(String(20), nullable=True)   # overrides the default dialect
     category: Mapped[str] = mapped_column(String(60), default="travel")
     country: Mapped[str] = mapped_column(String(60), default="")
     language: Mapped[str] = mapped_column(String(10), default="en")
@@ -125,6 +127,7 @@ class CalendarItem(Base):
     notes: Mapped[str] = mapped_column(Text, default="")
     content_type: Mapped[str] = mapped_column(String(30), default="travel")
     platform: Mapped[str] = mapped_column(String(30), default="instagram")
+    dialect: Mapped[str | None] = mapped_column(String(20), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="planned")  # planned | generated | scheduled | published
     draft_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -161,6 +164,7 @@ class Draft(Base):
     palette: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)   # brand colour set of this post
     variants: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)  # per-platform text + images
     cover_thumb_url: Mapped[str | None] = mapped_column(String(800), nullable=True)  # small cover for lists
+    dialect: Mapped[str | None] = mapped_column(String(20), nullable=True)   # msa | gulf | maghreb | algeria
     badge: Mapped[str] = mapped_column(String(30), default="news")
     status: Mapped[str] = mapped_column(String(20), default="generating", index=True)
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -252,6 +256,10 @@ _ADDED_COLUMNS = [
     ("drafts", "palette", "JSON"),
     ("drafts", "variants", "JSON"),
     ("drafts", "cover_thumb_url", "VARCHAR(800)"),
+    ("drafts", "dialect", "VARCHAR(20)"),
+    ("sources", "purpose", "VARCHAR(20) DEFAULT 'news'"),
+    ("sources", "dialect", "VARCHAR(20)"),
+    ("calendar_items", "dialect", "VARCHAR(20)"),
     ("brands", "color_mode", "VARCHAR(20)"),
     ("brands", "logo_backdrop", "VARCHAR(20)"),
 ]

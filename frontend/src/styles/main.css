@@ -297,3 +297,6 @@ html[dir="ltr"] .toasts { transform: translateX(-50%); }
 .cal-day .count-badge { position: absolute; top: 8px; inset-inline-end: 8px; font-size: 11px; font-weight: 800; color: var(--muted); }
 .cal-day .count-badge.full { color: var(--danger); }
 .chip[draggable="true"] { cursor: grab; }
+.thumb .tags-corner { position: absolute; bottom: 10px; inset-inline-start: 10px; display: flex; gap: 4px; flex-wrap: wrap; }
+.thumb .tags-corner .pill { position: static; }
+label.btn.disabled { opacity: .5; pointer-events: none; }

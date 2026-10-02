@@ -53,6 +53,7 @@ class Settings(BaseSettings):
 
     # Images
     pexels_api_key: str = ""
+    pixabay_api_key: str = ""
 
     # Publishers
     buffer_api_key: str = ""

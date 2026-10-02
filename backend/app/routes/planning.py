@@ -90,6 +90,7 @@ class CalendarIn(BaseModel):
     platform: str = "instagram"
     campaign_id: int | None = None
     brand_id: int | None = None
+    dialect: str | None = None
 
 
 @router.get("/calendar")

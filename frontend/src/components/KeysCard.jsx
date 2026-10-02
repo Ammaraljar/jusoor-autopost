@@ -9,6 +9,7 @@ const EXTRA_FIELDS = ['cloudflare_account_id'];
 const MODEL_FIELDS = ENGINE_ORDER.map((n) => `${n}_model`);
 const PUBLISH_KEYS = [
   { field: 'pexels_api_key', label: 'stock_photos', hint: 'pexels.com/api' },
+  { field: 'pixabay_api_key', label: 'Pixabay', hint: 'pixabay.com/api/docs' },
   { field: 'buffer_api_key', label: 'Buffer', hint: 'publish.buffer.com' },
   { field: 'meta_access_token', label: 'Meta (Facebook / Instagram)', hint: 'developers.facebook.com' },
   { field: 'uploadpost_api_key', label: 'upload-post.com', hint: 'upload-post.com' },

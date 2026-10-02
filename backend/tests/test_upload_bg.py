@@ -38,3 +38,21 @@ def test_uploaded_photo_is_used_without_calling_our_own_server(client, monkeypat
         assert bad.status_code == 400 and "JPG" in bad.json()["detail"]
     finally:
         client.delete(f"/api/drafts/{did}")
+
+
+def test_several_photos_are_spread_over_the_slides(client):
+    with session_scope() as db:
+        d = Draft(hook="h", caption="c " * 30, status="pending_review", origin="manual", language="ar")
+        for i, kind in enumerate(["cover", "content", "content", "content", "cta"]):
+            d.slides.append(Slide(position=i, kind=kind, heading="ع", body="ن"))
+        db.add(d)
+        db.flush()
+        did = d.id
+    try:
+        files = [("files", (f"p{i}.png", _jpeg(colour=(i * 60, 80, 120)), "image/png")) for i in range(2)]
+        r = client.post(f"/api/drafts/{did}/backgrounds", files=files)
+        assert r.status_code == 200, r.text
+        bgs = [s["background_url"] for s in sorted(r.json()["slides"], key=lambda s: s["position"])]
+        assert len(set(bgs)) == 2 and bgs[0] == bgs[2] == bgs[4] and bgs[1] == bgs[3]   # repeated in order
+    finally:
+        client.delete(f"/api/drafts/{did}")

@@ -23,14 +23,15 @@ class Jobs:
     def busy(self) -> bool:
         return self._running
 
-    async def run_collection(self, source_ids: list[int] | None = None) -> dict[str, Any]:
+    async def run_collection(self, source_ids: list[int] | None = None,
+                             window: dict[str, Any] | None = None) -> dict[str, Any]:
         if self._running:
             return {"skipped": True}
         self._running = True
         try:
             started = datetime.now(timezone.utc)
             try:
-                summary = await pipeline.run_collection_cycle(source_ids)
+                summary = await pipeline.run_collection_cycle(source_ids, window)
             except Exception as exc:  # noqa: BLE001
                 log.exception("collection cycle failed")
                 summary = {"error": str(exc)[:500]}

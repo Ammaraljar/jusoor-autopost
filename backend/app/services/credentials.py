@@ -25,7 +25,7 @@ from ..config import get_settings
 from ..db import AppSetting, session_scope
 
 SETTINGS_KEY = "credentials"
-VERSION = "3.6-plan-shapes-speed"
+VERSION = "3.7-dialects-programs"
 
 # Each engine carries what its own environment needs: suggested models, the key's format,
 # where to get the key, and request tweaks applied in generator._tune_payload().
@@ -107,6 +107,7 @@ FIELDS: dict[str, tuple[bool, str]] = {
     "cloudflare_account_id": (False, "cloudflare_account_id"),
     "cloudflare_model": (False, "cloudflare_model"),
     "pexels_api_key": (True, "pexels_api_key"),
+    "pixabay_api_key": (True, "pixabay_api_key"),
     "buffer_api_key": (True, "buffer_api_key"),
     "meta_access_token": (True, "meta_access_token"),
     "uploadpost_api_key": (True, "uploadpost_api_key"),

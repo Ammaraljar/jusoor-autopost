@@ -14,6 +14,7 @@ CONTENT_TYPES = ["news", "travel", "tips", "educational", "promotional", "storyt
                  "announcement", "corporate", "comparison", "event", "product"]
 PLATFORMS = ["instagram", "facebook", "linkedin", "tiktok", "x", "threads"]
 PROVIDERS = ["buffer", "meta", "uploadpost"]
+DIALECTS = ["msa", "gulf", "maghreb", "algeria"]
 
 DEFAULTS: dict[str, dict[str, Any]] = {
     "generation": {
@@ -27,6 +28,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "content_slides": 4,
         "image_source": "auto",     # auto | source | pexels
         "credit_source": True,
+        "dialect": "msa",           # msa | gulf | maghreb | algeria
     },
     "scheduler": {
         "scrape_enabled": True,
@@ -76,4 +78,4 @@ def update_section(db: Session, key: str, values: dict[str, Any]) -> dict[str, A
 
 def options() -> dict[str, list[str]]:
     return {"languages": LANGUAGES, "tones": TONES, "content_types": CONTENT_TYPES,
-            "platforms": PLATFORMS, "providers": PROVIDERS}
+            "platforms": PLATFORMS, "providers": PROVIDERS, "dialects": DIALECTS}
