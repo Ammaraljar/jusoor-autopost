@@ -8,7 +8,7 @@ from typing import Any
 
 from ..config import get_settings
 from ..db import session_scope
-from . import app_settings, pipeline, publishing
+from . import app_settings, pipeline, publishing, scheduling
 
 log = logging.getLogger(__name__)
 
@@ -46,6 +46,12 @@ class Jobs:
         if enabled:
             await self.run_collection(None)
 
+    async def scheduled_autoplan(self) -> None:
+        try:
+            await asyncio.to_thread(scheduling.run_autoplan)
+        except Exception:  # noqa: BLE001
+            log.exception("autoplan failed")
+
     async def scheduled_publish(self) -> None:
         try:
             await publishing.publish_due()
@@ -62,6 +68,8 @@ class Jobs:
         self.scheduler.add_job(self.scheduled_collection, "interval", minutes=10, id="collect",
                                max_instances=1, coalesce=True)
         self.scheduler.add_job(self.scheduled_publish, "interval", minutes=1, id="publish",
+                               max_instances=1, coalesce=True)
+        self.scheduler.add_job(self.scheduled_autoplan, "interval", minutes=5, id="autoplan",
                                max_instances=1, coalesce=True)
         self.scheduler.start()
 

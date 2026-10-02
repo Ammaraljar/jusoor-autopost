@@ -169,6 +169,8 @@ class AIError(RuntimeError):
 # Provider-side overload or rate limit: retried after a short pause (seconds between attempts).
 TRANSIENT_STATUSES = (429, 500, 502, 503, 504)
 RETRY_DELAYS: tuple[float, ...] = (3, 8, 15)
+ENSEMBLE_TIMEOUT = 90       # seconds per engine in parallel mode
+JUDGE_TIMEOUT = 45
 
 
 # ============================================================ OpenAI-compatible engines
@@ -521,7 +523,8 @@ async def _judge(brand_system: str, candidates: list[tuple[str, GeneratedPost]],
             "Do not favour length.\n\n"
             f"Candidates:\n{json.dumps(listing, ensure_ascii=False)}\n\nUse the choose_best tool.")
     try:
-        verdict = await _call_engine(judge_engine, brand_system, user, JUDGE_TOOL, max_tokens=500)
+        verdict = await asyncio.wait_for(_call_engine(judge_engine, brand_system, user, JUDGE_TOOL, max_tokens=500),
+                                         JUDGE_TIMEOUT)
         winner = str(verdict.get("winner", "")).strip().upper()[:1]
         if winner in labels:
             scores = {str(k).upper(): _as_int(v, 0) for k, v in (verdict.get("scores") or {}).items()}
@@ -554,13 +557,15 @@ async def _generate_post(system: str, user: str, gen: dict[str, Any]) -> Generat
             post.meta["reason"] = "تولّى هذا المحرّك الكتابة بعد تعذّر المحرّك الأساسي"
         return post
 
-    results = await asyncio.gather(*(_call_engine(n, system, user, POST_TOOL) for n in engines),
-                                   return_exceptions=True)
+    # A slow engine must not hold the whole post: each one gets ENSEMBLE_TIMEOUT seconds
+    results = await asyncio.gather(*(asyncio.wait_for(_call_engine(n, system, user, POST_TOOL), ENSEMBLE_TIMEOUT)
+                                     for n in engines), return_exceptions=True)
     candidates: list[tuple[str, GeneratedPost]] = []
     errors: dict[str, str] = {}
     for name, res in zip(engines, results):
         if isinstance(res, BaseException):
-            errors[name] = str(res)[:300]
+            errors[name] = (f"تجاوز المهلة ({ENSEMBLE_TIMEOUT} ثانية) فتُخطّي" if isinstance(res, asyncio.TimeoutError)
+                            else str(res)[:300])
             continue
         try:
             candidates.append((name, _parse(res)))

@@ -1,22 +1,26 @@
+import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import Layout from './components/Layout';
 import { Loading } from './components/ui';
 import { useAuth } from './lib/auth';
-import Brand from './pages/Brand';
-import CalendarPage from './pages/Calendar';
-import Campaigns from './pages/Campaigns';
-import DraftEditor from './pages/DraftEditor';
 import Login from './pages/Login';
 import Review from './pages/Review';
-import SettingsPage from './pages/Settings';
-import Sources from './pages/Sources';
-import Stats from './pages/Stats';
+
+// Other pages load on first visit — the review queue opens faster
+const Brand = lazy(() => import('./pages/Brand'));
+const CalendarPage = lazy(() => import('./pages/Calendar'));
+const Campaigns = lazy(() => import('./pages/Campaigns'));
+const DraftEditor = lazy(() => import('./pages/DraftEditor'));
+const SettingsPage = lazy(() => import('./pages/Settings'));
+const Sources = lazy(() => import('./pages/Sources'));
+const Stats = lazy(() => import('./pages/Stats'));
 
 export default function App() {
   const { loading, session } = useAuth();
   if (loading) return <Loading />;
   if (!session) return <Login />;
   return (
+    <Suspense fallback={<Loading />}>
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<Review />} />
@@ -30,5 +34,6 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
+    </Suspense>
   );
 }

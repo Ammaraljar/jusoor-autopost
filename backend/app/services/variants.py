@@ -1,10 +1,9 @@
 """One article → one post per platform.
 
-Each platform gets its own text (length, tone, hashtags) and its own image set:
+Each platform gets its own text (length, tone, hashtags) and its own image set, sized to what
+performs best there (the user can pick other slides):
 
-* instagram, tiktok      → the full carousel
-* facebook, linkedin,
-  x, threads             → one image (the cover slide)
+* instagram 2-5 · facebook 2-4 · linkedin 3-5 · x 1 · threads 1-3 · tiktok 3-10
 
 The texts come from the AI in a single call; if that fails, they are derived from the main
 caption so publishing never blocks.
@@ -21,21 +20,27 @@ log = logging.getLogger(__name__)
 
 PLATFORM_SPECS: dict[str, dict[str, Any]] = {
     "instagram": {"label": "Instagram", "format": "carousel", "limit": 2200, "tags": (5, 10),
+                  "images": {"best": (2, 5), "max": 10, "default": 5},
                   "guide": "Carousel caption: strong first line, short paragraphs with line breaks, 1-3 emojis, "
                            "a clear call to action, then 5-10 relevant hashtags at the end."},
-    "facebook": {"label": "Facebook", "format": "single", "limit": 1500, "tags": (0, 3),
-                 "guide": "One-image post: conversational, 3-5 short paragraphs telling the story, a question "
+    "facebook": {"label": "Facebook", "format": "carousel", "limit": 1500, "tags": (0, 3),
+                 "images": {"best": (2, 4), "max": 20, "default": 4},
+                 "guide": "Photo post: conversational, 3-5 short paragraphs telling the story, a question "
                           "to invite comments, a call to action, at most 3 hashtags."},
-    "linkedin": {"label": "LinkedIn", "format": "single", "limit": 2500, "tags": (3, 5),
-                 "guide": "One-image post for professionals: an insight-led opening line, the business or "
+    "linkedin": {"label": "LinkedIn", "format": "carousel", "limit": 2500, "tags": (3, 5),
+                 "images": {"best": (3, 5), "max": 9, "default": 5},
+                 "guide": "Multi-image post for professionals: an insight-led opening line, the business or "
                           "industry angle (tourism market, MICE, trends), 3-5 short paragraphs, no slang, "
                           "at most 1 emoji, 3-5 professional hashtags at the end."},
     "x": {"label": "X", "format": "single", "limit": 270, "tags": (1, 2),
+          "images": {"best": (1, 1), "max": 4, "default": 1},
           "guide": "One-image post: ONE punchy sentence with the key fact plus 1-2 hashtags. "
                    "The WHOLE text must be under 270 characters."},
     "threads": {"label": "Threads", "format": "single", "limit": 480, "tags": (0, 2),
-                "guide": "One-image post: casual and warm, 2-3 short lines, under 480 characters, 0-2 hashtags."},
+                "images": {"best": (1, 3), "max": 10, "default": 1},
+                "guide": "Short post: casual and warm, 2-3 short lines, under 480 characters, 0-2 hashtags."},
     "tiktok": {"label": "TikTok", "format": "carousel", "limit": 2000, "tags": (3, 6),
+               "images": {"best": (3, 10), "max": 35, "default": 10},
                "guide": "Photo-carousel caption: a catchy hook, 1-2 short lines, 3-6 trending travel hashtags."},
 }
 PLATFORMS = list(PLATFORM_SPECS)
@@ -85,6 +90,34 @@ def fallback_texts(draft) -> dict[str, str]:
     }
 
 
+def _kinds(draft) -> list[str]:
+    return [s.kind for s in sorted(draft.slides, key=lambda s: s.position)] if getattr(draft, "slides", None) else []
+
+
+def default_slides(platform: str, kinds: list[str]) -> list[int]:
+    """The best-performing number of images for the platform: cover first, the CTA slide last."""
+    total = len(kinds)
+    if not total:
+        return []
+    n = min(PLATFORM_SPECS[platform]["images"]["default"], total)
+    if n >= total:
+        return list(range(total))
+    cover = [i for i, k in enumerate(kinds) if k == "cover"][:1] or [0]
+    content = [i for i, k in enumerate(kinds) if k == "content"]
+    cta = [i for i, k in enumerate(kinds) if k == "cta"][:1]
+    if n == 1:
+        return cover
+    if n == 2:
+        return cover + (content[:1] or cta)
+    return sorted(set(cover + content[: n - 1 - len(cta)] + cta))
+
+
+def clean_slides(platform: str, wanted: list[int] | None, total: int) -> list[int]:
+    """Valid positions within the platform's maximum, in slide order."""
+    cap = PLATFORM_SPECS[platform]["images"]["max"]
+    return sorted({i for i in (wanted or []) if 0 <= i < total})[:cap]
+
+
 def finalize(draft, texts: dict[str, str], credit: bool = True,
              previous: dict[str, Any] | None = None) -> dict[str, dict[str, Any]]:
     """Build the stored variants: text within the platform limit (credit included), and images."""
@@ -100,12 +133,12 @@ def finalize(draft, texts: dict[str, str], credit: bool = True,
             text = f"{_trim(text, room)}\n{credit_line}" if platform == "x" else f"{_trim(text, room)}\n\n{credit_line}"
         text = _trim(text, spec["limit"])
         prev = (previous or {}).get(platform) or {}
-        if spec["format"] == "carousel":
-            slides = list(range(total))
-        else:
-            slides = prev.get("slides") if prev.get("slides") and max(prev["slides"]) < max(total, 1) else [0]
-        out[platform] = {"text": text, "format": spec["format"], "slides": slides, "limit": spec["limit"],
-                         "label": spec["label"]}
+        slides = clean_slides(platform, prev.get("slides"), total) if prev.get("custom_slides") else []
+        custom = bool(slides)
+        slides = slides or default_slides(platform, _kinds(draft))
+        out[platform] = {"text": text, "format": "carousel" if len(slides) > 1 else "single", "slides": slides,
+                         "custom_slides": custom, "limit": spec["limit"], "label": spec["label"],
+                         "images": spec["images"]}
     return out
 
 
@@ -138,10 +171,9 @@ def for_publish(draft, platform: str, credit: bool = True) -> tuple[str, list[in
     variants = draft.variants or finalize(draft, fallback_texts(draft), credit)
     v = variants.get(platform)
     if not v:
-        spec = PLATFORM_SPECS.get(platform, {"format": "carousel"})
         fb = finalize(draft, fallback_texts(draft), credit)
-        v = fb.get(platform) or {"text": fb["instagram"]["text"],
-                                 "slides": list(range(len(draft.slides))) if spec["format"] == "carousel" else [0]}
-    if (v.get("format") or PLATFORM_SPECS.get(platform, {}).get("format")) == "carousel":
-        return v["text"], list(range(len(draft.slides)))            # always the current full carousel
-    return v["text"], [i for i in (v.get("slides") or [0]) if i < len(draft.slides)] or [0]
+        v = fb.get(platform) or {"text": fb["instagram"]["text"], "slides": list(range(len(draft.slides)))}
+    total = len(draft.slides)
+    key = platform if platform in PLATFORM_SPECS else "instagram"
+    chosen = clean_slides(key, v.get("slides"), total) if v.get("custom_slides") else []
+    return v["text"], chosen or default_slides(key, _kinds(draft)) or [0]

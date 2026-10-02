@@ -47,13 +47,13 @@ def download_image(url: str) -> bytes | None:
         return None
 
 
-def search_pexels(query: str, count: int = 6) -> list[dict]:
+def search_pexels(query: str, count: int = 6, page: int = 1) -> list[dict]:
     key = credentials.current()["pexels_api_key"]
     if not key or not query:
         return []
     try:
         resp = httpx.get("https://api.pexels.com/v1/search",
-                         params={"query": query, "orientation": "portrait", "per_page": count},
+                         params={"query": query, "orientation": "portrait", "per_page": count, "page": page},
                          headers={"Authorization": key}, timeout=20)
         resp.raise_for_status()
         return [{"url": p["src"].get("large2x") or p["src"]["large"],
@@ -63,15 +63,51 @@ def search_pexels(query: str, count: int = 6) -> list[dict]:
         return []
 
 
-def collect_backgrounds(article_image: str | None, keywords: str, mode: str, needed: int) -> list[dict]:
-    """Return a list of {url, bytes, hash, credit} backgrounds (may be shorter than needed)."""
-    article = [{"url": article_image, "credit": ""}] if article_image else []
+def search_openverse(query: str, count: int = 8, page: int = 1) -> list[dict]:
+    """Free photos without an API key (Openverse, public-domain / CC0 only — no attribution needed)."""
+    if not query:
+        return []
+    try:
+        resp = httpx.get("https://api.openverse.org/v1/images/",
+                         params={"q": query, "license": "cc0,pdm", "page_size": count, "page": page,
+                                 "aspect_ratio": "tall,square", "size": "large", "mature": "false"},
+                         headers=HEADERS, timeout=20)
+        resp.raise_for_status()
+        return [{"url": r["url"], "credit": ""} for r in resp.json().get("results", []) if r.get("url")]
+    except Exception as exc:  # noqa: BLE001
+        log.warning("openverse search failed: %s", exc)
+        return []
+
+
+def stock_photos(keywords: str, count: int, page: int = 1) -> list[dict]:
+    """Pexels when a key is set, otherwise (or in addition) Openverse."""
+    found = search_pexels(keywords, count=count, page=page)
+    if len(found) < count:
+        found += search_openverse(keywords, count=count, page=page)
+    return found
+
+
+def collect_backgrounds(article_image: str | None, keywords: str, mode: str, needed: int,
+                        exclude: set[str] | None = None, fresh: bool = False) -> list[dict]:
+    """Return a list of {url, bytes, hash, credit} backgrounds (may be shorter than needed).
+
+    fresh=True ("new backgrounds"): skip the photos already used and look further in the results,
+    so the post really gets different images."""
+    import random
+    exclude = set(exclude or ())
+    article = [{"url": article_image, "credit": ""}] if article_image and article_image not in exclude else []
+    page = random.randint(2, 6) if fresh else 1
     if mode == "source":
         candidates = article
     else:
-        stock = search_pexels(keywords, count=max(needed, 4))
+        stock = stock_photos(keywords, count=max(needed + 2, 6), page=page)
+        if fresh and len(stock) < needed:
+            stock += stock_photos(keywords, count=max(needed + 2, 6), page=1)
+        if fresh:
+            random.shuffle(stock)
         # Auto: the article's own photo is the cover, stock photos fill the other slides.
         candidates = stock if mode == "pexels" else article + stock
+    candidates = [c for c in candidates if c["url"] not in exclude]
     out: list[dict] = []
     seen: set[str] = set()
     for c in candidates:

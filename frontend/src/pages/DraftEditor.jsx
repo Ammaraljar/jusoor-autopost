@@ -340,17 +340,23 @@ function PlatformPosts({ draft, locked, onChange }) {
   if (!names.length) return null;
 
   const slides = draft.slides || [];
-  const shown = v.format === 'carousel' ? slides : slides.filter((s) => (v.slides || [0]).includes(s.position));
+  const picked = v.slides || [];
+  const rules = v.images || { best: [1, 10], max: 10 };
   const over = text.length > v.limit;
   const save = () => run('save-v', async () => {
     onChange(await api.patch(`/api/drafts/${draft.id}/variants/${tab}`, { text }));
   }, t('saved'));
-  const pickImage = (pos) => run('img-v', async () => {
-    onChange(await api.patch(`/api/drafts/${draft.id}/variants/${tab}`, { slides: [pos] }));
-  });
+  const toggleImage = (pos) => {
+    const next = picked.includes(pos) ? picked.filter((p) => p !== pos) : [...picked, pos];
+    if (!next.length || next.length > rules.max) return;
+    run('img-v', async () => {
+      onChange(await api.patch(`/api/drafts/${draft.id}/variants/${tab}`, { slides: next }));
+    });
+  };
   const regenerate = () => run('regen-v', async () => {
     onChange(await api.post(`/api/drafts/${draft.id}/variants/regenerate`));
   }, t('done'));
+  const inBest = picked.length >= rules.best[0] && picked.length <= rules.best[1];
 
   return (
     <div className="card card-pad stack">
@@ -366,22 +372,28 @@ function PlatformPosts({ draft, locked, onChange }) {
         {names.map((p) => (
           <button key={p} className={`tab ${tab === p ? 'active' : ''}`} onClick={() => setTab(p)}>
             {variants[p].label}
-            <span className="n">{variants[p].format === 'carousel' ? `${slides.length} 🖼` : '1 🖼'}</span>
+            <span className="n">{(variants[p].slides || []).length} 🖼</span>
           </button>
         ))}
       </div>
-      <div className="xs muted">
-        {v.format === 'carousel' ? t('fmt_carousel') : t('fmt_single')}
+      <div className="row xs" style={{ gap: 8 }}>
+        <span className={`pill ${inBest ? 'ok' : 'warn'}`}>
+          {picked.length} {t('images_selected')} · {t('best_for_platform')} {rules.best[0] === rules.best[1] ? rules.best[0] : `${rules.best[0]}–${rules.best[1]}`}
+        </span>
+        <span className="muted">{t('tap_to_select_images')}</span>
       </div>
       <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-        {(v.format === 'carousel' ? shown : slides).map((s) => {
-          const on = v.format === 'carousel' || (v.slides || [0]).includes(s.position);
+        {slides.map((s) => {
+          const on = picked.includes(s.position);
+          const order = picked.indexOf(s.position) + 1;
           return s.image_url ? (
-            <button key={s.id} type="button" className="btn-ghost" disabled={v.format === 'carousel' || locked}
-              title={v.format === 'single' ? t('use_this_image') : ''} onClick={() => pickImage(s.position)}
-              style={{ padding: 0, border: on ? '3px solid var(--gold)' : '3px solid transparent', borderRadius: 10,
-                opacity: on ? 1 : 0.45, cursor: v.format === 'single' ? 'pointer' : 'default', background: 'none' }}>
+            <button key={s.id} type="button" disabled={locked || busy === 'img-v'}
+              title={on ? t('remove_image') : t('add_image')} onClick={() => toggleImage(s.position)}
+              style={{ position: 'relative', padding: 0, border: on ? '3px solid var(--gold)' : '3px solid transparent',
+                borderRadius: 10, opacity: on ? 1 : 0.4, cursor: 'pointer', background: 'none' }}>
               <img src={mediaUrl(s.image_url)} alt="" style={{ width: 64, height: 80, objectFit: 'cover', borderRadius: 7, display: 'block' }} />
+              {on && <span style={{ position: 'absolute', top: 3, insetInlineStart: 3, background: 'var(--gold)', color: 'var(--navy)',
+                fontSize: 11, fontWeight: 800, borderRadius: 6, padding: '0 5px' }}>{order}</span>}
             </button>
           ) : null;
         })}
@@ -476,7 +488,7 @@ function PublishModal({ draft, onClose, onDone }) {
                 return (
                   <div key={p} className="xs row" style={{ gap: 6 }}>
                     <b style={{ minWidth: 80 }}>{v?.label || p}</b>
-                    <span className="muted">{v?.format === 'single' ? t('one_image') : `${t('carousel')} ${draft.slides?.length || 0}`}</span>
+                    <span className="muted">{(v?.slides || []).length} 🖼</span>
                     <span className="muted clamp-2" dir="auto" style={{ flex: 1 }}>{(v?.text || '').slice(0, 90)}</span>
                   </div>
                 );
@@ -487,6 +499,15 @@ function PublishModal({ draft, onClose, onDone }) {
             <button className={`tab ${mode === 'now' ? 'active' : ''}`} onClick={() => setMode('now')}>{t('publish_now')}</button>
             <button className={`tab ${mode === 'later' ? 'active' : ''}`} onClick={() => setMode('later')}>{t('publish_later')}</button>
           </div>
+          {mode === 'later' && (
+            <Button size="sm" icon={Clock} busy={busy === 'slot'} disabled={!chosen.length}
+              onClick={() => run('slot', async () => {
+                onDone(await api.post(`/api/drafts/${draft.id}/schedule`, { targets: chosen }));
+                onClose();
+              }, t('saved'))}>
+              {t('next_free_slot')}
+            </Button>
+          )}
           {mode === 'later' && (
             <Field label={t('when')}>
               <input className="input ltr" type="datetime-local" value={when} min={toLocalInput(new Date())}

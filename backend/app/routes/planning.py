@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import RequireUser
 from ..db import CalendarItem, Campaign, Draft, get_db
-from ..services import pipeline
+from ..services import pipeline, scheduling
 
 router = APIRouter(prefix="/api", tags=["planning"], dependencies=[RequireUser])
 
@@ -109,8 +109,8 @@ def calendar(start: date | None = None, end: date | None = None, db: Session = D
     for d in list(scheduled) + list(published):
         posts[d.id] = {"id": d.id, "hook": d.hook, "status": d.status, "campaign_id": d.campaign_id,
                        "at": d.to_dict()["scheduled_at"] or d.to_dict()["published_at"],
-                       "cover_url": d.slides[0].image_url if d.slides else None}
-    return {"start": start.isoformat(), "end": end.isoformat(),
+                       "cover_url": d.cover_thumb_url or (d.slides[0].image_url if d.slides else None)}
+    return {"start": start.isoformat(), "end": end.isoformat(), "plan": scheduling.plan_view(db),
             "items": [i.to_dict() for i in items], "posts": list(posts.values())}
 
 

@@ -25,7 +25,7 @@ from ..config import get_settings
 from ..db import AppSetting, session_scope
 
 SETTINGS_KEY = "credentials"
-VERSION = "3.5-fast-gemini-cloudflare"
+VERSION = "3.6-plan-shapes-speed"
 
 # Each engine carries what its own environment needs: suggested models, the key's format,
 # where to get the key, and request tweaks applied in generator._tune_payload().

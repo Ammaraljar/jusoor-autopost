@@ -29,9 +29,12 @@ def test_fallback_variants_respect_each_platform():
     with session_scope() as db:
         d = db.get(Draft, did)
         v = variants.finalize(d, variants.fallback_texts(d))
-        assert v["instagram"]["slides"] == [0, 1, 2, 3, 4, 5] and v["instagram"]["format"] == "carousel"
-        for p in ("facebook", "linkedin", "x", "threads"):
-            assert v[p]["slides"] == [0] and v[p]["format"] == "single"
+        # best-performing counts: IG 5, FB 4, LinkedIn 5, X 1, Threads 1, TikTok all — cover first, CTA last
+        assert v["instagram"]["slides"] == [0, 1, 2, 3, 5] and v["instagram"]["format"] == "carousel"
+        assert v["facebook"]["slides"] == [0, 1, 2, 5]
+        assert v["linkedin"]["slides"] == [0, 1, 2, 3, 5]
+        assert v["x"]["slides"] == [0] and v["threads"]["slides"] == [0] and v["x"]["format"] == "single"
+        assert v["tiktok"]["slides"] == [0, 1, 2, 3, 4, 5]
         assert len(v["x"]["text"]) <= 270 and "TTG Asia" in v["x"]["text"]
         assert all(len(v[p]["text"]) <= variants.PLATFORM_SPECS[p]["limit"] for p in v)
         db.delete(d)
@@ -53,8 +56,12 @@ def test_ai_writes_one_text_per_platform(client, monkeypatch):
     assert "المصدر: TTG Asia" in d["variants"]["facebook"]["text"]
 
     # Edit one platform: its text, and which image LinkedIn uses
-    r = client.patch(f"/api/drafts/{did}/variants/linkedin", json={"text": "نص لينكدإن المعدّل", "slides": [2]}).json()
-    assert r["variants"]["linkedin"]["text"] == "نص لينكدإن المعدّل" and r["variants"]["linkedin"]["slides"] == [2]
+    r = client.patch(f"/api/drafts/{did}/variants/linkedin", json={"text": "نص لينكدإن المعدّل", "slides": [4, 2, 9]}).json()
+    assert r["variants"]["linkedin"]["text"] == "نص لينكدإن المعدّل" and r["variants"]["linkedin"]["slides"] == [2, 4]
+    assert client.patch(f"/api/drafts/{did}/variants/x", json={"slides": []}).status_code == 400
+    # the user's choice survives a rewrite of the platform texts
+    asyncio.run(pipeline.make_variants(did))
+    assert client.get(f"/api/drafts/{did}").json()["variants"]["linkedin"]["slides"] == [2, 4]
     assert client.patch(f"/api/drafts/{did}/variants/x", json={"text": "x" * 400}).status_code == 400
     client.delete(f"/api/drafts/{did}")
 
@@ -81,7 +88,7 @@ def test_publish_sends_each_platform_its_own_post(client, monkeypatch):
     result = asyncio.run(publishing.publish_draft(did))
     assert result["ok"] and result["status"] == "published"
     by = {p[0]: (cap, urls) for p, cap, urls in sent}
-    assert by["instagram"][0] == "IG text" and len(by["instagram"][1]) == 6       # carousel
-    assert by["linkedin"][0] == "LI text" and by["linkedin"][1] == ["https://cdn.example/s0.jpg"]   # one image
-    assert by["x"][0] == "X text" and len(by["x"][1]) == 1
+    assert by["instagram"][0] == "IG text" and len(by["instagram"][1]) == 5       # carousel of 5
+    assert by["linkedin"][0] == "LI text" and len(by["linkedin"][1]) == 5
+    assert by["x"][0] == "X text" and by["x"][1] == ["https://cdn.example/s0.jpg"]   # one strong image
     client.delete(f"/api/drafts/{did}")

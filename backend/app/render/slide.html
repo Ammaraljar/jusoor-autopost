@@ -34,10 +34,31 @@ body {{ font-family: '{font}', 'Cairo', sans-serif; background: var(--navy); col
 .card.frosted {{ background: var(--card-bg); backdrop-filter: blur(18px); color: var(--card-text); box-shadow: 0 20px 60px rgba(0,0,0,.28); }}
 .card.solid {{ background: var(--navy); color: #fff; border-top: 10px solid var(--gold); }}
 .card.minimal {{ background: transparent; padding: 0; color: #fff; text-shadow: 0 3px 16px rgba(0,0,0,.55); }}
+/* Band: full-width navy band across the bottom, gold edge on top */
+.card.band {{ left: 0; right: 0; bottom: 0; border-radius: 0; padding: 64px 72px 150px;
+  background: linear-gradient(180deg, rgba(var(--navy-rgb),.94), rgba(var(--navy-rgb),.99)); color: #fff;
+  border-top: 10px solid var(--gold); }}
+/* Side: tall glass panel on the reading side, photo stays visible on the other */
+.card.side {{ top: 170px; bottom: 130px; left: auto; right: auto; inset-inline-start: 0; width: 64%;
+  border-radius: 0; border-start-end-radius: 44px; border-end-end-radius: 44px;
+  padding: 70px 60px; display: flex; flex-direction: column; justify-content: center;
+  background: rgba(var(--navy-rgb),.86); backdrop-filter: blur(10px); color: #fff;
+  border-inline-end: 12px solid var(--gold); }}
+/* Ribbon: heading set on gold ribbons, text on a dark glass block */
+.card.ribbon {{ background: transparent; padding: 0; color: #fff; }}
+.card.ribbon h1, .card.ribbon h2 {{ display: inline; background: var(--gold); color: var(--navy) !important;
+  padding: 4px 22px; line-height: 1.75; -webkit-box-decoration-break: clone; box-decoration-break: clone;
+  border-radius: 10px; }}
+.card.ribbon p {{ margin-top: 30px; background: rgba(var(--navy-rgb),.82); padding: 30px 36px; border-radius: 26px;
+  backdrop-filter: blur(8px); }}
+.card.ribbon .accent {{ display: none; }}
+/* Outline: dark glass with a gold frame */
+.card.outline {{ background: rgba(var(--navy-rgb),.62); backdrop-filter: blur(12px); color: #fff;
+  border: 4px solid var(--gold); box-shadow: 0 20px 60px rgba(0,0,0,.3); }}
 .accent {{ width: 96px; height: 10px; border-radius: 10px; background: var(--gold); margin-bottom: 30px; }}
 h1 {{ font-weight: 900; line-height: 1.35; }}
 .card.frosted h1 {{ color: var(--card-title); }}
-.card.solid h1, .card.minimal h1 {{ color: #fff; }}
+.card.solid h1, .card.minimal h1, .card.band h1, .card.side h1, .card.outline h1 {{ color: #fff; }}
 h2 {{ font-weight: 800; line-height: 1.4; color: var(--gold); margin-bottom: 22px; }}
 .card.frosted h2 {{ color: var(--card-heading); }}
 p {{ line-height: 1.85; font-weight: 600; }}
@@ -62,8 +83,11 @@ p {{ line-height: 1.85; font-weight: 600; }}
 .cta-wrap .button {{ margin-top: 30px; background: var(--gold); color: var(--navy); font-weight: 900; font-size: 42px;
   padding: 22px 64px; border-radius: 999px; direction: ltr; unicode-bidi: isolate; }}
 .cta-wrap .site {{ margin-top: 36px; font-size: 34px; color: var(--gold-light); direction: ltr; font-weight: 700; }}
+/* Last slide: the photo stays visible under a brand-navy shade */
 .cta-overlay {{ position: absolute; inset: 0;
-  background: linear-gradient(160deg, rgba(var(--navy-rgb), .92), rgba(var(--navy-rgb), .98)), rgba(0,0,0,.25); }}
+  background: radial-gradient(ellipse at center, rgba(var(--navy-rgb), .78) 0%, rgba(var(--navy-rgb), .55) 55%, rgba(var(--navy-rgb), .35) 100%),
+              linear-gradient(180deg, rgba(var(--navy-rgb), .25) 0%, rgba(var(--navy-rgb), .70) 100%); }}
+.cta-wrap h1, .cta-wrap p {{ text-shadow: 0 3px 18px rgba(0,0,0,.45); }}
 </style>
 </head>
 <body>

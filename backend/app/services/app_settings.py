@@ -38,6 +38,15 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "default_platforms": ["instagram", "facebook"],
         "first_comment_enabled": False,
         "buffer_mode": "shareNow",
+        # Daily plan
+        "posts_per_day": 5,
+        "day_start": "09:00",
+        "day_end": "22:00",
+        "min_gap_hours": 2,
+        "timezone": "Asia/Kuala_Lumpur",
+        # Automation
+        "auto_schedule_approved": False,      # approved posts go to the next free slot by themselves
+        "auto_approve_min_relevance": 0,      # 0 = off; e.g. 8 → posts scoring 8+/10 that pass QA are scheduled
     },
 }
 

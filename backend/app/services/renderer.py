@@ -106,6 +106,9 @@ def _logo_html(brand: BrandStyle, plate: bool = False) -> str:
     return f'<div class="{cls}"><div class="wordmark">{first}{rest}</div></div>'
 
 
+CARD_STYLES = ("frosted", "solid", "band", "side", "ribbon", "outline", "minimal")
+
+
 def build_html(spec: SlideSpec, brand: BrandStyle) -> str:
     lang = brand.language if brand.language in BADGE_LABELS else "ar"
     rtl = lang == "ar"
@@ -128,8 +131,9 @@ def build_html(spec: SlideSpec, brand: BrandStyle) -> str:
     credit = f'<span class="credit">{CREDIT_LABEL[lang]}: {_esc(spec.credit)}</span>' if spec.credit else ""
     handle = f'<span class="handle">{_esc(brand.handle)}</span>' if brand.handle else ""
     footer = f'<div class="footer">{handle}{credit}<div class="dots">{dots}</div></div>'
-    card_style = brand.card_style if brand.card_style in ("frosted", "solid", "minimal") else "frosted"
-    if card_style != "minimal" and (brand.palette or {}).get("cardStyle") in ("frosted", "solid"):
+    card_style = brand.card_style if brand.card_style in CARD_STYLES else "frosted"
+    # "frosted" (the default) means automatic: the post's colour set brings its own card shape
+    if card_style == "frosted" and (brand.palette or {}).get("cardStyle") in CARD_STYLES:
         card_style = brand.palette["cardStyle"]          # the post's brand colour set decides the card
 
     if spec.kind == "cover":
@@ -165,7 +169,7 @@ def build_html(spec: SlideSpec, brand: BrandStyle) -> str:
 
 
 class Renderer:
-    """Keeps a single headless Chromium alive and renders slides sequentially."""
+    """Keeps a single headless Chromium alive; renders up to three slides at once."""
 
     def __init__(self) -> None:
         self._pw = None
@@ -178,6 +182,7 @@ class Renderer:
         if loop is not self._loop:
             # A browser belongs to the event loop that started it (matters for tests / reloads).
             self._loop, self._lock, self._browser, self._pw = loop, asyncio.Lock(), None, None
+            self._pages = asyncio.Semaphore(3)
 
     async def _ensure(self):
         if self._browser and self._browser.is_connected():
@@ -192,8 +197,9 @@ class Renderer:
 
     async def render(self, spec: SlideSpec, brand: BrandStyle) -> bytes:
         self._bind_loop()
-        async with self._lock:
+        async with self._lock:                       # only one launch at a time
             browser = await self._ensure()
+        async with self._pages:                      # several slides render side by side
             page = await browser.new_page(viewport={"width": WIDTH, "height": HEIGHT}, device_scale_factor=1)
             try:
                 await page.set_content(build_html(spec, brand), wait_until="load")

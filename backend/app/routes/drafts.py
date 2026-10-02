@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from ..auth import RequireUser
 from ..db import Draft, PublishLog, Slide, get_db, utcnow
 from ..publishers import REGISTRY
-from ..services import app_settings, generator, pipeline, publishing, qa, storage, variants
+from ..services import app_settings, generator, pipeline, publishing, qa, scheduling, storage, variants
 
 router = APIRouter(prefix="/api/drafts", tags=["drafts"], dependencies=[RequireUser])
 STATUSES = ["generating", "pending_review", "approved", "scheduled", "publishing", "published", "failed", "rejected"]
@@ -107,16 +107,27 @@ async def create_manual(body: ManualDraft, background: BackgroundTasks, db: Sess
 
 class BulkBody(BaseModel):
     ids: list[int] = Field(min_length=1, max_length=500)
-    action: str                     # approve | reject | restore | unschedule | delete
+    action: str                     # approve | reject | restore | unschedule | delete | auto_schedule
 
 
 @router.post("/bulk")
 def bulk(body: BulkBody, db: Session = Depends(get_db)):
     """Apply one decision to many posts at once — including permanent deletion."""
-    if body.action not in ("approve", "reject", "restore", "unschedule", "delete"):
+    if body.action not in ("approve", "reject", "restore", "unschedule", "delete", "auto_schedule"):
         raise HTTPException(400, "إجراء غير معروف")
     done, skipped = 0, 0
-    for d in db.scalars(select(Draft).where(Draft.id.in_(body.ids))).all():
+    reasons: list[str] = []
+    rows = db.scalars(select(Draft).where(Draft.id.in_(body.ids)).order_by(Draft.created_at)).all()
+    if body.action == "auto_schedule":
+        for d in rows:
+            try:
+                scheduling.schedule(db, d)
+                done += 1
+            except ValueError as exc:
+                skipped += 1
+                reasons.append(f"#{d.id}: {exc}")
+        return {"ok": True, "done": done, "skipped": skipped, "reasons": reasons[:10]}
+    for d in rows:
         if body.action == "delete":
             if d.status == "publishing":          # never pull a post out from under the publisher
                 skipped += 1
@@ -168,10 +179,14 @@ def update_variant(draft_id: int, platform: str, body: VariantPatch, db: Session
         if len(body.text) > spec["limit"]:
             raise HTTPException(400, f"النص يتجاوز حد {spec['label']} ({spec['limit']} حرف)")
         v["text"] = body.text
-    if body.slides is not None and spec["format"] == "single":
-        valid = [i for i in body.slides if 0 <= i < len(d.slides)]
-        v["slides"] = valid[:1] or [0]
-    current[platform] = {**v, "format": spec["format"], "limit": spec["limit"], "label": spec["label"]}
+    if body.slides is not None:
+        chosen = variants.clean_slides(platform, body.slides, len(d.slides))
+        if not chosen:
+            raise HTTPException(400, "اختر صورة واحدة على الأقل")
+        v["slides"], v["custom_slides"] = chosen, True
+    slides = v.get("slides") or variants.default_slides(platform, variants._kinds(d))
+    current[platform] = {**v, "slides": slides, "format": "carousel" if len(slides) > 1 else "single",
+                         "limit": spec["limit"], "label": spec["label"], "images": spec["images"]}
     d.variants = current
     return _full(db, d)
 
@@ -189,6 +204,37 @@ async def regenerate_variants(draft_id: int, db: Session = Depends(get_db)):
         raise HTTPException(502, str(exc)) from exc
     db.expire_all()
     return _full(db, _get(db, draft_id))
+
+
+class ScheduleBody(BaseModel):
+    scheduled_at: datetime | None = None     # exact time; or
+    date: str | None = None                  # a day (YYYY-MM-DD): the first free slot that day
+    targets: list[dict] | None = None
+
+
+@router.post("/{draft_id}/schedule")
+def schedule_draft(draft_id: int, body: ScheduleBody, db: Session = Depends(get_db)):
+    """Put a post on the plan, or move it: next free slot, a given day, or an exact time."""
+    from datetime import date as date_cls
+    d = _get(db, draft_id)
+    when = body.scheduled_at
+    if when and when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    if body.date and not when:
+        try:
+            day = date_cls.fromisoformat(body.date)
+        except ValueError as exc:
+            raise HTTPException(400, "تاريخ غير صالح") from exc
+        when = scheduling.next_free_slot(db, draft_id=d.id, only_day=day)
+        if when is None:
+            raise HTTPException(409, f"لا يوجد موعد فارغ يوم {body.date} — اختر يومًا آخر أو ارفع عدد المنشورات اليومي")
+    if when and when <= utcnow():
+        raise HTTPException(400, "اختر وقتًا في المستقبل")
+    try:
+        scheduling.schedule(db, d, when, body.targets)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return _full(db, d)
 
 
 @router.get("/{draft_id}")
@@ -370,9 +416,15 @@ class RenderBody(BaseModel):
 @router.post("/{draft_id}/render")
 async def rerender(draft_id: int, body: RenderBody, db: Session = Depends(get_db)):
     d = _get(db, draft_id)
+    if body.refresh_backgrounds and d.error and d.error.startswith("لم تُعثر"):
+        d.error = None
+    db.commit()
     await pipeline.render_draft(d.id, None, refresh_backgrounds=body.refresh_backgrounds)
     db.expire_all()
-    return _full(db, _get(db, draft_id))
+    d = _get(db, draft_id)
+    if body.refresh_backgrounds and d.error and d.error.startswith("لم تُعثر"):
+        raise HTTPException(409, d.error)
+    return _full(db, d)
 
 
 @router.get("/{draft_id}/qa")
@@ -435,6 +487,9 @@ async def publish(draft_id: int, body: PublishBody, background: BackgroundTasks,
     if when and when.tzinfo is None:
         when = when.replace(tzinfo=timezone.utc)
     if when and when > utcnow():
+        problem = scheduling.check(db, when, d.id)
+        if problem:
+            raise HTTPException(409, problem)
         d.status, d.scheduled_at = "scheduled", when
         if d.calendar_item_id:
             from ..db import CalendarItem

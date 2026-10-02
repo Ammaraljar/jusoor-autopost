@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckSquare, ChevronLeft, ChevronRight, ExternalLink, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { CheckSquare, ChevronLeft, ChevronRight, Clock, ExternalLink, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { BulkBar, Button, ErrorBox, Field, Modal, PageHead, StatusPill, useAction, useLoad, useSelection } from '../components/ui';
-import { api } from '../lib/api';
+import { api, mediaUrl } from '../lib/api';
 import { isoDay } from '../lib/format';
 import { useI18n } from '../lib/i18n';
 
@@ -33,8 +33,15 @@ export default function CalendarPage() {
   const campaigns = useLoad(() => api.get('/api/campaigns'), []);
   const [editing, setEditing] = useState(null);
   const [selectMode, setSelectMode] = useState(false);
+  const [dropDay, setDropDay] = useState(null);
+  const [movingPost, setMovingPost] = useState(null);
   const sel = useSelection(cal.data?.items);
   const [busy, run] = useAction();
+  const moveToDay = (postId, day) => run(`move-${postId}`, async () => {
+    await api.post(`/api/drafts/${postId}/schedule`, { date: day });
+    cal.reload(true);
+  }, t('saved'));
+  const plan = cal.data?.plan;
   const bulkDelete = () => run('bulk-delete', async () => {
     await api.post('/api/calendar/bulk-delete', { ids: sel.ids });
     sel.clear();
@@ -67,6 +74,12 @@ export default function CalendarPage() {
           onClick={() => { setSelectMode((m) => !m); sel.clear(); }}>{t('select')}</Button>
         <Button variant="primary" icon={Plus} onClick={() => setEditing({ date: today, time: '10:00' })}>{t('add_item')}</Button>
       </PageHead>
+      {plan && (
+        <div className="small muted" style={{ marginBottom: 8 }}>
+          {t('plan_summary')}: <b>{plan.posts_per_day}</b> {t('per_day')} · {plan.day_start}–{plan.day_end} · {t('gap')} {plan.min_gap_hours}h
+          {plan.today_slots?.length ? ` · ${plan.today_slots.join(' · ')}` : ''} — {t('drag_hint')}
+        </div>
+      )}
       {selectMode && !sel.count && <div className="banner info small">{t('calendar_select_hint')}</div>}
       <BulkBar sel={sel} busy={busy} onAction={bulkDelete} selectedLabel={t('selected')} clearLabel={t('clear_selection')}
         actions={[{ key: 'delete', label: t('delete_forever'), icon: Trash2, variant: 'danger', confirm: t('confirm_bulk_delete') }]} />
@@ -88,9 +101,21 @@ export default function CalendarPage() {
           const entry = byDay[key] || { items: [], posts: [] };
           const out = d.getMonth() !== anchor.getMonth();
           return (
-            <div key={key} className={`cal-day ${out ? 'out' : ''} ${key === today ? 'today' : ''}`}
-              onClick={() => { if (!selectMode) setEditing({ date: key, time: '10:00' }); }}>
+            <div key={key} className={`cal-day ${out ? 'out' : ''} ${key === today ? 'today' : ''} ${dropDay === key ? 'drop' : ''}`}
+              onClick={() => { if (!selectMode) setEditing({ date: key, time: '10:00' }); }}
+              onDragOver={(e) => { if (key >= today) { e.preventDefault(); setDropDay(key); } }}
+              onDragLeave={() => setDropDay((cur) => (cur === key ? null : cur))}
+              onDrop={(e) => {
+                e.preventDefault(); setDropDay(null);
+                const id = Number(e.dataTransfer.getData('text/post'));
+                if (id) moveToDay(id, key);
+              }}>
               <span className="num">{d.getDate()}</span>
+              {plan && entry.posts.filter((p) => p.status !== 'failed').length > 0 && (
+                <span className={`count-badge ${entry.posts.length >= plan.posts_per_day ? 'full' : ''}`}>
+                  {entry.posts.filter((p) => p.status !== 'failed').length}/{plan.posts_per_day}
+                </span>
+              )}
               {entry.items.map((i) => (
                 <div key={`i${i.id}`} className="chip" title={i.topic} dir="auto"
                   style={{ ...(campaignColor(i.campaign_id) ? { borderInlineStartColor: campaignColor(i.campaign_id) } : {}),
@@ -102,7 +127,9 @@ export default function CalendarPage() {
               ))}
               {entry.posts.map((p) => (
                 <div key={`p${p.id}`} className={`chip ${p.status === 'published' ? 'post' : p.status === 'failed' ? 'failed' : 'scheduled'}`}
-                  title={p.hook} dir="auto" onClick={(e) => { e.stopPropagation(); navigate(`/drafts/${p.id}`); }}>
+                  title={p.hook} dir="auto" draggable={p.status === 'scheduled'}
+                  onDragStart={(e) => { e.dataTransfer.setData('text/post', String(p.id)); e.stopPropagation(); }}
+                  onClick={(e) => { e.stopPropagation(); if (p.status === 'scheduled') setMovingPost(p); else navigate(`/drafts/${p.id}`); }}>
                   {new Date(p.at).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })} {p.hook}
                 </div>
               ))}
@@ -110,11 +137,49 @@ export default function CalendarPage() {
           );
         })}
       </div>
+      {movingPost && (
+        <MovePostModal post={movingPost} onClose={() => setMovingPost(null)}
+          onChanged={() => { setMovingPost(null); cal.reload(true); }} />
+      )}
       {editing && (
         <ItemModal item={editing} campaigns={campaigns.data || []} onClose={() => setEditing(null)}
           onChanged={() => { setEditing(null); cal.reload(true); }} />
       )}
     </>
+  );
+}
+
+function MovePostModal({ post, onClose, onChanged }) {
+  const { t } = useI18n();
+  const navigate = useNavigate();
+  const [busy, run] = useAction();
+  const local = new Date(post.at);
+  const pad = (n) => String(n).padStart(2, '0');
+  const [when, setWhen] = useState(
+    `${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(local.getDate())}T${pad(local.getHours())}:${pad(local.getMinutes())}`);
+  const move = (body) => run('move', async () => {
+    await api.post(`/api/drafts/${post.id}/schedule`, body);
+    onChanged();
+  }, t('saved'));
+  return (
+    <Modal title={t('move_post')} onClose={onClose} footer={<>
+      <Button onClick={() => navigate(`/drafts/${post.id}`)} icon={ExternalLink}>{t('open_post')}</Button>
+      <Button variant="danger" busy={busy === 'un'} onClick={() => run('un', async () => {
+        await api.post(`/api/drafts/${post.id}/unschedule`); onChanged();
+      }, t('saved'))}>{t('unschedule')}</Button>
+      <div className="spacer" />
+      <Button onClick={onClose}>{t('cancel')}</Button>
+      <Button variant="primary" busy={busy === 'move'} onClick={() => move({ scheduled_at: new Date(when).toISOString() })}>{t('save')}</Button>
+    </>}>
+      <div className="stack">
+        <div className="bold small" dir="auto">{post.hook}</div>
+        {post.cover_url && <img src={mediaUrl(post.cover_url)} alt="" style={{ width: 120, borderRadius: 10 }} />}
+        <Field label={t('when')}>
+          <input className="input ltr" type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
+        </Field>
+        <Button size="sm" icon={Clock} busy={busy === 'move'} onClick={() => move({})}>{t('next_free_slot')}</Button>
+      </div>
+    </Modal>
   );
 }
 

@@ -6,6 +6,13 @@ import { useI18n } from '../lib/i18n';
 
 const COLOR_KEYS = ['navy', 'gold', 'goldLight', 'cardTitle', 'cardText'];
 
+const PREVIEWS = [
+  { key: 'v0', kind: 'cover', variant: 0 }, { key: 'v1', kind: 'content', variant: 1 },
+  { key: 'v2', kind: 'content', variant: 2 }, { key: 'v3', kind: 'content', variant: 3 },
+  { key: 'v4', kind: 'cover', variant: 4 }, { key: 'v5', kind: 'content', variant: 5 },
+  { key: 'cta', kind: 'cta' },
+];
+
 export default function Brand() {
   const { t } = useI18n();
   const brands = useLoad(() => api.get('/api/brands'), []);
@@ -59,11 +66,9 @@ function BrandForm({ brand, onChanged }) {
   const bufferIds = f.publish_config.buffer_channel_ids || [];
 
   const refreshPreview = () => run('preview', async () => {
-    const out = {};
-    for (const kind of ['cover', 'content', 'cta']) {
-      out[kind] = (await api.post(`/api/brands/${brand.id}/preview`, { kind })).image;
-    }
-    setPreviews(out);
+    // Six JUSOOR colour sets / card shapes + the last (call-to-action) slide, rendered in parallel
+    const jobs = PREVIEWS.map((p) => api.post(`/api/brands/${brand.id}/preview`, p).then((r) => [p.key, r.image]));
+    setPreviews(Object.fromEntries(await Promise.all(jobs)));
   });
   useEffect(() => { refreshPreview(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -133,7 +138,7 @@ function BrandForm({ brand, onChanged }) {
             </Field>
             <Field label={t('card_style')}>
               <select className="select" value={f.card_style} onChange={(e) => set('card_style', e.target.value)}>
-                {['frosted', 'solid', 'minimal'].map((s) => <option key={s} value={s}>{t(s)}</option>)}
+                {['frosted', 'solid', 'band', 'side', 'ribbon', 'outline', 'minimal'].map((s) => <option key={s} value={s}>{t(`card_${s}`)}</option>)}
               </select>
             </Field>
           </div>
@@ -211,9 +216,13 @@ function BrandForm({ brand, onChanged }) {
             <Button size="sm" icon={RefreshCw} busy={busy === 'preview'} onClick={refreshPreview}>{t('refresh_preview')}</Button>
           </div>
           <div className="preview-grid">
-            {['cover', 'content', 'cta'].map((k) => (
-              <div className="ph" key={k}>{previews[k] ? <img src={previews[k]} alt={k} /> : <Spinner />}</div>
+            {PREVIEWS.filter((p) => p.variant !== undefined).map((p) => (
+              <div className="ph" key={p.key}>{previews[p.key] ? <img src={previews[p.key]} alt={p.key} /> : <Spinner />}</div>
             ))}
+          </div>
+          <div className="xs muted" style={{ margin: '10px 0 6px' }}>{t('cta_preview')}</div>
+          <div className="preview-grid">
+            <div className="ph">{previews.cta ? <img src={previews.cta} alt="cta" /> : <Spinner />}</div>
           </div>
           <p className="xs muted" style={{ marginTop: 8 }}>{t('preview_hint')} · {t('save')} → {t('refresh_preview')}</p>
         </div>

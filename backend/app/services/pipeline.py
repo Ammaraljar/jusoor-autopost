@@ -200,8 +200,8 @@ async def draft_from_article(article_id: int) -> int | None:
             draft.status = "rejected"
             draft.reject_reason = f"صلة منخفضة بجمهور السفر ({post.relevance}/10): {post.relevance_reason}"
             return draft_id
-    await make_variants(draft_id)
-    await render_draft(draft_id)
+    # Platform texts (AI) and slide images (photos + rendering) are independent: do both at once
+    await asyncio.gather(make_variants(draft_id), render_draft(draft_id))
     return draft_id
 
 
@@ -228,8 +228,8 @@ async def draft_from_calendar(item_id: int) -> int | None:
         return draft_id
     with session_scope() as db:
         _apply_post(db.get(Draft, draft_id), post)
-    await make_variants(draft_id)
-    await render_draft(draft_id)
+    # Platform texts (AI) and slide images (photos + rendering) are independent: do both at once
+    await asyncio.gather(make_variants(draft_id), render_draft(draft_id))
     return draft_id
 
 
@@ -269,6 +269,14 @@ async def make_variants(draft_id: int) -> None:
         draft = db.get(Draft, draft_id)
         if draft is not None:
             draft.variants = variants.finalize(draft, texts, gen.get("credit_source", True), draft.variants)
+
+
+def _fail_soft(draft_id: int, message: str) -> None:
+    """Report a problem on the draft without failing it."""
+    with session_scope() as db:
+        d = db.get(Draft, draft_id)
+        if d:
+            d.error = message[:2000]
 
 
 def _fail(draft_id: int, message: str) -> None:
@@ -327,11 +335,16 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
 
     backgrounds = []
     if needs_bg:
-        needed = max(1, sum(1 for s in slides if s[1] != "cta"))
+        needed = max(1, sum(1 for s in slides if s[1] != "cta")) + 1        # +1: the last slide gets its own photo
+        used = {s[5] for s in slides if s[5]} if refresh_backgrounds else set()
         # Network calls run in a worker thread so the server keeps answering while photos download
-        backgrounds = await asyncio.to_thread(images.collect_backgrounds, article_image, keywords, mode, needed)
-        if not backgrounds and mode != "source" and article_image:
+        backgrounds = await asyncio.to_thread(images.collect_backgrounds, article_image, keywords, mode, needed,
+                                              used, refresh_backgrounds)
+        if not backgrounds and mode != "source" and article_image and not refresh_backgrounds:
             backgrounds = await asyncio.to_thread(images.collect_backgrounds, article_image, keywords, "source", 1)
+        if refresh_backgrounds and not backgrounds:
+            _fail_soft(draft_id, "لم تُعثر على صور جديدة — أضف مفتاح Pexels في الإعدادات أو غيّر كلمات البحث عن الصور")
+            return
 
     # Colours: always a JUSOOR identity set (navy + gold shades), chosen once per post so all
     # slides match — it suits the cover photo and differs from the previous posts.
@@ -352,21 +365,31 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
     total = len(slides)
     results: dict[int, dict] = {}
     thumb_url = None
-    try:
-        bg_index = 0
-        for slide_id, kind, heading, body, pos, bg_url, old_key in slides:
-            if positions is not None and pos not in positions and not needs_bg:
-                continue
-            bg = None
-            if bg_url and not refresh_backgrounds:
+
+    # 1) decide each slide's photo (cheap), 2) download + render all slides in parallel
+    plan = []
+    bg_index = 1 if len(backgrounds) > 1 else 0          # backgrounds[0] is the cover
+    for slide_id, kind, heading, body, pos, bg_url, old_key in slides:
+        if positions is not None and pos not in positions and not needs_bg:
+            continue
+        chosen = None
+        if not (bg_url and not refresh_backgrounds) and backgrounds:
+            if kind == "cover":
+                chosen = backgrounds[0]
+            elif kind == "cta":
+                chosen = backgrounds[-1]                     # a different photo from the cover when possible
+            else:
+                chosen = backgrounds[bg_index % len(backgrounds)]
+                bg_index += 1
+        plan.append((slide_id, kind, heading, body, pos, bg_url, old_key, chosen))
+
+    gate = asyncio.Semaphore(3)
+
+    async def one(slide_id, kind, heading, body, pos, bg_url, old_key, chosen):
+        async with gate:
+            bg = chosen
+            if bg is None and bg_url:
                 # keep the slide's own photo (e.g. one the user uploaded)
-                data = await asyncio.to_thread(images.download_image, bg_url)
-                bg = {"url": bg_url, "bytes": data, "hash": hashlib.sha1(data).hexdigest()} if data else None
-            if bg is None and backgrounds:
-                bg = backgrounds[0] if kind in ("cover", "cta") else backgrounds[bg_index % len(backgrounds)]
-                if kind == "content":
-                    bg_index += 1
-            elif bg is None and bg_url:
                 data = await asyncio.to_thread(images.download_image, bg_url)
                 bg = {"url": bg_url, "bytes": data, "hash": hashlib.sha1(data).hexdigest()} if data else None
             spec = SlideSpec(kind=kind, heading=heading, body=body, position=pos, total=total,
@@ -379,13 +402,17 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
             jpeg = await renderer.render(spec, style)
             key = f"generated/draft-{draft_id}-s{pos}-{uuid.uuid4().hex[:8]}.jpg"
             url = await asyncio.to_thread(storage.save_bytes, key, jpeg)
-            if pos == 0:
-                thumb_url = await asyncio.to_thread(_save_thumb, key, jpeg)
+            thumb = await asyncio.to_thread(_save_thumb, key, jpeg) if pos == 0 else None
             if old_key:
-                storage.delete(old_key)
-            results[slide_id] = {"image_key": key, "image_url": url, "width": 1080, "height": 1350,
-                                 "background_url": bg["url"] if bg else bg_url,
-                                 "image_hash": bg["hash"] if bg else None}
+                await asyncio.to_thread(storage.delete, old_key)
+            return slide_id, thumb, {"image_key": key, "image_url": url, "width": 1080, "height": 1350,
+                                     "background_url": bg["url"] if bg else bg_url,
+                                     "image_hash": bg["hash"] if bg else None}
+
+    try:
+        for slide_id, thumb, data in await asyncio.gather(*(one(*p) for p in plan)):
+            results[slide_id] = data
+            thumb_url = thumb_url or thumb
     except Exception as exc:  # noqa: BLE001
         log.exception("render failed")
         _fail(draft_id, f"فشل تصميم الصور: {exc}")

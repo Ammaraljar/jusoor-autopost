@@ -291,3 +291,9 @@ html[dir="ltr"] .toasts { transform: translateX(-50%); }
 .draft-card.picked { outline: 3px solid var(--gold); outline-offset: -3px; }
 .select-row { display: flex; align-items: center; gap: 12px; margin: 4px 0 8px; }
 .art-thumb { width: 64px; height: 64px; border-radius: 10px; object-fit: cover; flex: none; background: var(--surface-2); }
+.bulk-bar .btn-gold { background: var(--gold); color: var(--navy); border-color: var(--gold); }
+.cal-day.drop { outline: 2px dashed var(--gold); outline-offset: -3px; background: var(--gold-tint); }
+.cal-day { position: relative; }
+.cal-day .count-badge { position: absolute; top: 8px; inset-inline-end: 8px; font-size: 11px; font-weight: 800; color: var(--muted); }
+.cal-day .count-badge.full { color: var(--danger); }
+.chip[draggable="true"] { cursor: grab; }

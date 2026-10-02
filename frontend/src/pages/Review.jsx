@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Check, ChevronDown, ChevronLeft, Images, Lightbulb, RefreshCw, RotateCcw, Search, Sparkles, Trash2, X } from 'lucide-react';
+import { CalendarClock, Check, ChevronDown, ChevronLeft, Images, Lightbulb, RefreshCw, RotateCcw, Search, Sparkles, Trash2, X } from 'lucide-react';
 import { BulkBar, Button, Empty, ErrorBox, Field, Modal, PageHead, SelectAll, Spinner, StatusPill, useAction, useLoad, useSelection } from '../components/ui';
 import { api, mediaUrl } from '../lib/api';
 import { dayBucket, fmtDate, relative } from '../lib/format';
@@ -50,9 +50,13 @@ export default function Review() {
     const res = await api.post('/api/drafts/bulk', { ids: sel.ids, action });
     sel.clear();
     await Promise.all([drafts.reload(true), counts.reload(true)]);
+    if (res.skipped) {
+      throw new Error(`${t('done')}: ${res.done} · ${t('skipped')}: ${res.skipped}${res.reasons?.length ? ` — ${res.reasons[0]}` : ''}`);
+    }
     return res;
   }, t('done'));
   const bulkActions = [
+    { key: 'auto_schedule', label: t('auto_schedule'), icon: CalendarClock, variant: 'gold' },
     { key: 'approve', label: t('approve'), icon: Check },
     { key: 'reject', label: t('reject'), icon: X },
     { key: 'restore', label: t('restore'), icon: RotateCcw },

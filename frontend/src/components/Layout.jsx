@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { Suspense } from 'react';
+import { Loading } from './ui';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { BarChart3, CalendarDays, Globe, Inbox, Languages, LogOut, Menu, Moon, Palette, Rss, Settings, Sun,
   SunMoon, Target } from 'lucide-react';
@@ -71,7 +73,7 @@ export default function Layout() {
         </div>
       </aside>
       {open && <div className="modal-back" style={{ zIndex: 55 }} onClick={() => setOpen(false)} />}
-      <main className="main"><Outlet /></main>
+      <main className="main"><Suspense fallback={<Loading />}><Outlet /></Suspense></main>
     </div>
   );
 }

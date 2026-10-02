@@ -129,7 +129,9 @@ _VARIANTS = [
     ("amber",    "ذهبي كهرماني",   0.8, (6, 1.00, 0.17), (-6, 0.72, 0.50), ("ivory", 0.960)),
 ]
 VARIANT_IDS = [v[0] for v in _VARIANTS]
-_SOLID = {"midnight", "ocean", "amber"}     # navy card with a gold edge; the others use a light card
+# Six shapes, one per colour set, so consecutive posts look clearly different
+CARD_SHAPES = {"classic": "frosted", "midnight": "solid", "royal": "band", "ocean": "side",
+               "sand": "ribbon", "amber": "outline"}
 
 
 def _hls_of(hex_colour: str) -> tuple[float, float, float]:
@@ -165,7 +167,7 @@ def brand_variants(navy: str = BRAND_NAVY, gold: str = BRAND_GOLD) -> list[dict[
             "navy": dark, "gold": accent, "goldLight": accent_light,
             "cardBg": f"rgba({r},{g},{b},0.94)", "cardBgHex": card_bg_hex,
             "cardTitle": dark, "cardHeading": card_heading, "cardText": card_text,
-            "cardStyle": "solid" if vid in _SOLID else "frosted",
+            "cardStyle": CARD_SHAPES.get(vid, "frosted"),
         })
     return out
 

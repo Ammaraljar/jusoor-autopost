@@ -136,6 +136,42 @@ export default function SettingsPage() {
               <input type="checkbox" checked={p.first_comment_enabled} onChange={(e) => set('publishing', 'first_comment_enabled', e.target.checked)} />
               {t('first_comment_enabled')}
             </label>
+            <div className="divider" />
+            <b className="small">{t('daily_plan')}</b>
+            <div className="grid grid-2">
+              <Field label={t('posts_per_day')} hint={t('posts_per_day_hint')}>
+                <input className="input" type="number" min={1} max={24} value={p.posts_per_day ?? 5}
+                  onChange={(e) => set('publishing', 'posts_per_day', Number(e.target.value))} />
+              </Field>
+              <Field label={t('min_gap_hours')}>
+                <input className="input" type="number" min={0} max={12} step={0.5} value={p.min_gap_hours ?? 2}
+                  onChange={(e) => set('publishing', 'min_gap_hours', Number(e.target.value))} />
+              </Field>
+              <Field label={t('day_start')}>
+                <input className="input ltr" type="time" value={p.day_start || '09:00'} onChange={(e) => set('publishing', 'day_start', e.target.value)} />
+              </Field>
+              <Field label={t('day_end')}>
+                <input className="input ltr" type="time" value={p.day_end || '22:00'} onChange={(e) => set('publishing', 'day_end', e.target.value)} />
+              </Field>
+              <Field label={t('timezone')}>
+                <select className="select ltr" value={p.timezone || 'Asia/Kuala_Lumpur'} onChange={(e) => set('publishing', 'timezone', e.target.value)}>
+                  {['Asia/Kuala_Lumpur', 'Asia/Riyadh', 'Asia/Dubai', 'Asia/Jakarta', 'Asia/Bangkok', 'Europe/London', 'UTC'].map((z) => <option key={z}>{z}</option>)}
+                </select>
+              </Field>
+            </div>
+            <div className="divider" />
+            <b className="small">{t('automation')}</b>
+            <label className="check">
+              <input type="checkbox" checked={!!p.auto_schedule_approved} onChange={(e) => set('publishing', 'auto_schedule_approved', e.target.checked)} />
+              {t('auto_schedule_approved')}
+            </label>
+            <Field label={t('auto_approve_min_relevance')} hint={t('auto_approve_hint')}>
+              <select className="select" value={p.auto_approve_min_relevance ?? 0}
+                onChange={(e) => set('publishing', 'auto_approve_min_relevance', Number(e.target.value))}>
+                <option value={0}>{t('off')}</option>
+                {[7, 8, 9, 10].map((n) => <option key={n} value={n}>{n}/10 {t('or_more')}</option>)}
+              </select>
+            </Field>
             <div><Button variant="primary" icon={Save} busy={busy === 'publishing'} onClick={() => save('publishing')}>{t('save')}</Button></div>
           </div>
         </div>

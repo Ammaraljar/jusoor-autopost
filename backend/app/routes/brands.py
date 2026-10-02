@@ -29,7 +29,7 @@ class BrandIn(BaseModel):
     colors: dict[str, str] | None = None
     font_family: str | None = None
     logo_placement: str | None = Field(None, pattern="^(top-left|top-right)$")
-    card_style: str | None = Field(None, pattern="^(frosted|solid|minimal)$")
+    card_style: str | None = Field(None, pattern="^(frosted|solid|band|side|ribbon|outline|minimal)$")
     color_mode: str | None = Field(None, pattern="^(auto|brand)$")
     logo_backdrop: str | None = Field(None, pattern="^(auto|always|never)$")
     cta_text: str | None = None
@@ -125,6 +125,7 @@ def remove_logo(bid: int, db: Session = Depends(get_db)):
 class PreviewIn(BaseModel):
     kind: str = "cover"
     language: str = "ar"
+    variant: int | None = None      # 0-5: one of the six JUSOOR colour sets / card shapes
 
 
 @router.post("/{bid}/preview")
@@ -140,11 +141,15 @@ async def preview(bid: int, body: PreviewIn, db: Session = Depends(get_db)):
     # Each preview uses a different sample photo (bright sky → logo plate, sea, sunset) and a
     # different JUSOOR colour set, to show how posts vary while staying inside the identity.
     background = colours.sample_background(body.kind)
-    if (b.color_mode or "auto") == "auto":
+    navy = (b.colors or {}).get("navy") or colours.BRAND_NAVY
+    gold = (b.colors or {}).get("gold") or colours.BRAND_GOLD
+    if body.variant is not None:
+        background = colours.sample_background(["cover", "content", "cta"][body.variant % 3])
+        if (b.color_mode or "auto") == "auto":
+            style.palette = colours.brand_variants(navy, gold)[body.variant % 6]
+    elif (b.color_mode or "auto") == "auto":
         others = {"cover": [], "content": ["classic", "royal"], "cta": ["classic", "ocean"]}
-        style.palette = colours.pick_variant(background, others.get(body.kind, []),
-                                             (b.colors or {}).get("navy") or colours.BRAND_NAVY,
-                                             (b.colors or {}).get("gold") or colours.BRAND_GOLD)
+        style.palette = colours.pick_variant(background, others.get(body.kind, []), navy, gold)
     plate = body.kind != "cta" and colours.logo_needs_plate(background, b.logo_placement or "top-left",
                                                             body.language == "ar")
     jpeg = await renderer.render(SlideSpec(kind=body.kind, heading=heading, body=text, position=0, total=6,

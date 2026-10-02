@@ -96,8 +96,8 @@ def test_publish_due_marks_partial_success(client, monkeypatch):
     assert {l["platform"] for l in d["logs"]} == {"instagram", "facebook"}
     by_platform = {r.platforms[0]: r for r in FakePublisher.calls[-2:]}
     ig, fb = by_platform["instagram"], by_platform["facebook"]
-    assert len(ig.image_urls) == 6 and all(u.startswith("https://autopost.example.com/media/") for u in ig.image_urls)
-    assert len(fb.image_urls) == 1                     # Facebook: one image, its own text
+    assert len(ig.image_urls) == 5 and all(u.startswith("https://autopost.example.com/media/") for u in ig.image_urls)
+    assert len(fb.image_urls) == 4                     # Facebook: 4 images, its own text
     assert "#" in ig.caption
 
 
