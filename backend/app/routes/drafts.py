@@ -240,7 +240,7 @@ def schedule_draft(draft_id: int, body: ScheduleBody, db: Session = Depends(get_
 
 
 class DialectBody(BaseModel):
-    dialect: str = Field(pattern="^(msa|gulf|maghreb|algeria)$")
+    dialect: str = Field(pattern="^(fusha|msa|egyptian|gulf|maghreb|algeria)$")
 
 
 @router.post("/{draft_id}/dialect-copy")

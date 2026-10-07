@@ -24,7 +24,7 @@ def new_brand(org: Organization, name: str | None = None, logo_path: str | None 
     profile = industries.get(org.industry)
     return Brand(org_id=org.id, name=name or org.name, handle="", website="",
                  voice="", colors=dict(profile.get("colors") or {}),
-                 cta_text=profile["cta"] if org.language == "ar" else profile["cta_en"],
+                 cta_text=industries.cta(profile, org.language),
                  card_theme="magazine", design_seed=random.randint(1, 10_000), is_default=True,
                  logo_path=logo_path)
 
@@ -34,7 +34,7 @@ def create_org(db: Session, name: str, industry: str = "general", language: str 
                owner_name: str = "") -> tuple[Organization, User | None]:
     if industry not in industries.INDUSTRIES:
         industry = "general"
-    org = Organization(name=name.strip(), industry=industry, language=language if language in ("ar", "en") else "ar",
+    org = Organization(name=name.strip(), industry=industry, language=language if language in industries.LANGUAGES else "ar",
                        dialect=dialect)
     db.add(org)
     db.flush()
@@ -80,6 +80,13 @@ def bootstrap() -> None:
                 if own and not db.get(AppSetting, f"credentials:org{org.id}"):
                     db.add(AppSetting(key=f"credentials:org{org.id}", value=own))
             log.info("multi-company mode: existing data moved to company #%s", org.id)
+        # the Algerian dialect was retired: such settings move to Moroccan (Maghrebi)
+        for row in db.scalars(select(AppSetting)):
+            if isinstance(row.value, dict) and row.value.get("dialect") == "algeria":
+                row.value = {**row.value, "dialect": "maghreb"}
+        db.execute(update(Organization).where(Organization.dialect == "algeria").values(dialect="maghreb"))
+        db.execute(update(Source).where(Source.dialect == "algeria").values(dialect="maghreb")
+                   .execution_options(all_orgs=True))
         # brands without a design seed get one (unique look per company)
         for b in db.scalars(select(Brand).where(Brand.design_seed.is_(None)).execution_options(all_orgs=True)):
             b.design_seed = random.randint(1, 10_000)

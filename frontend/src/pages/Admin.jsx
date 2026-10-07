@@ -4,9 +4,8 @@ import KeysCard from '../components/KeysCard';
 import { Button, ErrorBox, Field, Loading, Modal, PageHead, useAction, useLoad } from '../components/ui';
 import { api, setActingOrg } from '../lib/api';
 import { fmtDate } from '../lib/format';
-import { useI18n } from '../lib/i18n';
+import { DIALECTS, LANGUAGES, useI18n } from '../lib/i18n';
 
-const DIALECTS = ['msa', 'gulf', 'maghreb', 'algeria'];
 
 function NewOrgModal({ industries, onClose, onSaved }) {
   const { t, lang } = useI18n();
@@ -33,12 +32,12 @@ function NewOrgModal({ industries, onClose, onSaved }) {
         <div className="grid grid-2">
           <Field label={t('industry')}>
             <select className="select" value={f.industry} onChange={(e) => set('industry', e.target.value)}>
-              {industries.map((i) => <option key={i.id} value={i.id}>{lang === 'ar' ? i.ar : i.en}</option>)}
+              {industries.map((i) => <option key={i.id} value={i.id}>{i[lang] || i.en}</option>)}
             </select>
           </Field>
           <Field label={t('content_language')}>
             <select className="select" value={f.language} onChange={(e) => set('language', e.target.value)}>
-              <option value="ar">العربية</option><option value="en">English</option>
+              {LANGUAGES.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
             </select>
           </Field>
           {f.language === 'ar' && (
@@ -75,7 +74,7 @@ export default function Admin() {
   if (orgs.loading && !orgs.data) return <Loading />;
   const label = (id) => {
     const i = industries.find((x) => x.id === id);
-    return i ? (lang === 'ar' ? i.ar : i.en) : id;
+    return i ? (i[lang] || i.en) : id;
   };
   const patch = (o, body) => run(`p-${o.id}`, async () => { await api.patch(`/api/admin/orgs/${o.id}`, body); orgs.reload(true); }, t('saved'));
   const open = (o) => { setActingOrg(o.id); window.location.assign('/'); };

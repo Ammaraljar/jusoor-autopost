@@ -4,7 +4,7 @@ import { BulkBar, Button, Empty, ErrorBox, Field, Loading, Modal, PageHead, Sele
 import { api } from '../lib/api';
 import ScrapeModal from '../components/ScrapeModal';
 import { fmtDateTime, relative } from '../lib/format';
-import { useI18n } from '../lib/i18n';
+import { DIALECTS, useI18n } from '../lib/i18n';
 
 const EMPTY = {
   name: '', kind: 'website', base_url: '', feed_url: '', listing_urls: [], link_pattern: '', link_selector: '',
@@ -217,7 +217,7 @@ function SourceModal({ initial, onClose, onSaved }) {
           <Field label={t('dialect')}>
             <select className="select" value={f.dialect || ''} onChange={(e) => set('dialect', e.target.value)}>
               <option value="">{t('dialect_default')}</option>
-              {['msa', 'gulf', 'maghreb', 'algeria'].map((x) => <option key={x} value={x}>{t(`dialect_${x}`)}</option>)}
+              {DIALECTS.map((x) => <option key={x} value={x}>{t(`dialect_${x}`)}</option>)}
             </select>
           </Field>
         </div>

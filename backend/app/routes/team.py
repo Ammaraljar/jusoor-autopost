@@ -28,7 +28,7 @@ def my_org(db: Session = Depends(get_db)):
 class OrgPatch(BaseModel):
     name: str | None = Field(None, min_length=2, max_length=160)
     industry: str | None = None
-    language: str | None = Field(None, pattern="^(ar|en)$")
+    language: str | None = Field(None, pattern="^(ar|en|ms|fr)$")
     dialect: str | None = None
     apply_industry_defaults: bool = False
 
@@ -142,7 +142,7 @@ def all_orgs(db: Session = Depends(get_db)):
 class NewOrg(BaseModel):
     name: str = Field(min_length=2, max_length=160)
     industry: str = "general"
-    language: str = Field("ar", pattern="^(ar|en)$")
+    language: str = Field("ar", pattern="^(ar|en|ms|fr)$")
     dialect: str | None = None
     owner_email: str = Field(min_length=5)
     owner_name: str = ""

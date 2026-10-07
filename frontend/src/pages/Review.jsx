@@ -5,7 +5,7 @@ import { BulkBar, Button, Empty, ErrorBox, Field, Modal, PageHead, SelectAll, Sp
 import { api, mediaUrl } from '../lib/api';
 import ScrapeModal from '../components/ScrapeModal';
 import { dayBucket, fmtDate, relative } from '../lib/format';
-import { useI18n } from '../lib/i18n';
+import { DIALECTS, useI18n } from '../lib/i18n';
 
 const TABS = ['pending_review', 'all', 'approved', 'scheduled', 'published', 'failed', 'rejected'];
 const BUCKETS = ['today', 'yesterday', 'week', 'older'];
@@ -215,7 +215,7 @@ function ManualModal({ onClose, onDone }) {
         <Field label={t('dialect')}>
           <select className="select" value={dialect} onChange={(e) => setDialect(e.target.value)}>
             <option value="">{t('dialect_default')}</option>
-            {['msa', 'gulf', 'maghreb', 'algeria'].map((x) => <option key={x} value={x}>{t(`dialect_${x}`)}</option>)}
+            {DIALECTS.map((x) => <option key={x} value={x}>{t(`dialect_${x}`)}</option>)}
           </select>
         </Field>
         {brands.data?.length > 1 && (

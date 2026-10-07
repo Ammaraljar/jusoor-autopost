@@ -3,9 +3,8 @@ import { Building2, LogIn } from 'lucide-react';
 import { Button, Field } from '../components/ui';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { useI18n } from '../lib/i18n';
+import { DIALECTS, LANGUAGES, useI18n } from '../lib/i18n';
 
-const DIALECTS = ['msa', 'gulf', 'maghreb', 'algeria'];
 
 function SignupForm({ onBack }) {
   const { signUp } = useAuth();
@@ -38,14 +37,13 @@ function SignupForm({ onBack }) {
       </Field>
       <Field label={t('industry')} hint={t('industry_hint')}>
         <select className="select" value={form.industry} onChange={(e) => set('industry', e.target.value)}>
-          {industries.map((i) => <option key={i.id} value={i.id}>{lang === 'ar' ? i.ar : i.en}</option>)}
+          {industries.map((i) => <option key={i.id} value={i.id}>{i[lang] || i.en}</option>)}
         </select>
       </Field>
       <div className="grid grid-2">
         <Field label={t('content_language')}>
           <select className="select" value={form.language} onChange={(e) => set('language', e.target.value)}>
-            <option value="ar">العربية</option>
-            <option value="en">English</option>
+            {LANGUAGES.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
           </select>
         </Field>
         {form.language === 'ar' && (
@@ -104,9 +102,10 @@ export default function Login() {
   };
 
   const langToggle = (
-    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setLang(lang === 'ar' ? 'en' : 'ar')}>
-      {t('language')}
-    </button>
+    <select className="select" style={{ maxWidth: 200, alignSelf: 'center' }} value={lang}
+      onChange={(e) => setLang(e.target.value)} aria-label={t('ui_language')}>
+      {LANGUAGES.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
+    </select>
   );
 
   if (signup) {

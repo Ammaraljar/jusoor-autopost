@@ -72,7 +72,7 @@ def _trim(text: str, limit: int) -> str:
 def _credit_line(draft, credit: bool) -> str:
     if not (credit and draft.origin == "source" and draft.source_name):
         return ""
-    label = {"ar": "المصدر", "en": "Source", "fr": "Source"}.get(draft.language, "Source")
+    label = {"ar": "المصدر", "en": "Source", "fr": "Source", "ms": "Sumber"}.get(draft.language, "Source")
     return f"{label}: {draft.source_name}"
 
 

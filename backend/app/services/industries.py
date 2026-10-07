@@ -59,10 +59,10 @@ INDUSTRIES: dict[str, dict[str, Any]] = {
         "colors": {"navy": "#3B1F14", "gold": "#E9A23B"},
     },
     "education": {
-        "ar": "المدارس والتعليم والجامعات", "en": "Schools, training & universities",
-        "brand_type": "educational institution (school, training centre or university)",
-        "audience": {"ar": "طلاب وأولياء أمور ومهنيون يبحثون عن تعليم وتدريب موثوق",
-                     "en": "students, parents and professionals looking for trusted education and training"},
+        "ar": "المدارس والجامعات والتعليم", "en": "Schools & universities",
+        "brand_type": "educational institution (school, institute or university)",
+        "audience": {"ar": "طلاب وأولياء أمور يبحثون عن تعليم موثوق",
+                     "en": "students and parents looking for trusted education"},
         "objective": "build credibility, show outcomes and drive enrolments",
         "value": "a study tip, admission dates and steps, programme benefits, career outcomes, student success",
         "relevance": "education, learning, admissions, scholarships, training and careers",
@@ -149,6 +149,31 @@ INDUSTRIES: dict[str, dict[str, Any]] = {
         "cta": "سجّل مقعدك الآن", "cta_en": "Register your seat now",
         "colors": {"navy": "#1A1446", "gold": "#F5B700"},
     },
+    "training": {
+        "ar": "التدريب والتأهيل", "en": "Training & professional development",
+        "brand_type": "training and professional development provider",
+        "audience": {"ar": "موظفون ومهنيون ومؤسسات يبحثون عن تطوير المهارات وشهادات معتمدة",
+                     "en": "professionals, teams and organisations looking to build skills and earn accredited certificates"},
+        "objective": "show expertise and outcomes, build credibility and fill training programmes",
+        "value": "a skill tip, what participants will be able to do, accreditation, programme dates and format, career impact",
+        "relevance": "skills, training, professional development, certifications, leadership and the workplace",
+        "tone": "professional", "content_type": "educational", "image_keywords": "training workshop professionals",
+        "cta": "سجّل في البرنامج الآن", "cta_en": "Register for the programme now",
+        "colors": {"navy": "#0E3B43", "gold": "#E0A526"},
+    },
+    "nonprofit": {
+        "ar": "المنظمات غير الربحية", "en": "Non-profit organisations",
+        "brand_type": "non-profit / charitable organisation",
+        "audience": {"ar": "متبرعون ومتطوعون وشركاء ومجتمع يهتم بالأثر الإنساني",
+                     "en": "donors, volunteers, partners and a community that cares about impact"},
+        "objective": "show real impact, build trust and move people to donate, volunteer or share",
+        "value": "a real story, the impact in numbers, the need, how to help, transparency about results",
+        "relevance": "the cause, community, humanitarian work, volunteering, campaigns and partnerships",
+        "tone": "emotional", "content_type": "storytelling", "image_keywords": "community volunteers people helping",
+        "cta": "كن جزءًا من الأثر — تبرّع أو تطوّع", "cta_en": "Be part of the impact — donate or volunteer",
+        "colors": {"navy": "#123B2E", "gold": "#F2A541"},
+        "rules": "Be respectful and dignified with people in need; no guilt-tripping, no exaggerated numbers.",
+    },
     "general": {
         "ar": "مجال آخر / عام", "en": "Other / general business",
         "brand_type": "business",
@@ -162,8 +187,44 @@ INDUSTRIES: dict[str, dict[str, Any]] = {
     },
 }
 
-LANGUAGES = {"ar": "العربية", "en": "English"}
-ENGLISH_STYLES = {"en": "Standard English"}
+LANGUAGES = {"ar": "العربية", "en": "English", "ms": "Bahasa Melayu", "fr": "Français"}
+
+# Labels and calls to action in Malay and French; card design family for each field
+EXTRA: dict[str, dict[str, str]] = {
+    "travel": {"ms": "Pelancongan & perjalanan", "fr": "Voyage & tourisme", "design": "travel",
+               "cta_ms": "Rancang percutian anda bersama kami", "cta_fr": "Planifiez votre prochain voyage avec nous"},
+    "news": {"ms": "Berita & media", "fr": "Actualités & médias", "design": "news",
+             "cta_ms": "Ikuti kami untuk berita terkini", "cta_fr": "Suivez-nous pour l’actualité"},
+    "tech": {"ms": "Teknologi & perisian", "fr": "Technologie & logiciels", "design": "tech",
+             "cta_ms": "Hubungi kami untuk penyelesaian teknologi", "cta_fr": "Parlons de la bonne solution pour vous"},
+    "restaurants": {"ms": "Restoran & kafe", "fr": "Restaurants & cafés", "design": "food",
+                    "cta_ms": "Tempah meja atau pesan sekarang", "cta_fr": "Réservez ou commandez maintenant"},
+    "education": {"ms": "Sekolah & universiti", "fr": "Écoles & universités", "design": "education",
+                  "cta_ms": "Daftar sekarang", "cta_fr": "Inscrivez-vous dès maintenant"},
+    "training": {"ms": "Latihan & pembangunan profesional", "fr": "Formation & développement professionnel",
+                 "design": "training", "cta_ms": "Daftar program sekarang", "cta_fr": "Inscrivez-vous au programme"},
+    "nonprofit": {"ms": "Organisasi bukan untung", "fr": "Associations & ONG", "design": "nonprofit",
+                  "cta_ms": "Jadi sebahagian daripada impak — derma atau jadi sukarelawan",
+                  "cta_fr": "Participez — faites un don ou devenez bénévole"},
+    "ecommerce": {"ms": "Kedai dalam talian", "fr": "E-commerce", "design": "retail",
+                  "cta_ms": "Pesan sekarang — penghantaran pantas", "cta_fr": "Commandez maintenant — livraison rapide"},
+    "realestate": {"ms": "Hartanah", "fr": "Immobilier", "design": "luxury",
+                   "cta_ms": "Tempah lawatan hari ini", "cta_fr": "Réservez une visite"},
+    "fashion": {"ms": "Fesyen", "fr": "Mode", "design": "fashion",
+                "cta_ms": "Terokai koleksi", "cta_fr": "Découvrez la collection"},
+    "health": {"ms": "Kesihatan & klinik", "fr": "Santé & cliniques", "design": "health",
+               "cta_ms": "Tempah janji temu anda", "cta_fr": "Prenez rendez-vous"},
+    "beauty": {"ms": "Kecantikan & salun", "fr": "Beauté & salons", "design": "beauty",
+               "cta_ms": "Tempah sesi anda", "cta_fr": "Réservez votre séance"},
+    "automotive": {"ms": "Automotif", "fr": "Automobile", "design": "auto",
+                   "cta_ms": "Tempah pandu uji", "cta_fr": "Réservez un essai"},
+    "events": {"ms": "Acara & persidangan", "fr": "Événements & conférences", "design": "events",
+               "cta_ms": "Daftar tempat anda sekarang", "cta_fr": "Réservez votre place"},
+    "general": {"ms": "Perniagaan umum", "fr": "Autre / activité générale", "design": "general",
+                "cta_ms": "Hubungi kami hari ini", "cta_fr": "Contactez-nous aujourd’hui"},
+}
+for _k, _v in EXTRA.items():
+    INDUSTRIES[_k].update(_v)
 
 
 def get(industry: str | None) -> dict[str, Any]:
@@ -171,11 +232,24 @@ def get(industry: str | None) -> dict[str, Any]:
 
 
 def options() -> list[dict[str, str]]:
-    return [{"id": k, "ar": v["ar"], "en": v["en"]} for k, v in INDUSTRIES.items()]
+    return [{"id": k, "ar": v["ar"], "en": v["en"], "ms": v["ms"], "fr": v["fr"]} for k, v in INDUSTRIES.items()]
+
+
+def audience(profile: dict[str, Any], language: str) -> str:
+    return profile["audience"]["ar" if language == "ar" else "en"]
+
+
+def cta(profile: dict[str, Any], language: str) -> str:
+    return profile["cta"] if language == "ar" else profile.get(f"cta_{language}") or profile["cta_en"]
+
+
+def label(industry: str | None, language: str = "ar") -> str:
+    p = get(industry)
+    return p.get(language) or p["en"]
 
 
 def generation_defaults(industry: str, language: str = "ar", dialect: str | None = None) -> dict[str, Any]:
     p = get(industry)
     return {"language": language, "tone": p["tone"], "content_type": p["content_type"],
-            "audience": p["audience"]["ar" if language == "ar" else "en"], "objective": p["objective"],
+            "audience": audience(p, language), "objective": p["objective"],
             "industry": industry, "dialect": dialect or "msa"}

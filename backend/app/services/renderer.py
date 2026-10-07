@@ -24,8 +24,10 @@ BADGE_LABELS = {
            "culture": "Culture", "food": "Food"},
     "fr": {"news": "Actu", "tips": "Conseils", "guide": "Guide", "offer": "Offre", "event": "Événement",
            "culture": "Culture", "food": "Saveurs"},
+    "ms": {"news": "Berita", "tips": "Tip", "guide": "Panduan", "offer": "Tawaran", "event": "Acara",
+           "culture": "Budaya", "food": "Rasa"},
 }
-CREDIT_LABEL = {"ar": "المصدر", "en": "Source", "fr": "Source"}
+CREDIT_LABEL = {"ar": "المصدر", "en": "Source", "fr": "Source", "ms": "Sumber"}
 
 DEFAULT_COLORS = {"navy": "#16244F", "gold": "#C6A23C", "goldLight": "#D9B96A",
                   "cardBg": "rgba(251,248,240,0.94)", "cardTitle": "#16244F", "cardText": "#1F2B55",
@@ -68,19 +70,26 @@ class BrandStyle:
     language: str = "ar"
     palette: dict | None = None       # colours taken from the photo (overrides brand colours)
     logo_backdrop: str = "auto"       # auto | always | never
-    theme: str = "magazine"           # magazine (bold, modern) | classic (rounded cards)
+    theme: str = "magazine"           # magazine = photo-first field designs | classic (rounded cards)
+    family: str = "general"           # card design family of the company's field
 
 
 @lru_cache
 def _font_faces() -> str:
     faces = []
+    ranges = {
+        "arabic": "U+0600-06FF, U+0750-077F, U+0870-08FF, U+FB50-FDFF, U+FE70-FEFF, U+200C-200E",
+        "latin": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, "
+                 "U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD",
+        "latin-ext": "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1E00-1EFF, "
+                     "U+20A0-20C0, U+2C60-2C7F, U+A720-A7FF",
+    }
     for file in sorted((RENDER_DIR / "fonts").glob("cairo-*-normal.woff2")):
-        _, subset, weight, _ = file.stem.split("-")
+        parts = file.stem.split("-")              # cairo-<subset>-<weight>-normal, subset may contain "-"
+        subset, weight = "-".join(parts[1:-2]), parts[-2]
         b64 = base64.b64encode(file.read_bytes()).decode()
-        rng = "U+0600-06FF, U+0750-077F, U+0870-08FF, U+FB50-FDFF, U+FE70-FEFF, U+200C-200E" if subset == "arabic" \
-            else "U+0000-00FF, U+2000-206F, U+20AC, U+2122"
         faces.append(f"@font-face {{ font-family: 'Cairo'; font-weight: {weight}; font-style: normal; "
-                     f"src: url(data:font/woff2;base64,{b64}) format('woff2'); unicode-range: {rng}; }}")
+                     f"src: url(data:font/woff2;base64,{b64}) format('woff2'); unicode-range: {ranges[subset]}; }}")
     return "\n".join(faces)
 
 
@@ -111,8 +120,9 @@ def _logo_html(brand: BrandStyle, plate: bool = False) -> str:
 CARD_STYLES = ("frosted", "solid", "band", "side", "ribbon", "outline", "minimal")
 
 
-SWIPE = {"ar": "اسحب للمزيد", "en": "Swipe for more", "fr": "Glissez"}
+SWIPE = {"ar": "اسحب للمزيد", "en": "Swipe for more", "fr": "Glissez", "ms": "Leret"}
 SAVE_SHARE = {"ar": ("احفظ", "شارك", "راسلنا"), "en": ("Save", "Share", "Message us"),
+              "ms": ("Simpan", "Kongsi", "Mesej kami"),
               "fr": ("Enregistrez", "Partagez", "Écrivez-nous")}
 _ICONS = {
     "save": '<svg viewBox="0 0 24 24"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z"/></svg>',
@@ -220,7 +230,8 @@ def build_html(spec: SlideSpec, brand: BrandStyle) -> str:
     # The logo plate always uses the brand's own navy, so the logo keeps its identity.
     plate = brand.logo_backdrop == "always" or (brand.logo_backdrop != "never" and spec.logo_plate)
     bg_pos = ["center", "30% center", "70% center", "center 30%", "center 70%"][spec.variant % 5]
-    bg_filter = "filter: blur(2px) saturate(1.05); transform: scale(1.04);" if spec.variant % 2 and spec.kind == "content" else ""
+    bg_filter = ("filter: blur(2px) saturate(1.05); transform: scale(1.04);"
+                 if spec.variant % 2 and spec.kind == "content" and brand.theme != "magazine" else "")
     bg = f'<div class="bg" style="background-image:url({_data_uri(spec.background)})"></div>' if spec.background else ""
 
     # Logo sits on the requested side; badge takes the other side.
@@ -239,8 +250,13 @@ def build_html(spec: SlideSpec, brand: BrandStyle) -> str:
     if card_style == "frosted" and (brand.palette or {}).get("cardStyle") in CARD_STYLES:
         card_style = brand.palette["cardStyle"]          # the post's brand colour set decides the card
 
-    if brand.theme == "magazine" and card_style != "minimal":
-        content = _magazine(spec, brand, lang, bg, top, plate)
+    extra_css = ""
+    if brand.theme == "magazine":
+        # photo-first cards of the company's field: one logo, no boxes over the photo
+        from . import cards
+        content, theme_class = cards.build(spec, brand, lang, _logo_html(brand, False), _logo_html(brand, plate), bg,
+                                          logo_start=(logo_left != rtl))
+        extra_css = cards.css()
     elif spec.kind == "cover":
         content = (f'{bg}<div class="shade"></div>{top}'
                    f'<div class="card {card_style}" data-fit="760,40"><div class="accent"></div>'
@@ -262,9 +278,10 @@ def build_html(spec: SlideSpec, brand: BrandStyle) -> str:
                    f'<h2 style="font-size:54px">{_esc(spec.heading)}</h2>'
                    f'<p style="font-size:42px">{_esc(spec.body)}</p></div>{footer}')
 
-    theme_class = "theme-magazine" if (brand.theme == "magazine" and card_style != "minimal") else "theme-classic"
+    if brand.theme != "magazine":
+        theme_class = "theme-classic"
     return _template().format(
-        theme=theme_class, lang=lang, dir="rtl" if rtl else "ltr", font_faces=_font_faces(), font=brand.font_family or "Cairo",
+        theme=theme_class, extra_css=extra_css, lang=lang, dir="rtl" if rtl else "ltr", font_faces=_font_faces(), font=brand.font_family or "Cairo",
         navy=colors["navy"], gold=colors["gold"], gold_light=colors.get("goldLight", colors["gold"]),
         card_bg=colors.get("cardBg"), card_solid=colors.get("cardBgHex") or "#F8F4EA", card_title=colors.get("cardTitle"),
         card_text=colors.get("cardText", colors.get("cardSubtle", "#3A4058")),

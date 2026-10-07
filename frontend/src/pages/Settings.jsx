@@ -5,7 +5,7 @@ import KeysCard from '../components/KeysCard';
 import { Button, ErrorBox, Field, Loading, PageHead, useAction, useLoad } from '../components/ui';
 import { api } from '../lib/api';
 import { fmtDateTime } from '../lib/format';
-import { useI18n } from '../lib/i18n';
+import { DIALECTS, LANGUAGES, useI18n } from '../lib/i18n';
 
 const PROVIDER_NAMES = { buffer: 'Buffer', meta: 'Meta Graph API', uploadpost: 'upload-post.com' };
 const ENV_HINT = { buffer: 'BUFFER_API_KEY', meta: 'META_ACCESS_TOKEN', uploadpost: 'UPLOADPOST_API_KEY' };
@@ -42,7 +42,7 @@ export default function SettingsPage() {
             <div className="grid grid-2">
               <Field label={t('gen_language')}>
                 <select className="select" value={g.language} onChange={(e) => set('generation', 'language', e.target.value)}>
-                  {opts.languages.map((o) => <option key={o}>{o}</option>)}
+                  {opts.languages.map((o) => <option key={o} value={o}>{LANGUAGES.find((l) => l.id === o)?.label || o}</option>)}
                 </select>
               </Field>
               <Field label={t('tone')}>
@@ -50,11 +50,13 @@ export default function SettingsPage() {
                   {opts.tones.map((o) => <option key={o}>{o}</option>)}
                 </select>
               </Field>
+              {g.language === 'ar' && (
               <Field label={t('dialect')} hint={t('dialect_hint')}>
                 <select className="select" value={g.dialect || 'msa'} onChange={(e) => set('generation', 'dialect', e.target.value)}>
-                  {['msa', 'gulf', 'maghreb', 'algeria'].map((o) => <option key={o} value={o}>{t(`dialect_${o}`)}</option>)}
+                  {DIALECTS.map((o) => <option key={o} value={o}>{t(`dialect_${o}`)}</option>)}
                 </select>
               </Field>
+              )}
               <Field label={t('content_type')}>
                 <select className="select" value={g.content_type} onChange={(e) => set('generation', 'content_type', e.target.value)}>
                   {opts.content_types.map((o) => <option key={o}>{o}</option>)}

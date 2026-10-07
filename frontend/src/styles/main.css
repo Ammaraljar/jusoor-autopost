@@ -36,6 +36,9 @@ p { margin: 0; }
 .sidebar-foot button { background: rgba(255,255,255,.08); border: 0; color: #fff; border-radius: 8px; padding: 6px 10px;
   cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
 .sidebar-foot button:hover { background: rgba(255,255,255,.16); }
+.lang-pick { display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,.08); border-radius: 8px; padding: 2px 8px; color: #fff; flex: 1; }
+.lang-pick select { background: transparent; border: 0; color: #fff; font: inherit; padding: 4px 0; flex: 1; cursor: pointer; }
+.lang-pick select option { color: #111; }
 .main { flex: 1; min-width: 0; padding: 26px 32px 60px; }
 .topbar { display: none; }
 

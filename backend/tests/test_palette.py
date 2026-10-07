@@ -130,12 +130,26 @@ def test_consecutive_posts_get_different_brand_sets():
 
 def test_magazine_cover_highlights_title_words_and_prompts_swipe():
     from app.services.renderer import BrandStyle, SlideSpec, build_html
-    brand = BrandStyle(name="JUSOOR Travel", handle="@jusoortravel", theme="magazine")
+    brand = BrandStyle(name="JUSOOR Travel", handle="@jusoortravel", theme="magazine", family="travel")
     html = build_html(SlideSpec(kind="cover", heading="٥ أسرار في لنكاوي", body="دليلك", position=0, total=6,
                                 highlight=["٥ أسرار"]), brand)
-    assert "<mark>٥ أسرار</mark>" in html and "اسحب للمزيد" in html and "theme-magazine" in html
-    tip = build_html(SlideSpec(kind="content", heading="شاطئ", body="نص", position=2, total=6), brand)
-    assert ">02<" in tip and "2/4" in tip
-    classic = build_html(SlideSpec(kind="cover", heading="عنوان", body="", position=0, total=6),
-                         BrandStyle(name="J", theme="classic"))
-    assert "theme-classic" in classic and 'class="m-cover"' not in classic
+    assert "<mark>٥ أسرار</mark>" in html and "اسحب" in html and "theme-photo" in html and "fam-travel" in html
+
+
+def test_photo_first_cards_have_one_logo_and_no_boxes_over_the_photo():
+    """Every field family, every design, every slide kind: a single logo and the photo uncovered."""
+    from app.services import palette
+    from app.services.renderer import BrandStyle, SlideSpec, build_html
+    for family in palette.FAMILIES:
+        for i in range(palette.DESIGN_COUNT):
+            pal = palette.design(i, seed=3, family=family)
+            for lang in ("ar", "en", "ms", "fr"):
+                brand = BrandStyle(name="Acme Co", handle="@acme", theme="magazine", family=family,
+                                   palette=pal, language=lang)
+                for kind in ("cover", "content", "cta"):
+                    html = build_html(SlideSpec(kind=kind, heading="h", body="b", position=1, total=6,
+                                                badge="news"), brand)
+                    body = html.split("<body", 1)[1]
+                    assert body.count('class="logo') == 1, (family, i, kind)
+                    for old in ("L2-", "C-stamp", "postmark", "m-panel", "card frosted"):
+                        assert old not in body, (family, kind, old)

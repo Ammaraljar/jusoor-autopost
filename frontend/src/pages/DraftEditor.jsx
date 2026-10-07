@@ -6,7 +6,7 @@ import { Button, ErrorBox, Field, Loading, Modal, Spinner, StatusPill, useAction
 import { api, mediaUrl } from '../lib/api';
 import { fmtDate, fmtDateTime, toLocalInput } from '../lib/format';
 import { useAuth } from '../lib/auth';
-import { useI18n } from '../lib/i18n';
+import { DIALECTS, useI18n } from '../lib/i18n';
 
 const TEXT_FIELDS = ['hook', 'hook_highlight', 'subtitle', 'caption', 'hashtags', 'first_comment', 'cta'];
 const REGEN_FIELDS = ['hook', 'subtitle', 'caption', 'cta', 'first_comment'];
@@ -162,7 +162,7 @@ export default function DraftEditor() {
                   if (dialect) run('dcopy', () => api.post(`/api/drafts/${d.id}/dialect-copy`, { dialect }), t('dialect_copy_started'));
                 }}>
                 <option value="">{t('dialect_copy')}</option>
-                {['gulf', 'maghreb', 'algeria', 'msa'].filter((x) => x !== (d.dialect || 'msa')).map((x) => (
+                {DIALECTS.filter((x) => x !== (d.dialect || 'msa')).map((x) => (
                   <option key={x} value={x}>{t(`dialect_${x}`)}</option>
                 ))}
               </select>

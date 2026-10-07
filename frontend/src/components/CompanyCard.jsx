@@ -3,9 +3,8 @@ import { Building2, Save } from 'lucide-react';
 import { Button, Field, Spinner, useAction, useLoad } from './ui';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { useI18n } from '../lib/i18n';
+import { DIALECTS, LANGUAGES, useI18n } from '../lib/i18n';
 
-const DIALECTS = ['msa', 'gulf', 'maghreb', 'algeria'];
 
 /** The company profile: its field decides the AI's audience, tone, rules and photo keywords. */
 export default function CompanyCard({ onSaved }) {
@@ -37,12 +36,12 @@ export default function CompanyCard({ onSaved }) {
       <div className="grid grid-2">
         <Field label={t('industry')}>
           <select className="select" value={f.industry} onChange={(e) => set('industry', e.target.value)}>
-            {(org.data.industries || []).map((i) => <option key={i.id} value={i.id}>{lang === 'ar' ? i.ar : i.en}</option>)}
+            {(org.data.industries || []).map((i) => <option key={i.id} value={i.id}>{i[lang] || i.en}</option>)}
           </select>
         </Field>
         <Field label={t('content_language')}>
           <select className="select" value={f.language} onChange={(e) => set('language', e.target.value)}>
-            <option value="ar">العربية</option><option value="en">English</option>
+            {LANGUAGES.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
           </select>
         </Field>
         {f.language === 'ar' && (

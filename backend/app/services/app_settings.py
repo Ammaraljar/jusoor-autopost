@@ -8,13 +8,13 @@ from sqlalchemy.orm import Session
 
 from ..db import AppSetting, current_org
 
-LANGUAGES = ["ar", "en", "fr"]
+LANGUAGES = ["ar", "en", "ms", "fr"]
 TONES = ["friendly", "professional", "luxury", "emotional", "bold", "educational", "corporate", "storytelling"]
 CONTENT_TYPES = ["news", "travel", "tips", "educational", "promotional", "storytelling",
                  "announcement", "corporate", "comparison", "event", "product"]
 PLATFORMS = ["instagram", "facebook", "linkedin", "tiktok", "x", "threads"]
 PROVIDERS = ["buffer", "meta", "uploadpost"]
-DIALECTS = ["msa", "gulf", "maghreb", "algeria"]
+DIALECTS = ["fusha", "msa", "egyptian", "gulf", "maghreb"]
 
 DEFAULTS: dict[str, dict[str, Any]] = {
     "generation": {
@@ -28,7 +28,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "content_slides": 4,
         "image_source": "auto",     # auto | source | pexels
         "credit_source": True,
-        "dialect": "msa",           # msa | gulf | maghreb | algeria
+        "dialect": "msa",           # fusha | msa | egyptian | gulf | maghreb
         "industry": "travel",       # see services/industries.py
     },
     "scheduler": {

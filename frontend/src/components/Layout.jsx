@@ -6,7 +6,7 @@ import { BarChart3, CalendarDays, Eye, Globe, Images, Inbox, Languages, LogOut, 
   Shield, Sun, SunMoon, Target, Users } from 'lucide-react';
 import { api, getActingOrg, setActingOrg } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { useI18n } from '../lib/i18n';
+import { LANGUAGES, useI18n } from '../lib/i18n';
 
 export default function Layout() {
   const { t, lang, setLang, theme, setTheme } = useI18n();
@@ -85,7 +85,11 @@ export default function Layout() {
         </nav>
         <div className="sidebar-foot">
           <div className="row">
-            <button onClick={() => setLang(lang === 'ar' ? 'en' : 'ar')}><Languages size={14} /> {t('language')}</button>
+            <label className="lang-pick" title={t('ui_language')}><Languages size={14} />
+              <select value={lang} onChange={(e) => setLang(e.target.value)} aria-label={t('ui_language')}>
+                {LANGUAGES.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
+              </select>
+            </label>
             <button onClick={() => setTheme(nextTheme)} aria-label={t('theme')}><ThemeIcon size={14} /></button>
           </div>
           {!local && (

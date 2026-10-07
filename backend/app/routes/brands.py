@@ -137,39 +137,41 @@ class PreviewIn(BaseModel):
     variant: int | None = None      # 0-5: one of the six JUSOOR colour sets / card shapes
 
 
+SAMPLES = {
+    "ar": {"cover": ("عنوان منشورك يظهر هنا بوضوح", "سطر قصير يشد المتابع للتمرير"),
+           "content": ("فكرة واحدة واضحة", "كل شريحة تحمل فكرة واحدة بكلمات قليلة، والصورة تبقى هي البطل."),
+           "cta": ("تواصل معنا اليوم", "فريقنا جاهز لمساعدتك")},
+    "en": {"cover": ("Your headline shines here", "A short line that makes people swipe"),
+           "content": ("One clear idea", "Each slide carries one idea in a few words — the photo stays the hero."),
+           "cta": ("Get in touch today", "Our team is ready to help")},
+    "ms": {"cover": ("Tajuk anda menyerlah di sini", "Satu baris ringkas yang buat orang terus leret"),
+           "content": ("Satu idea yang jelas", "Setiap slaid membawa satu idea ringkas — foto kekal sebagai tumpuan."),
+           "cta": ("Hubungi kami hari ini", "Pasukan kami sedia membantu")},
+    "fr": {"cover": ("Votre titre brille ici", "Une phrase courte qui donne envie de glisser"),
+           "content": ("Une idée claire", "Chaque slide porte une seule idée en quelques mots — la photo reste la star."),
+           "cta": ("Contactez-nous aujourd’hui", "Notre équipe est prête à vous aider")},
+}
+
+
 @router.post("/{bid}/preview")
 async def preview(bid: int, body: PreviewIn, db: Session = Depends(get_db)):
+    """A sample slide in the company's own designs (variant = design number of its rotation)."""
+    from ..db import current_org
     b = _get(db, bid)
-    style = pipeline.brand_style(b, body.language)
-    if body.language == "en":
-        samples = {
-            "cover": ("Your headline shines here", "A short line that makes people swipe"),
-            "content": ("What's new?", "Each slide tells one clear idea in a few words, over a photo that fits the post."),
-            "cta": (b.cta_text or "Get in touch today", "Our team is ready to help"),
-        }
-    else:
-        samples = {
-            "cover": ("عنوان منشورك يظهر هنا بوضوح", "سطر قصير يشد المتابع للتمرير"),
-            "content": ("ما الجديد؟", "كل شريحة تحمل فكرة واحدة واضحة بكلمات قليلة، فوق صورة تناسب المنشور."),
-            "cta": (b.cta_text or "تواصل معنا اليوم", "فريقنا جاهز لمساعدتك"),
-        }
-    heading, text = samples.get(body.kind, samples["cover"])
-    # Each preview uses a different sample photo (bright sky → logo plate, sea, sunset) and a
-    # different JUSOOR colour set, to show how posts vary while staying inside the identity.
-    background = colours.sample_background(body.kind)
+    lang = body.language if body.language in SAMPLES else "ar"
+    family = pipeline.family_of(db, current_org.get())
+    style = pipeline.brand_style(b, lang, family)
+    heading, text = SAMPLES[lang].get(body.kind, SAMPLES[lang]["cover"])
+    if body.kind == "cta" and b.cta_text:
+        heading = b.cta_text
+    background = colours.sample_background(["cover", "content", "cta"][(body.variant or 0) % 3]
+                                           if body.variant is not None else body.kind)
     navy = (b.colors or {}).get("navy") or colours.BRAND_NAVY
     gold = (b.colors or {}).get("gold") or colours.BRAND_GOLD
-    if body.variant is not None:
-        background = colours.sample_background(["cover", "content", "cta"][body.variant % 3])
-        if (b.color_mode or "auto") == "auto":
-            style.palette = colours.brand_variants(navy, gold)[body.variant % 6]
-    elif (b.color_mode or "auto") == "auto":
-        others = {"cover": [], "content": ["classic", "royal"], "cta": ["classic", "ocean"]}
-        style.palette = colours.pick_variant(background, others.get(body.kind, []), navy, gold)
-    plate = body.kind != "cta" and colours.logo_needs_plate(background, b.logo_placement or "top-left",
-                                                            body.language == "ar")
-    jpeg = await renderer.render(SlideSpec(kind=body.kind, heading=heading, body=text, position=0, total=6,
+    style.palette = colours.design(body.variant or 0, navy, gold, b.design_seed or 0, family) \
+        if (b.color_mode or "auto") == "auto" else {"family": family}
+    plate = body.kind != "cta" and colours.logo_needs_plate(background, b.logo_placement or "top-left", lang == "ar")
+    jpeg = await renderer.render(SlideSpec(kind=body.kind, heading=heading, body=text, position=1, total=6,
                                            background=background, logo_plate=plate,
-                                           badge="news" if body.kind == "cover" else None,
-                                           credit="The Star" if body.kind != "cta" else ""), style)
+                                           badge=None, credit="Reuters" if body.kind == "cover" else ""), style)
     return {"image": "data:image/jpeg;base64," + base64.b64encode(jpeg).decode()}

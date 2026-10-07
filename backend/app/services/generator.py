@@ -20,7 +20,7 @@ from . import credentials
 
 log = logging.getLogger(__name__)
 
-LANG_NAMES = {"ar": "Modern Standard Arabic (فصحى سهلة)", "en": "English", "fr": "French"}
+LANG_NAMES = {"ar": "Arabic", "en": "English", "ms": "Malay (Bahasa Melayu, Malaysian usage)", "fr": "French"}
 
 POST_TOOL = {
     "name": "create_post",
@@ -93,28 +93,33 @@ class BrandContext:
 
 # Arabic varieties for the target markets. The post must sound native to that audience.
 DIALECTS: dict[str, dict[str, str]] = {
-    "msa": {"label": "فصحى مبسّطة", "audience": "Arab travellers in general",
-            "guide": "Modern Standard Arabic, simple, warm and easy to read — understood across the Arab world."},
-    "gulf": {"label": "خليجي", "audience": "travellers from Saudi Arabia, UAE, Kuwait, Qatar, Bahrain and Oman",
-             "guide": "Write in natural Gulf (Khaleeji) Arabic as Saudi/Emirati/Kuwaiti families speak on social "
-                      "media: e.g. وايد، حيل، مرة، يا هلا، عساكم، تونّسون، الحين، شي، وش رايكم، بتحصلون. Warm, "
-                      "family- and luxury-oriented, generous hospitality vibe. Keep it readable; avoid heavy slang."},
-    "maghreb": {"label": "مغاربي (مغربي)", "audience": "travellers from Morocco and the wider Maghreb",
+    "fusha": {"label": "فصحى", "audience": "Arabic readers across the Arab world",
+              "guide": "Write in correct, eloquent Modern Standard Arabic (فصحى) — polished and formal yet engaging, "
+                       "with careful grammar and rich but clear vocabulary. No dialect words."},
+    "msa": {"label": "فصحى مبسّطة", "audience": "Arabic readers across the Arab world",
+            "guide": "Modern Standard Arabic, simple, warm and easy to read — short everyday words, understood "
+                     "across the Arab world, like a friendly modern brand on social media."},
+    "egyptian": {"label": "مصرية", "audience": "readers in Egypt and Egyptian-dialect speakers",
+                 "guide": "Write in natural Egyptian Arabic as Egyptians write on social media: e.g. أوي، دلوقتي، "
+                          "إزاي، عشان، كده، بتاع، يلا، مش، هتلاقي، جامد. Light, witty and warm; keep facts and "
+                          "names clear."},
+    "gulf": {"label": "خليجية", "audience": "readers from Saudi Arabia, UAE, Kuwait, Qatar, Bahrain and Oman",
+             "guide": "Write in natural Gulf (Khaleeji) Arabic as Saudi/Emirati/Kuwaiti people speak on social "
+                      "media: e.g. وايد، حيل، مرة، يا هلا، عساكم، الحين، شي، وش رايكم، بتحصلون. Warm, generous "
+                      "hospitality vibe. Keep it readable; avoid heavy slang."},
+    "maghreb": {"label": "مغربية", "audience": "readers from Morocco and the wider Maghreb",
                 "guide": "Write in light Moroccan Darija that any Maghrebi reader understands: e.g. بزاف، دابا، "
                          "واش، مزيان، غادي، ديال، فين، شحال، بغيتو. A few common French words are natural "
-                         "(voyage, promo, programme). Friendly and lively; keep facts and names clear."},
-    "algeria": {"label": "جزائري", "audience": "travellers from Algeria",
-                "guide": "Write in natural Algerian Darja as used on Algerian social media: e.g. بزاف، واش، راكم، "
-                         "نتاع، صح، ياسر، شحال، روحو، كاين، مليح، وقيلا. Some French words are natural "
-                         "(voyage, hôtel, programme). Warm, direct and fun; keep facts and names clear."},
+                         "(promo, programme). Friendly and lively; keep facts and names clear."},
 }
+DIALECT_ALIASES = {"algeria": "maghreb", "msa_simple": "msa", "classical": "fusha"}
 
 
 def dialect_rules(dialect: str | None) -> str:
-    d = DIALECTS.get(dialect or "msa", DIALECTS["msa"])
+    d = DIALECTS.get(DIALECT_ALIASES.get(dialect or "", dialect or "msa"), DIALECTS["msa"])
     return (f"- Arabic variety: {d['guide']} Hashtags may stay in standard Arabic/English.\n"
             f"- The readers are {d['audience']}: pick angles, examples and benefits that matter to them "
-            "(flights from their region, family travel, halal food, visas, budget, weather) when the source supports it.")
+            "when the source supports it.")
 
 
 PROGRAM_RULES = """
@@ -135,10 +140,16 @@ def build_system_prompt(brand: BrandContext, gen: dict[str, Any]) -> str:
     language = gen.get("language", "ar")
     lang = LANG_NAMES.get(language, "Arabic")
     profile = industries.get(gen.get("industry"))
-    audience = gen.get("audience") or profile["audience"]["ar" if language == "ar" else "en"]
+    audience = gen.get("audience") or industries.audience(profile, language)
     extra = ""
     if language == "ar":
         extra += "\n" + dialect_rules(gen.get("dialect"))
+    elif language == "ms":
+        extra += ("\n- Write natural, engaging Bahasa Melayu as Malaysian brands do on social media — friendly, "
+                  "clear and concrete (use 'anda'), never stiff or word-for-word translated.")
+    elif language == "fr":
+        extra += ("\n- Écris en français naturel et engageant pour les réseaux sociaux — clair, chaleureux et concret, "
+                  "jamais administratif ni traduit mot à mot.")
     else:
         extra += "\n- Write natural, engaging English for social media — clear, warm and concrete, never corporate."
     if profile.get("rules"):

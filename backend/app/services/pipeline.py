@@ -47,7 +47,14 @@ def brand_context(brand: Brand) -> generator.BrandContext:
                                   voice=brand.voice, cta_text=brand.cta_text)
 
 
-def brand_style(brand: Brand, language: str) -> BrandStyle:
+def family_of(db: Session, org_id: int | None) -> str:
+    """Card design family of the company's field."""
+    from . import cards
+    org = db.get(Organization, org_id) if org_id else None
+    return cards.FAMILY_OF_INDUSTRY.get(org.industry if org else "general", "general")
+
+
+def brand_style(brand: Brand, language: str, family: str = "general") -> BrandStyle:
     logo = None
     if brand.logo_path:
         try:
@@ -58,7 +65,7 @@ def brand_style(brand: Brand, language: str) -> BrandStyle:
                       font_family=brand.font_family, logo=logo, logo_placement=brand.logo_placement,
                       card_style=brand.card_style, language=language,
                       logo_backdrop=brand.logo_backdrop or "auto",
-                      theme=getattr(brand, "card_theme", None) or "magazine")
+                      theme=getattr(brand, "card_theme", None) or "magazine", family=family)
 
 
 # ---------------------------------------------------------------- collecting
@@ -427,7 +434,8 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
             return
         brand = _brand_for(db, draft.brand_id)
         gen = app_settings.get_section(db, "generation")
-        style = brand_style(brand, draft.language)
+        family = family_of(db, draft.org_id)
+        style = brand_style(brand, draft.language, family)
         slides = [(s.id, s.kind, s.heading, s.body, s.position, s.background_url, s.image_key) for s in draft.slides]
         needs_bg = refresh_backgrounds or any(s[5] is None for s in slides if s[1] != "cta")
         keywords, article_image = draft.image_keywords, draft.original_image_url
@@ -484,7 +492,7 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
             index = int(stored_index)
         else:
             index = _next_design_index(draft_id)
-        palette_to_store = colours.design(index, brand_navy, brand_gold, design_seed)
+        palette_to_store = colours.design(index, brand_navy, brand_gold, design_seed, family)
         style.palette = palette_to_store
     else:
         style.palette = None
@@ -606,7 +614,7 @@ async def run_collection_cycle(source_ids: list[int] | None = None, window: dict
 def compose_caption(draft: Draft, credit: bool = True) -> str:
     parts = [draft.caption.strip()]
     if credit and draft.origin == "source" and draft.source_name:
-        label = {"ar": "المصدر", "en": "Source", "fr": "Source"}.get(draft.language, "Source")
+        label = {"ar": "المصدر", "en": "Source", "fr": "Source", "ms": "Sumber"}.get(draft.language, "Source")
         parts.append(f"{label}: {draft.source_name}")
     if draft.hashtags:
         parts.append(draft.hashtags.strip())
