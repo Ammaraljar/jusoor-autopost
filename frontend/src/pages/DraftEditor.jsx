@@ -234,7 +234,7 @@ export default function DraftEditor() {
             ))}
           </div>
 
-          <PlatformPosts draft={d} locked={locked} onChange={apply} />
+          <PlatformPosts draft={d} locked={editLocked} onChange={apply} />
 
           {(d.original_title || d.source_url) && (
             <div className="card card-pad">
@@ -390,7 +390,7 @@ function PlatformPosts({ draft, locked, onChange }) {
       <div className="row">
         <h3 style={{ margin: 0 }}><Send size={16} /> {t('platform_posts')}</h3>
         <div className="spacer" />
-        <Button size="sm" icon={Wand2} busy={busy === 'regen-v'} disabled={editLocked} onClick={regenerate}>{t('regen_platforms')}</Button>
+        <Button size="sm" icon={Wand2} busy={busy === 'regen-v'} disabled={locked} onClick={regenerate}>{t('regen_platforms')}</Button>
       </div>
       <p className="xs muted" style={{ margin: 0 }}>
         {draft.variants_generated ? t('platform_posts_hint') : t('platform_posts_derived')}
@@ -425,7 +425,7 @@ function PlatformPosts({ draft, locked, onChange }) {
           ) : null;
         })}
       </div>
-      <textarea className="textarea" dir="auto" rows={v.limit <= 500 ? 4 : 9} value={text} disabled={editLocked}
+      <textarea className="textarea" dir="auto" rows={v.limit <= 500 ? 4 : 9} value={text} disabled={locked}
         onChange={(e) => { setText(e.target.value); setEdited(true); }} />
       <div className="row">
         <span className="xs" style={{ color: over ? 'var(--danger)' : 'var(--muted)' }}>{text.length} / {v.limit}</span>
