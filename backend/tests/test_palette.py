@@ -126,3 +126,16 @@ def test_consecutive_posts_get_different_brand_sets():
         assert v["variant"] not in recent[:2]
         recent.insert(0, v["variant"])
     assert len(set(recent)) >= 4
+
+
+def test_magazine_cover_highlights_title_words_and_prompts_swipe():
+    from app.services.renderer import BrandStyle, SlideSpec, build_html
+    brand = BrandStyle(name="JUSOOR Travel", handle="@jusoortravel", theme="magazine")
+    html = build_html(SlideSpec(kind="cover", heading="٥ أسرار في لنكاوي", body="دليلك", position=0, total=6,
+                                highlight=["٥ أسرار"]), brand)
+    assert "<mark>٥ أسرار</mark>" in html and "اسحب للمزيد" in html and "theme-magazine" in html
+    tip = build_html(SlideSpec(kind="content", heading="شاطئ", body="نص", position=2, total=6), brand)
+    assert ">02<" in tip and "2/4" in tip
+    classic = build_html(SlideSpec(kind="cover", heading="عنوان", body="", position=0, total=6),
+                         BrandStyle(name="J", theme="classic"))
+    assert "theme-classic" in classic and 'class="m-cover"' not in classic

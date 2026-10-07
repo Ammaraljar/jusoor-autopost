@@ -50,6 +50,7 @@ class Brand(Base):
     logo_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     logo_placement: Mapped[str] = mapped_column(String(20), default="top-left")
     card_style: Mapped[str] = mapped_column(String(20), default="frosted")
+    card_theme: Mapped[str | None] = mapped_column(String(20), nullable=True, default="magazine")  # magazine | classic
     color_mode: Mapped[str | None] = mapped_column(String(20), nullable=True, default="auto")      # auto | brand
     logo_backdrop: Mapped[str | None] = mapped_column(String(20), nullable=True, default="auto")   # auto | always | never
     cta_text: Mapped[str] = mapped_column(Text, default="")
@@ -165,6 +166,7 @@ class Draft(Base):
     variants: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)  # per-platform text + images
     cover_thumb_url: Mapped[str | None] = mapped_column(String(800), nullable=True)  # small cover for lists
     dialect: Mapped[str | None] = mapped_column(String(20), nullable=True)   # msa | gulf | maghreb | algeria
+    hook_highlight: Mapped[str | None] = mapped_column(String(200), nullable=True)  # title words shown in gold
     badge: Mapped[str] = mapped_column(String(30), default="news")
     status: Mapped[str] = mapped_column(String(20), default="generating", index=True)
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -260,6 +262,8 @@ _ADDED_COLUMNS = [
     ("sources", "purpose", "VARCHAR(20) DEFAULT 'news'"),
     ("sources", "dialect", "VARCHAR(20)"),
     ("calendar_items", "dialect", "VARCHAR(20)"),
+    ("brands", "card_theme", "VARCHAR(20)"),
+    ("drafts", "hook_highlight", "VARCHAR(200)"),
     ("brands", "color_mode", "VARCHAR(20)"),
     ("brands", "logo_backdrop", "VARCHAR(20)"),
 ]

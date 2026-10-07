@@ -122,16 +122,21 @@ BRAND_GOLD = "#C6A23C"
 # card = ("ivory" | "cool" | "gold", lightness)
 _VARIANTS = [
     ("classic",  "كلاسيكي",        0.5, (0, 1.00, None), (0, None, None),  ("ivory", 0.965)),
-    ("midnight", "كحلي جسور",      0.6, (0, 1.05, 0.22), (3, 0.58, 0.62),  ("ivory", 0.975)),
-    ("royal",    "أزرق ملكي",      0.2, (-3, 1.30, 0.34), (-4, 0.66, 0.50), ("cool", 0.975)),
-    ("ocean",    "أزرق بحري",      0.1, (-10, 1.15, 0.30), (0, 0.50, 0.56), ("cool", 0.970)),
-    ("sand",     "ذهبي رملي",      0.9, (0, 0.95, 0.24), (2, 0.60, 0.47),  ("gold", 0.945)),
-    ("amber",    "ذهبي كهرماني",   0.8, (6, 1.00, 0.26), (-6, 0.72, 0.50), ("ivory", 0.965)),
+    ("midnight", "كحلي ليلي",      0.6, (0, 1.05, 0.11), (3, 0.58, 0.62),  ("ivory", 0.970)),
+    ("royal",    "أزرق ملكي",      0.2, (-3, 1.25, 0.24), (-4, 0.66, 0.50), ("cool", 0.970)),
+    ("ocean",    "كحلي بحري",      0.1, (-10, 1.10, 0.19), (0, 0.50, 0.56), ("cool", 0.965)),
+    ("sand",     "ذهبي رملي",      0.9, (0, 0.95, 0.15), (2, 0.60, 0.47),  ("gold", 0.935)),
+    ("amber",    "ذهبي كهرماني",   0.8, (6, 1.00, 0.17), (-6, 0.72, 0.50), ("ivory", 0.960)),
 ]
 VARIANT_IDS = [v[0] for v in _VARIANTS]
-# Six shapes, one per colour set, so consecutive posts look clearly different
-CARD_SHAPES = {"classic": "frosted", "midnight": "solid", "royal": "band", "ocean": "side",
-               "sand": "ribbon", "amber": "outline"}
+# Modern theme: a different creative layout for each colour set
+LAYOUTS = {"classic": "panel", "midnight": "arch", "royal": "ticket", "ocean": "polaroid",
+           "sand": "wave", "amber": "circle"}
+COVERS = {"classic": "full", "midnight": "stamp", "royal": "diagonal", "ocean": "full",
+          "sand": "stamp", "amber": "diagonal"}
+# Card per colour set: light frosted cards and navy cards with a gold edge, alternating
+CARD_SHAPES = {"classic": "frosted", "midnight": "solid", "royal": "frosted", "ocean": "solid",
+               "sand": "frosted", "amber": "solid"}
 
 
 def _hls_of(hex_colour: str) -> tuple[float, float, float]:
@@ -168,6 +173,7 @@ def brand_variants(navy: str = BRAND_NAVY, gold: str = BRAND_GOLD) -> list[dict[
             "cardBg": f"rgba({r},{g},{b},0.94)", "cardBgHex": card_bg_hex,
             "cardTitle": dark, "cardHeading": card_heading, "cardText": card_text,
             "cardStyle": CARD_SHAPES.get(vid, "frosted"),
+            "layout": LAYOUTS.get(vid, "panel"), "cover": COVERS.get(vid, "full"),
         })
     return out
 

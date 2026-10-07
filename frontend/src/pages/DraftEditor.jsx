@@ -7,7 +7,7 @@ import { api, mediaUrl } from '../lib/api';
 import { fmtDate, fmtDateTime, toLocalInput } from '../lib/format';
 import { useI18n } from '../lib/i18n';
 
-const TEXT_FIELDS = ['hook', 'subtitle', 'caption', 'hashtags', 'first_comment', 'cta'];
+const TEXT_FIELDS = ['hook', 'hook_highlight', 'subtitle', 'caption', 'hashtags', 'first_comment', 'cta'];
 const REGEN_FIELDS = ['hook', 'subtitle', 'caption', 'cta', 'first_comment'];
 const BADGES = ['news', 'tips', 'guide', 'offer', 'event', 'culture', 'food'];
 

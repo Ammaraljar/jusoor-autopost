@@ -75,7 +75,7 @@ function BrandForm({ brand, onChanged }) {
   const save = () => run('save', async () => {
     await api.patch(`/api/brands/${brand.id}`, {
       name: f.name, handle: f.handle, website: f.website, voice: f.voice, cta_text: f.cta_text,
-      colors: f.colors, logo_placement: f.logo_placement, card_style: f.card_style, publish_config: f.publish_config,
+      colors: f.colors, logo_placement: f.logo_placement, card_style: f.card_style, card_theme: f.card_theme || 'magazine', publish_config: f.publish_config,
       color_mode: f.color_mode || 'auto', logo_backdrop: f.logo_backdrop || 'auto',
     });
     onChanged();
@@ -134,6 +134,12 @@ function BrandForm({ brand, onChanged }) {
               <select className="select" value={f.logo_placement} onChange={(e) => set('logo_placement', e.target.value)}>
                 <option value="top-left">{t('top_left')}</option>
                 <option value="top-right">{t('top_right')}</option>
+              </select>
+            </Field>
+            <Field label={t('card_theme')}>
+              <select className="select" value={f.card_theme || 'magazine'} onChange={(e) => set('card_theme', e.target.value)}>
+                <option value="magazine">{t('theme_magazine')}</option>
+                <option value="classic">{t('theme_classic')}</option>
               </select>
             </Field>
             <Field label={t('card_style')}>

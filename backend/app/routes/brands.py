@@ -30,6 +30,7 @@ class BrandIn(BaseModel):
     font_family: str | None = None
     logo_placement: str | None = Field(None, pattern="^(top-left|top-right)$")
     card_style: str | None = Field(None, pattern="^(frosted|solid|band|side|ribbon|outline|minimal)$")
+    card_theme: str | None = Field(None, pattern="^(magazine|classic)$")
     color_mode: str | None = Field(None, pattern="^(auto|brand)$")
     logo_backdrop: str | None = Field(None, pattern="^(auto|always|never)$")
     cta_text: str | None = None
@@ -40,6 +41,7 @@ def _out(b: Brand) -> dict:
     data = b.to_dict()
     data["color_mode"] = b.color_mode or "auto"
     data["logo_backdrop"] = b.logo_backdrop or "auto"
+    data["card_theme"] = b.card_theme or "magazine"
     return {**data, "logo_url": storage.public_url(b.logo_path) if b.logo_path else None}
 
 

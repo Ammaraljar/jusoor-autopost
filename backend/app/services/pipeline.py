@@ -57,7 +57,8 @@ def brand_style(brand: Brand, language: str) -> BrandStyle:
     return BrandStyle(name=brand.name, handle=brand.handle, website=brand.website, colors=brand.colors,
                       font_family=brand.font_family, logo=logo, logo_placement=brand.logo_placement,
                       card_style=brand.card_style, language=language,
-                      logo_backdrop=brand.logo_backdrop or "auto")
+                      logo_backdrop=brand.logo_backdrop or "auto",
+                      theme=getattr(brand, "card_theme", None) or "magazine")
 
 
 # ---------------------------------------------------------------- collecting
@@ -327,6 +328,7 @@ async def draft_from_calendar(item_id: int) -> int | None:
 
 def _apply_post(draft: Draft, post: generator.GeneratedPost) -> None:
     draft.hook, draft.subtitle, draft.caption = post.hook, post.subtitle, post.caption
+    draft.hook_highlight = post.highlight if post.highlight and post.highlight in post.hook else None
     draft.hashtags = " ".join(post.hashtags)
     draft.first_comment, draft.cta = post.first_comment, post.cta
     draft.image_keywords, draft.badge, draft.relevance = post.image_keywords, post.badge, post.relevance
@@ -417,6 +419,7 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
         keywords, article_image = draft.image_keywords, draft.original_image_url
         credit = draft.source_name if (draft.origin == "source" and gen.get("credit_source", True)) else ""
         badge = draft.badge
+        highlight = [draft.hook_highlight] if draft.hook_highlight else None
         mode = "pexels" if draft.content_type == "program" else gen.get("image_source", "auto")
         prev_status = draft.status
         color_mode = brand.color_mode or "auto"
@@ -489,6 +492,7 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
                              background=bg["bytes"] if bg else None,
                              badge=badge if kind == "cover" else None,
                              credit=credit if kind != "cta" else "", variant=pos,
+                             highlight=highlight if kind == "cover" else None,
                              # the CTA slide sits on a dark overlay, so its logo never needs a plate
                              logo_plate=kind != "cta" and colours.logo_needs_plate(
                                  bg["bytes"] if bg else None, logo_placement, rtl))

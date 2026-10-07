@@ -31,19 +31,28 @@ POST_TOOL = {
             "relevance": {"type": "integer", "minimum": 0, "maximum": 10,
                           "description": "How relevant/useful this is for the brand's travel audience (0-10)."},
             "relevance_reason": {"type": "string"},
-            "hook": {"type": "string", "description": "Scroll-stopping title, max 10 words."},
-            "subtitle": {"type": "string", "description": "One short supporting line, max 14 words."},
-            "caption": {"type": "string", "description": "Post caption, 60-160 words, short paragraphs, ends with a soft CTA."},
+            "hook": {"type": "string", "description": "Scroll-stopping cover title, max 10 words, built on one of the "
+                                                      "hook formulas (number, secret/mistake, question, benefit, news-you-can-use)."},
+            "highlight": {"type": "string", "description": "1-3 words copied EXACTLY from the hook that carry its power "
+                                                           "(a number, a place, a benefit) — shown in gold on the cover."},
+            "subtitle": {"type": "string", "description": "One short line, max 14 words, that promises what the reader gains by swiping."},
+            "caption": {"type": "string", "description": "Caption, 80-170 words: a first line that repeats the promise, "
+                                                         "2-4 short value paragraphs, a question that invites comments, "
+                                                         "then a save/share line and a soft CTA."},
             "hashtags": {"type": "array", "items": {"type": "string"}, "minItems": 5, "maxItems": 14},
             "slides": {
                 "type": "array",
                 "description": "Content slides (not including cover and CTA).",
                 "items": {"type": "object",
-                          "properties": {"heading": {"type": "string", "description": "max 6 words"},
-                                         "body": {"type": "string", "description": "max 35 words"}},
+                          "properties": {"heading": {"type": "string",
+                                                     "description": "max 6 words — the takeaway itself, not a generic label"},
+                                         "body": {"type": "string",
+                                                  "description": "max 32 words — one concrete, useful detail (a tip, a number, "
+                                                                 "a time, a how-to, what it means for the traveller)"}},
                           "required": ["heading", "body"]},
             },
-            "cta": {"type": "string", "description": "Closing call-to-action slide text, max 16 words."},
+            "cta": {"type": "string", "description": "Closing slide line, max 14 words: a warm, specific invitation "
+                                                     "(e.g. plan this trip with us), not a generic 'contact us'."},
             "first_comment": {"type": "string",
                               "description": "Optional first comment (extra tip or question). Empty string if none."},
             "image_keywords": {"type": "string", "description": "3-6 English keywords for a stock photo search."},
@@ -68,6 +77,7 @@ class GeneratedPost:
     badge: str = "news"
     relevance: int = 10
     relevance_reason: str = ""
+    highlight: str = ""
     raw: dict[str, Any] = field(default_factory=dict)
     meta: dict[str, Any] = field(default_factory=dict)   # which engine wrote it, ensemble verdict
 
@@ -134,6 +144,19 @@ Marketing objective: {gen.get('objective') or 'engagement and trust'}.
 Write everything in {lang}. Tone: {gen.get('tone', 'friendly')}. Content type: {gen.get('content_type', 'news')}.
 Platform: {gen.get('platform', 'instagram')} carousel (1080x1350).
 
+Writing playbook (this is what makes people stop, save and share):
+- Value first: every slide must teach or give something the reader can use — a practical tip, an insider detail,
+  a number, a best time, a mistake to avoid, or what the news means for THEIR trip. No filler, no empty praise.
+- Hook formulas (pick the one the material supports best): a number ("٥ أشياء…"), a secret or a common mistake
+  ("خطأ يقع فيه أغلب…"), a direct question, a clear benefit ("وفّر…", "بدون زحام"), or news-you-can-use
+  ("ابتداءً من…"). Concrete beats generic: name the place, the season, the saving.
+- Speak to one reader ("أنت/أنتم"), warm and confident like a trusted travel friend — never like a press release.
+- Slides follow a story: the promise → the useful points (one idea per slide) → a practical next step.
+- Short sentences. One idea per sentence. Arabic that sounds natural, not translated.
+- Caption: first line repeats the promise, then value, then a question that invites comments (e.g. "أي محطة
+  تبدأون بها؟"), then a save/share nudge ("احفظ المنشور لرحلتك القادمة") and a soft invitation to book.
+- 1-3 emojis in the caption at most, none on the slides.
+
 Rules:
 - Use ONLY facts present in the source material. Never invent prices, dates, names, numbers or quotes.
 - Rewrite in your own words; do not translate sentence by sentence and do not copy long passages.
@@ -196,6 +219,7 @@ def _parse(data: dict[str, Any]) -> GeneratedPost:
         badge=_text(data.get("badge")) or "news",
         relevance=max(0, min(10, _as_int(data.get("relevance"), 10))),
         relevance_reason=_text(data.get("relevance_reason")),
+        highlight=_text(data.get("highlight"))[:120],
         raw=data,
     )
     missing = [k for k in ("hook", "caption") if not getattr(post, k)] + ([] if post.slides else ["slides"])

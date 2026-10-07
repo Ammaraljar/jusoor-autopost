@@ -25,7 +25,7 @@ from ..config import get_settings
 from ..db import AppSetting, session_scope
 
 SETTINGS_KEY = "credentials"
-VERSION = "3.7-dialects-programs"
+VERSION = "3.9-creative-layouts"
 
 # Each engine carries what its own environment needs: suggested models, the key's format,
 # where to get the key, and request tweaks applied in generator._tune_payload().

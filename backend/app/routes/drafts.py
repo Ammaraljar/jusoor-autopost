@@ -20,7 +20,7 @@ from ..services import app_settings, generator, pipeline, publishing, qa, schedu
 
 router = APIRouter(prefix="/api/drafts", tags=["drafts"], dependencies=[RequireUser])
 STATUSES = ["generating", "pending_review", "approved", "scheduled", "publishing", "published", "failed", "rejected"]
-EDITABLE = ["hook", "subtitle", "caption", "hashtags", "first_comment", "cta", "badge", "campaign_id", "brand_id"]
+EDITABLE = ["hook", "hook_highlight", "subtitle", "caption", "hashtags", "first_comment", "cta", "badge", "campaign_id", "brand_id"]
 
 
 def _get(db: Session, draft_id: int) -> Draft:
@@ -261,6 +261,7 @@ def get_draft(draft_id: int, db: Session = Depends(get_db)):
 
 class DraftPatch(BaseModel):
     hook: str | None = None
+    hook_highlight: str | None = None
     subtitle: str | None = None
     caption: str | None = None
     hashtags: str | None = None
@@ -280,7 +281,7 @@ async def update_draft(draft_id: int, body: DraftPatch, background: BackgroundTa
         if key in EDITABLE:
             setattr(d, key, value if value is not None or key in ("campaign_id",) else getattr(d, key))
     for s in d.slides:
-        if s.kind == "cover" and ({"hook", "subtitle", "badge"} & changes.keys()):
+        if s.kind == "cover" and ({"hook", "hook_highlight", "subtitle", "badge"} & changes.keys()):
             s.heading, s.body = d.hook, d.subtitle
             rerender.add(s.position)
         if s.kind == "cta" and "cta" in changes:
