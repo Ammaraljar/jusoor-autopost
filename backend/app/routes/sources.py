@@ -9,12 +9,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
-from ..auth import RequireUser
+from ..auth import RequireUser, RequireWriter
 from ..db import Article, Draft, Source, get_db
 from ..services import pipeline, scraper
 from ..services.jobs import jobs
 
-router = APIRouter(prefix="/api/sources", tags=["sources"], dependencies=[RequireUser])
+router = APIRouter(prefix="/api/sources", tags=["sources"], dependencies=[RequireUser, RequireWriter])
 
 PRESETS = [
     {"name": "The Star - Travel", "kind": "website", "base_url": "https://www.thestar.com.my",
@@ -46,7 +46,7 @@ class SourceIn(BaseModel):
     body_selector: str | None = None
     purpose: str = Field("news", pattern="^(news|programs)$")
     dialect: str | None = None
-    category: str = "travel"
+    category: str = "general"
     country: str = ""
     language: str = "en"
     priority: int = 5
@@ -101,9 +101,31 @@ def list_sources(db: Session = Depends(get_db)):
     return [_with_stats(db, s) for s in db.scalars(select(Source).order_by(Source.priority.desc(), Source.id))]
 
 
+GENERAL_PRESETS = {
+    "tech": [
+        {"name": "TechCrunch", "kind": "rss", "base_url": "https://techcrunch.com",
+         "feed_url": "https://techcrunch.com/feed/", "category": "tech", "country": "", "language": "en"},
+        {"name": "The Verge", "kind": "rss", "base_url": "https://www.theverge.com",
+         "feed_url": "https://www.theverge.com/rss/index.xml", "category": "tech", "country": "", "language": "en"},
+    ],
+    "news": [
+        {"name": "BBC Arabic", "kind": "rss", "base_url": "https://www.bbc.com/arabic",
+         "feed_url": "https://feeds.bbci.co.uk/arabic/rss.xml", "category": "news", "country": "", "language": "ar"},
+        {"name": "BBC World", "kind": "rss", "base_url": "https://www.bbc.com/news",
+         "feed_url": "https://feeds.bbci.co.uk/news/world/rss.xml", "category": "news", "country": "",
+         "language": "en"},
+    ],
+}
+
+
 @router.get("/presets")
-def presets():
-    return PRESETS
+def presets(db: Session = Depends(get_db)):
+    """Suggested sources for the company's field (travel companies get the travel news sites)."""
+    from ..services import app_settings
+    industry = app_settings.get_section(db, "generation").get("industry", "travel")
+    if industry == "travel":
+        return PRESETS
+    return GENERAL_PRESETS.get(industry, [])
 
 
 @router.post("")

@@ -167,29 +167,27 @@ def _magazine(spec: SlideSpec, brand: BrandStyle, lang: str, bg: str, top: str, 
     foot = (f'<div class="m-foot">{handle}<span class="m-count">{spec.position}/{content_total}</span></div>'
             f'<div class="m-progress"><i style="width:{min(progress, 100)}%"></i></div>')
     layout = (brand.palette or {}).get("layout") or "panel"
-    if layout == "arch":            # photo inside a travel-poster arch, gold double frame
-        return (f'<div class="L-arch"><div class="arch-photo">{bg}</div><div class="arch-num">{number}</div>'
-                f'<div class="arch-text">{text.format(fit="430,28")}</div>{foot}</div>')
-    if layout == "ticket":          # boarding pass over the photo
-        return (f'{bg}<div class="tk-shade"></div>{top}'
-                f'<div class="L-ticket"><div class="tk-head"><span class="tk-plane">✈</span>'
+    # Every layout keeps the photo as the hero (full-bleed); only a compact text shape sits on it.
+    photo = f'{bg}<div class="ph-shade"></div>{top}'
+    if layout == "arch":            # text inside a small travel-poster arch
+        return (f'{photo}<div class="L2-arch"><div class="arch-num">{number}</div>'
+                f'{text.format(fit="300,26")}</div>{foot}')
+    if layout == "ticket":          # compact boarding pass at the bottom
+        return (f'{photo}<div class="L2-ticket"><div class="tk-head"><span class="tk-plane">✈</span>'
                 f'<span class="tk-label">{"بطاقة صعود" if lang == "ar" else "Boarding pass"}</span>'
-                f'<span class="tk-seat">{number}</span></div><div class="tk-cut"></div>'
-                f'<div class="tk-text">{text.format(fit="470,28")}</div>{foot}</div>')
-    if layout == "polaroid":        # tilted instant photo with gold tape
-        return (f'<div class="L-polaroid"><div class="pol"><i class="tape t1"></i><i class="tape t2"></i>'
-                f'<div class="pol-photo">{bg}</div><div class="pol-cap">{number}</div></div>'
-                f'<div class="pol-text">{text.format(fit="380,28")}</div>{foot}</div>')
-    if layout == "wave":            # photo flowing into the page with a wave
-        return (f'<div class="L-wave"><div class="wave-photo">{bg}<svg viewBox="0 0 1080 160" preserveAspectRatio="none">'
-                f'<path d="M0,90 C180,10 360,150 560,80 C760,10 900,110 1080,60 L1080,160 L0,160 Z"/></svg></div>{top}'
-                f'<div class="wave-num">{number}</div><div class="wave-text">{text.format(fit="470,28")}</div>{foot}</div>')
-    if layout == "circle":          # big round photo with gold rings
-        return (f'<div class="L-circle"><i class="ring r1"></i><i class="ring r2"></i><div class="circ-photo">{bg}</div>'
-                f'<div class="circ-num">{number}</div><div class="circ-text">{text.format(fit="430,28")}</div>{foot}</div>')
-    return (f'<div class="m-photo">{bg}<div class="m-photo-shade"></div></div>{top}'
-            f'<div class="m-panel"><div class="m-num">{number}</div>'
-            f'{text.format(fit="560,30")}{foot}</div>')
+                f'<span class="tk-seat">{number}</span></div><div class="tk-text">{text.format(fit="250,26")}</div></div>{foot}')
+    if layout == "polaroid":        # a taped paper note
+        return (f'{photo}<div class="L2-note"><i class="tape t1"></i><i class="tape t2"></i>'
+                f'<div class="note-num">{number}</div>{text.format(fit="290,26")}</div>{foot}')
+    if layout == "wave":            # wave rising from the bottom
+        return (f'{photo}<div class="L2-wave"><svg viewBox="0 0 1080 120" preserveAspectRatio="none">'
+                f'<path d="M0,70 C180,0 360,120 560,60 C760,0 900,90 1080,40 L1080,120 L0,120 Z"/></svg>'
+                f'<div class="wave-num">{number}</div>{text.format(fit="300,26")}</div>{foot}')
+    if layout == "circle":          # leaf-shaped card with a gold number medal
+        return (f'{photo}<div class="L2-leaf"><div class="leaf-num">{number}</div>'
+                f'{text.format(fit="300,26")}</div>{foot}')
+    return (f'{photo}<div class="L2-panel"><div class="m-num">{number}</div>'
+            f'{text.format(fit="320,26")}</div>{foot}')
 
 
 def _cover_variant(spec: SlideSpec, brand: BrandStyle, lang: str, bg: str, top: str) -> str | None:
@@ -205,11 +203,11 @@ def _cover_variant(spec: SlideSpec, brand: BrandStyle, lang: str, bg: str, top: 
         mark = _esc((brand.name or "").split(" ")[0].upper())
         return (f'<div class="C-stamp"><div class="stamp"><div class="stamp-photo">{bg}</div></div>'
                 f'<div class="postmark"><span>{mark}</span><small>TRAVEL</small></div>{top}'
-                f'<div class="stamp-title" data-fit="470,40">{title}</div>'
+                f'<div class="stamp-title" data-fit="275,34">{title}</div>'
                 f'<div class="m-bar dark">{handle}{credit}{swipe}</div></div>')
     if style == "diagonal":
         return (f'{bg}<div class="C-diag"><i class="diag-gold"></i><div class="diag-band"></div></div>{top}'
-                f'<div class="diag-title" data-fit="500,40">{title}</div>'
+                f'<div class="diag-title" data-fit="300,36">{title}</div>'
                 f'<div class="m-bar dark">{handle}{credit}{swipe}</div>')
     return None
 

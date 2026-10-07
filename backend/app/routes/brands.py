@@ -10,13 +10,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..auth import RequireUser
+from ..auth import RequireUser, RequireWriter
 from ..db import Brand, get_db
 from ..services import palette as colours
 from ..services import pipeline, storage
 from ..services.renderer import SlideSpec, renderer
 
-router = APIRouter(prefix="/api/brands", tags=["brands"], dependencies=[RequireUser])
+router = APIRouter(prefix="/api/brands", tags=["brands"], dependencies=[RequireUser, RequireWriter])
 FONTS = ["Cairo"]
 
 
@@ -112,6 +112,13 @@ async def upload_logo(bid: int, file: UploadFile = File(...), db: Session = Depe
     if b.logo_path:
         storage.delete(b.logo_path)
     b.logo_path = key
+    # The identity follows the logo at once: colours read from it drive every card and overlay
+    from ..services import palette as colours
+    if ext == "png":
+        found = colours.colors_from_logo(data)
+        if found:
+            b.colors = {**(b.colors or {}), **found}
+            b.color_mode = "auto"
     return _out(b)
 
 
@@ -134,11 +141,18 @@ class PreviewIn(BaseModel):
 async def preview(bid: int, body: PreviewIn, db: Session = Depends(get_db)):
     b = _get(db, bid)
     style = pipeline.brand_style(b, body.language)
-    samples = {
-        "cover": ("بينانغ بعد ٢٢ عامًا... جزيرة تسرق القلب", "دليلك لأجمل ما تغيّر في الجزيرة"),
-        "content": ("ما الجديد؟", "مقاهٍ تراثية، وشوارع فنية، وأسواق ليلية تجعل من جورج تاون وجهة مثالية للعائلات."),
-        "cta": (b.cta_text or "خطّط رحلتك القادمة معنا", "فريقنا جاهز لمساعدتك"),
-    }
+    if body.language == "en":
+        samples = {
+            "cover": ("Your headline shines here", "A short line that makes people swipe"),
+            "content": ("What's new?", "Each slide tells one clear idea in a few words, over a photo that fits the post."),
+            "cta": (b.cta_text or "Get in touch today", "Our team is ready to help"),
+        }
+    else:
+        samples = {
+            "cover": ("عنوان منشورك يظهر هنا بوضوح", "سطر قصير يشد المتابع للتمرير"),
+            "content": ("ما الجديد؟", "كل شريحة تحمل فكرة واحدة واضحة بكلمات قليلة، فوق صورة تناسب المنشور."),
+            "cta": (b.cta_text or "تواصل معنا اليوم", "فريقنا جاهز لمساعدتك"),
+        }
     heading, text = samples.get(body.kind, samples["cover"])
     # Each preview uses a different sample photo (bright sky → logo plate, sea, sunset) and a
     # different JUSOOR colour set, to show how posts vary while staying inside the identity.

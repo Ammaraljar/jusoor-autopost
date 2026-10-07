@@ -30,7 +30,7 @@ PLATFORM_SPECS: dict[str, dict[str, Any]] = {
     "linkedin": {"label": "LinkedIn", "format": "carousel", "limit": 2500, "tags": (3, 5),
                  "images": {"best": (3, 5), "max": 9, "default": 5},
                  "guide": "Multi-image post for professionals: an insight-led opening line, the business or "
-                          "industry angle (tourism market, MICE, trends), 3-5 short paragraphs, no slang, "
+                          "industry angle of the brand's field (market, trends, what it means for customers), 3-5 short paragraphs, no slang, "
                           "at most 1 emoji, 3-5 professional hashtags at the end."},
     "x": {"label": "X", "format": "single", "limit": 270, "tags": (1, 2),
           "images": {"best": (1, 1), "max": 4, "default": 1},
@@ -41,7 +41,7 @@ PLATFORM_SPECS: dict[str, dict[str, Any]] = {
                 "guide": "Short post: casual and warm, 2-3 short lines, under 480 characters, 0-2 hashtags."},
     "tiktok": {"label": "TikTok", "format": "carousel", "limit": 2000, "tags": (3, 6),
                "images": {"best": (3, 10), "max": 35, "default": 10},
-               "guide": "Photo-carousel caption: a catchy hook, 1-2 short lines, 3-6 trending travel hashtags."},
+               "guide": "Photo-carousel caption: a catchy hook, 1-2 short lines, 3-6 trending hashtags of the brand's field."},
 }
 PLATFORMS = list(PLATFORM_SPECS)
 

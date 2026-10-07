@@ -8,7 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..auth import RequireUser, check_supabase_key, current_user
+from ..auth import RequireOwner, RequireUser, RequireWriter, check_supabase_key, current_user
 from ..config import get_settings
 from ..db import Article, Draft, PublishLog, Source, get_db, utcnow
 from ..publishers import REGISTRY, get_publisher
@@ -63,7 +63,14 @@ async def health(check: bool = True):
 
 @router.get("/me")
 def me(user: dict = RequireUser):
-    return user
+    from ..db import Organization, session_scope
+    out = dict(user)
+    with session_scope() as db:
+        org = db.get(Organization, user.get("org_id")) if user.get("org_id") else None
+        if org:
+            out["org"] = {"id": org.id, "name": org.name, "industry": org.industry, "language": org.language,
+                          "dialect": org.dialect, "status": org.status}
+    return out
 
 
 @router.get("/status", dependencies=[RequireUser])
@@ -99,7 +106,7 @@ def read_credentials():
     return {"values": credentials.public_view(), "providers": {"ai": list(credentials.ENGINES)}}
 
 
-@router.post("/settings/credentials/test-ai", dependencies=[RequireUser])
+@router.post("/settings/credentials/test-ai", dependencies=[RequireOwner])
 async def test_ai():
     """Round-trip to the configured AI engine — powers the "test connection" button."""
     return await generator.test_connection()
@@ -116,7 +123,7 @@ async def engine_models(engine: str):
         raise HTTPException(502, str(exc)) from exc
 
 
-@router.put("/settings/credentials", dependencies=[RequireUser])
+@router.put("/settings/credentials", dependencies=[RequireOwner])
 def write_credentials(body: dict, db: Session = Depends(get_db)):
     """Save keys. An empty secret keeps the current one; null removes it."""
     # Fields of removed engines (sent by an older dashboard) are ignored instead of failing.
@@ -124,7 +131,7 @@ def write_credentials(body: dict, db: Session = Depends(get_db)):
     return {"values": credentials.save(db, body)}
 
 
-@router.put("/settings/{section}", dependencies=[RequireUser])
+@router.put("/settings/{section}", dependencies=[RequireOwner])
 def save_settings(section: str, body: dict, db: Session = Depends(get_db)):
     try:
         return app_settings.update_section(db, section, body)
@@ -132,7 +139,7 @@ def save_settings(section: str, body: dict, db: Session = Depends(get_db)):
         raise HTTPException(404, "قسم إعدادات غير معروف") from exc
 
 
-@router.post("/scrape/run", dependencies=[RequireUser])
+@router.post("/scrape/run", dependencies=[RequireWriter])
 async def run_now(background: BackgroundTasks):
     if jobs.busy:
         raise HTTPException(409, "توجد عملية سحب قيد التنفيذ")
@@ -148,7 +155,7 @@ class ScrapeWindow(BaseModel):
     purpose: str | None = None          # news | programs
 
 
-@router.post("/scrape/run-all", dependencies=[RequireUser])
+@router.post("/scrape/run-all", dependencies=[RequireWriter])
 async def run_all(background: BackgroundTasks, body: ScrapeWindow | None = None, db: Session = Depends(get_db)):
     if jobs.busy:
         raise HTTPException(409, "توجد عملية سحب قيد التنفيذ")
@@ -212,7 +219,7 @@ def export_backup(db: Session = Depends(get_db)):
     }
 
 
-@router.post("/backup/restore", dependencies=[RequireUser])
+@router.post("/backup/restore", dependencies=[RequireOwner])
 def restore_backup(body: dict, db: Session = Depends(get_db)):
     """Restore settings and add missing sources / campaigns from a backup file (nothing is deleted)."""
     from ..db import Campaign

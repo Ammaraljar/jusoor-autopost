@@ -10,8 +10,8 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..db import Article, Brand, CalendarItem, Draft, Slide, Source, session_scope, utcnow
-from . import app_settings, generator, images, scraper, storage, variants
+from ..db import Article, Brand, CalendarItem, Draft, Organization, Slide, Source, session_scope, utcnow
+from . import app_settings, generator, images, industries, media, scraper, storage, variants
 from . import palette as colours
 from .renderer import BrandStyle, SlideSpec, renderer
 
@@ -301,8 +301,10 @@ async def draft_from_calendar(item_id: int) -> int | None:
         if item is None:
             return None
         brand = _brand_for(db, item.brand_id)
-        gen = {**app_settings.get_section(db, "generation"), "content_type": item.content_type,
-               "platform": item.platform}
+        base = app_settings.get_section(db, "generation")
+        if not item.content_type:
+            item.content_type = base.get("content_type") or "news"
+        gen = {**base, "content_type": item.content_type, "platform": item.platform}
         if getattr(item, "dialect", None):
             gen["dialect"] = item.dialect
         draft = Draft(brand_id=brand.id, campaign_id=item.campaign_id, calendar_item_id=item.id, origin="calendar",
@@ -405,7 +407,19 @@ def _save_thumb(key: str, jpeg: bytes) -> str | None:
         return None
 
 
-async def render_draft(draft_id: int, positions: list[int] | None = None, refresh_backgrounds: bool = False) -> None:
+def _next_design_index(draft_id: int) -> int:
+    """The design after the one used by the company's most recent post."""
+    with session_scope() as db:
+        rows = db.scalars(select(Draft.palette).where(Draft.id != draft_id, Draft.palette.is_not(None))
+                          .order_by(Draft.id.desc()).limit(5)).all()
+    for p in rows:
+        if isinstance(p, dict) and p.get("design") is not None:
+            return int(p["design"]) + 1
+    return 0
+
+
+async def render_draft(draft_id: int, positions: list[int] | None = None, refresh_backgrounds: bool = False,
+                       next_design: bool = False) -> None:
     """(Re)render slide images. positions=None renders all slides."""
     with session_scope() as db:
         draft = db.get(Draft, draft_id)
@@ -417,6 +431,9 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
         slides = [(s.id, s.kind, s.heading, s.body, s.position, s.background_url, s.image_key) for s in draft.slides]
         needs_bg = refresh_backgrounds or any(s[5] is None for s in slides if s[1] != "cta")
         keywords, article_image = draft.image_keywords, draft.original_image_url
+        hook_text = draft.hook or ""
+        org = db.get(Organization, draft.org_id) if draft.org_id else None
+        fallback_keywords = industries.get(org.industry if org else None)["image_keywords"]
         credit = draft.source_name if (draft.origin == "source" and gen.get("credit_source", True)) else ""
         badge = draft.badge
         highlight = [draft.hook_highlight] if draft.hook_highlight else None
@@ -426,6 +443,7 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
         stored_palette = draft.palette
         brand_navy = (brand.colors or {}).get("navy") or colours.BRAND_NAVY
         brand_gold = (brand.colors or {}).get("gold") or colours.BRAND_GOLD
+        design_seed = brand.design_seed or 0
         logo_placement = brand.logo_placement or "top-left"
         rtl = draft.language == "ar"
 
@@ -433,26 +451,40 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
     if needs_bg:
         needed = max(1, sum(1 for s in slides if s[1] != "cta")) + 1        # +1: the last slide gets its own photo
         used = {s[5] for s in slides if s[5]} if refresh_backgrounds else set()
+        with session_scope() as db:
+            library = media.pick(db, f"{keywords} {hook_text}", needed + 4, used)
         # Network calls run in a worker thread so the server keeps answering while photos download
         backgrounds = await asyncio.to_thread(images.collect_backgrounds, article_image, keywords, mode, needed,
-                                              used, refresh_backgrounds)
+                                              used, refresh_backgrounds, library, fallback_keywords)
         if not backgrounds and mode != "source" and article_image and not refresh_backgrounds:
             backgrounds = await asyncio.to_thread(images.collect_backgrounds, article_image, keywords, "source", 1)
-        if refresh_backgrounds and not backgrounds:
-            _fail_soft(draft_id, "لم تُعثر على صور جديدة — أضف مفتاح Pexels في الإعدادات أو غيّر كلمات البحث عن الصور")
-            return
+        if refresh_backgrounds and len(backgrounds) < 2:
+            # Not enough new photos anywhere: at least reshuffle the post's own photos so it changes,
+            # and tell the user how to get fresh ones.
+            own = [s[5] for s in slides if s[5]]
+            if len(set(own)) > 1:
+                rotated = own[1:] + own[:1]
+                backgrounds = backgrounds + [b for b in await asyncio.to_thread(
+                    images.collect_backgrounds, None, "", "source", needed, set(), False,
+                    [{"url": u, "credit": "", "match": True} for u in dict.fromkeys(rotated)])]
+            _fail_soft(draft_id, "لم تتوفر صور جديدة كافية — أضف صورًا إلى مكتبة الصور أو مفتاح Pixabay/Pexels "
+                                 "في الإعدادات لمزيد من التنوع")
+            if not backgrounds:
+                return
 
-    # Colours: always a JUSOOR identity set (navy + gold shades), chosen once per post so all
-    # slides match — it suits the cover photo and differs from the previous posts.
+    # Design (colour set + card layout + cover style) from the company's own rotation: a new post
+    # takes the next design after the previous post; "redesign" moves this post to its next one.
+    # All designs are used before any of them comes back.
     palette_to_store = stored_palette
     if color_mode == "auto":
-        if needs_bg or not stored_palette or not stored_palette.get("variant"):
-            cover_bytes = backgrounds[0]["bytes"] if backgrounds else None
-            if cover_bytes is None:
-                cover_url = next((s[5] for s in slides if s[1] == "cover" and s[5]), None)
-                cover_bytes = await asyncio.to_thread(images.download_image, cover_url) if cover_url else None
-            palette_to_store = colours.pick_variant(cover_bytes, _recent_variants(draft_id),
-                                                    brand_navy, brand_gold, seed=draft_id)
+        stored_index = (stored_palette or {}).get("design")
+        if next_design and stored_index is not None:
+            index = int(stored_index) + 1
+        elif stored_index is not None:
+            index = int(stored_index)
+        else:
+            index = _next_design_index(draft_id)
+        palette_to_store = colours.design(index, brand_navy, brand_gold, design_seed)
         style.palette = palette_to_store
     else:
         style.palette = None

@@ -14,6 +14,9 @@ const DraftEditor = lazy(() => import('./pages/DraftEditor'));
 const SettingsPage = lazy(() => import('./pages/Settings'));
 const Sources = lazy(() => import('./pages/Sources'));
 const Stats = lazy(() => import('./pages/Stats'));
+const Library = lazy(() => import('./pages/Library'));
+const Team = lazy(() => import('./pages/Team'));
+const Admin = lazy(() => import('./pages/Admin'));
 
 export default function App() {
   const { loading, session } = useAuth();
@@ -31,6 +34,9 @@ export default function App() {
         <Route path="brand" element={<Brand />} />
         <Route path="stats" element={<Stats />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="library" element={<Library />} />
+        <Route path="team" element={<Team />} />
+        <Route path="admin" element={<Admin />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

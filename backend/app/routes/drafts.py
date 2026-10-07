@@ -13,12 +13,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from ..auth import RequireUser
+from ..auth import RequireUser, RequireWriter
 from ..db import Draft, PublishLog, Slide, get_db, utcnow
 from ..publishers import REGISTRY
 from ..services import app_settings, generator, pipeline, publishing, qa, scheduling, storage, variants
 
-router = APIRouter(prefix="/api/drafts", tags=["drafts"], dependencies=[RequireUser])
+router = APIRouter(prefix="/api/drafts", tags=["drafts"], dependencies=[RequireUser, RequireWriter])
 STATUSES = ["generating", "pending_review", "approved", "scheduled", "publishing", "published", "failed", "rejected"]
 EDITABLE = ["hook", "hook_highlight", "subtitle", "caption", "hashtags", "first_comment", "cta", "badge", "campaign_id", "brand_id"]
 
@@ -91,7 +91,7 @@ class ManualDraft(BaseModel):
     notes: str = ""
     dialect: str | None = None
     brand_id: int | None = None
-    content_type: str = "travel"
+    content_type: str = ""
     platform: str = "instagram"
 
 
@@ -461,15 +461,17 @@ async def regenerate_all(draft_id: int, background: BackgroundTasks, db: Session
 
 class RenderBody(BaseModel):
     refresh_backgrounds: bool = False
+    next_design: bool = False          # "redesign": move to the next design in the rotation
 
 
 @router.post("/{draft_id}/render")
 async def rerender(draft_id: int, body: RenderBody, db: Session = Depends(get_db)):
     d = _get(db, draft_id)
-    if body.refresh_backgrounds and d.error and d.error.startswith("لم تُعثر"):
+    if body.refresh_backgrounds and d.error and d.error.startswith(("لم تُعثر", "لم تتوفر")):
         d.error = None
     db.commit()
-    await pipeline.render_draft(d.id, None, refresh_backgrounds=body.refresh_backgrounds)
+    await pipeline.render_draft(d.id, None, refresh_backgrounds=body.refresh_backgrounds,
+                                next_design=body.next_design)
     db.expire_all()
     d = _get(db, draft_id)
     if body.refresh_backgrounds and d.error and d.error.startswith("لم تُعثر"):

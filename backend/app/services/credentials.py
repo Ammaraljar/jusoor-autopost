@@ -25,11 +25,63 @@ from ..config import get_settings
 from ..db import AppSetting, session_scope
 
 SETTINGS_KEY = "credentials"
-VERSION = "3.9-creative-layouts"
+VERSION = "4.0-multi-company"
 
 # Each engine carries what its own environment needs: suggested models, the key's format,
 # where to get the key, and request tweaks applied in generator._tune_payload().
 ENGINES: dict[str, dict[str, Any]] = {
+    "claude": {
+        "label": "Claude (Anthropic)", "kind": "openai", "base_url": "https://api.anthropic.com/v1",
+        "default_model": "claude-sonnet-4-6",
+        "models": [
+            {"id": "claude-sonnet-4-6", "note": "ممتاز بالعربية وسريع — الأنسب للمنشورات"},
+            {"id": "claude-opus-5-5", "note": "الأعلى جودة — أبطأ وأغلى"},
+        ],
+        "key_url": "https://console.anthropic.com/settings/keys", "key_prefix": "sk-ant-", "key_placeholder": "sk-ant-…",
+        "free": "مدفوع بالاستخدام (رصيد مسبق)",
+    },
+    "openai": {
+        "label": "OpenAI (ChatGPT)", "kind": "openai", "base_url": "https://api.openai.com/v1",
+        "default_model": "gpt-5-mini",
+        "models": [
+            {"id": "gpt-5-mini", "note": "سريع واقتصادي"},
+            {"id": "gpt-5", "note": "الأعلى جودة"},
+        ],
+        "key_url": "https://platform.openai.com/api-keys", "key_prefix": "sk-", "key_placeholder": "sk-…",
+        "free": "مدفوع بالاستخدام",
+    },
+    "kimi": {
+        "label": "Kimi (Moonshot)", "kind": "openai", "base_url": "https://api.moonshot.ai/v1",
+        "default_model": "kimi-k3",
+        "models": [
+            {"id": "kimi-k3", "note": "الأحدث والأقوى من Kimi"},
+            {"id": "kimi-k2.6", "note": "عام وأخف"},
+        ],
+        "key_url": "https://platform.kimi.ai/console/api-keys", "key_prefix": "sk-", "key_placeholder": "sk-…",
+        "free": "رصيد تجريبي عند التسجيل ثم مدفوع",
+    },
+    "deepseek": {
+        "label": "DeepSeek", "kind": "openai", "base_url": "https://api.deepseek.com",
+        "default_model": "deepseek-chat",
+        "models": [{"id": "deepseek-chat", "note": "اقتصادي جدًا وجيد بالعربية"}],
+        "key_url": "https://platform.deepseek.com/api_keys", "key_prefix": "sk-", "key_placeholder": "sk-…",
+        "free": "مدفوع برصيد مسبق — رخيص",
+    },
+    "grok": {
+        "label": "Grok (xAI)", "kind": "openai", "base_url": "https://api.x.ai/v1",
+        "default_model": "grok-4",
+        "models": [{"id": "grok-4", "note": "نموذج xAI الرئيسي"}],
+        "key_url": "https://console.x.ai", "key_prefix": "xai-", "key_placeholder": "xai-…",
+        "free": "مدفوع بالاستخدام",
+    },
+    "qwen": {
+        "label": "Qwen (Alibaba)", "kind": "openai",
+        "base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+        "default_model": "qwen-plus",
+        "models": [{"id": "qwen-plus", "note": "متوازن"}, {"id": "qwen-max", "note": "الأعلى جودة"}],
+        "key_url": "https://modelstudio.console.alibabacloud.com", "key_prefix": "sk-", "key_placeholder": "sk-…",
+        "free": "حصة مجانية عند التسجيل ثم مدفوع",
+    },
     "gemini": {
         "label": "Google Gemini", "kind": "openai",
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
@@ -88,7 +140,8 @@ ENGINES: dict[str, dict[str, Any]] = {
         "free": "خطة مجانية بحدود في الدقيقة واليوم",
     },
 }
-ENGINE_ORDER = ("gemini", "mistral", "groq", "cloudflare", "openrouter")   # preference when no primary is chosen
+ENGINE_ORDER = ("gemini", "claude", "openai", "mistral", "groq", "deepseek", "kimi", "grok", "qwen",
+                "cloudflare", "openrouter")   # preference when no primary is chosen
 
 # field -> (is_secret, env fallback attribute on Settings)
 FIELDS: dict[str, tuple[bool, str]] = {
@@ -101,6 +154,18 @@ FIELDS: dict[str, tuple[bool, str]] = {
     "openrouter_model": (False, "openrouter_model"),
     "groq_api_key": (True, "groq_api_key"),
     "groq_model": (False, "groq_model"),
+    "claude_api_key": (True, "anthropic_api_key"),
+    "claude_model": (False, "claude_model"),
+    "openai_api_key": (True, "openai_api_key"),
+    "openai_model": (False, "openai_model"),
+    "kimi_api_key": (True, "kimi_api_key"),
+    "kimi_model": (False, "kimi_model"),
+    "deepseek_api_key": (True, "deepseek_api_key"),
+    "deepseek_model": (False, "deepseek_model"),
+    "grok_api_key": (True, "grok_api_key"),
+    "grok_model": (False, "grok_model"),
+    "qwen_api_key": (True, "qwen_api_key"),
+    "qwen_model": (False, "qwen_model"),
     "gemini_api_key": (True, "gemini_api_key"),
     "gemini_model": (False, "gemini_model"),
     "cloudflare_api_key": (True, "cloudflare_api_key"),
@@ -113,33 +178,67 @@ FIELDS: dict[str, tuple[bool, str]] = {
     "uploadpost_api_key": (True, "uploadpost_api_key"),
 }
 
-_cache: dict[str, str] | None = None
+# Two layers: the platform's keys (shared by every company) and each company's own keys, which win.
+# Publishing accounts (Buffer, Meta, upload-post) are always the company's own.
+COMPANY_ONLY = {"buffer_api_key", "meta_access_token", "uploadpost_api_key"}
+HOME_ORG = 1          # the platform owner's company may also use the server's environment variables
+_cache: dict[str, dict[str, str]] = {}
 
 
 # --------------------------------------------------------------------- storage
-def _raw_stored() -> dict[str, str]:
-    global _cache
-    if _cache is None:
+def _org() -> int | None:
+    from ..db import current_org
+    return current_org.get()
+
+
+def _row_key(scope: str) -> str:
+    org = _org()
+    return SETTINGS_KEY if scope == "platform" or org is None else f"{SETTINGS_KEY}:org{org}"
+
+
+def _load(key: str) -> dict[str, str]:
+    if key not in _cache:
         try:
             with session_scope() as db:
-                row = db.get(AppSetting, SETTINGS_KEY)
-                _cache = {k: str(v) for k, v in (row.value or {}).items()} if row else {}
+                row = db.get(AppSetting, key)
+                _cache[key] = {k: str(v) for k, v in (row.value or {}).items()} if row else {}
         except Exception:  # noqa: BLE001 - never break a request because of the cache
             return {}
-    return _cache
+    return _cache[key]
+
+
+def _clean(values: dict[str, str]) -> dict[str, str]:
+    return {k: v for k, v in values.items() if k in FIELDS and v}
+
+
+def _platform() -> dict[str, str]:
+    return _clean(_load(SETTINGS_KEY))
+
+
+def _company() -> dict[str, str]:
+    return _clean(_load(_row_key("company"))) if _org() is not None else {}
+
+
+def _raw_stored() -> dict[str, str]:
+    return _load(SETTINGS_KEY)
 
 
 def _stored() -> dict[str, str]:
-    """Stored values that still mean something (keys of removed engines are ignored)."""
-    return {k: v for k, v in _raw_stored().items() if k in FIELDS and v}
+    """Values set from the dashboard: the company's own over the platform's."""
+    platform = _platform()
+    company = _company()
+    shared = {k: v for k, v in platform.items()
+              if k not in COMPANY_ONLY or _org() in (None, HOME_ORG)}
+    return {**shared, **company}
 
 
 def refresh() -> None:
-    global _cache
-    _cache = None
+    _cache.clear()
 
 
 def _env_value(field: str) -> str:
+    if field in COMPANY_ONLY and _org() not in (None, HOME_ORG):
+        return ""
     attr = FIELDS[field][1]
     return str(getattr(get_settings(), attr, "") or "") if attr else ""
 
@@ -175,10 +274,15 @@ def _default_primary(values: dict[str, str]) -> str:
 
 
 def source_of(field: str) -> str:
+    """dashboard = set by this company (or the platform when no company); platform = shared key."""
     if field not in FIELDS:
         return "unset"
-    if _stored().get(field):
+    if _org() is None:
+        return "dashboard" if _platform().get(field) else ("environment" if _env_value(field) else "unset")
+    if _company().get(field):
         return "dashboard"
+    if _stored().get(field):
+        return "platform"
     return "environment" if _env_value(field) else "unset"
 
 
@@ -269,12 +373,13 @@ def public_view() -> dict[str, Any]:
     return out
 
 
-def save(db: Session, values: dict[str, Any]) -> dict[str, Any]:
+def save(db: Session, values: dict[str, Any], scope: str = "company") -> dict[str, Any]:
     """Update stored credentials. For secrets: "" keeps the current value, None clears it.
 
-    Fields of removed engines are dropped from the database on every save."""
-    row = db.get(AppSetting, SETTINGS_KEY)
-    data = dict(_stored())
+    scope="company": the current company's own keys; scope="platform": the shared keys."""
+    key = _row_key(scope)
+    row = db.get(AppSetting, key)
+    data = _clean(dict(row.value or {})) if row else {}
     for field, (secret, _env) in FIELDS.items():
         if field not in values:
             continue
@@ -296,8 +401,7 @@ def save(db: Session, values: dict[str, Any]) -> dict[str, Any]:
     if row:
         row.value = data
     else:
-        db.add(AppSetting(key=SETTINGS_KEY, value=data))
+        db.add(AppSetting(key=key, value=data))
     db.flush()
-    global _cache
-    _cache = dict(data)
+    _cache[key] = dict(data)
     return public_view()

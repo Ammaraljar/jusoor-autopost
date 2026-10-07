@@ -5,6 +5,7 @@ import { AlertTriangle, ArrowRight, Bot, Check, CheckCircle2, ChevronLeft, Chevr
 import { Button, ErrorBox, Field, Loading, Modal, Spinner, StatusPill, useAction, useLoad } from '../components/ui';
 import { api, mediaUrl } from '../lib/api';
 import { fmtDate, fmtDateTime, toLocalInput } from '../lib/format';
+import { useAuth } from '../lib/auth';
 import { useI18n } from '../lib/i18n';
 
 const TEXT_FIELDS = ['hook', 'hook_highlight', 'subtitle', 'caption', 'hashtags', 'first_comment', 'cta'];
@@ -12,6 +13,7 @@ const REGEN_FIELDS = ['hook', 'subtitle', 'caption', 'cta', 'first_comment'];
 const BADGES = ['news', 'tips', 'guide', 'offer', 'event', 'culture', 'food'];
 
 export default function DraftEditor() {
+  const { can } = useAuth();
   const { id } = useParams();
   const { t, lang } = useI18n();
   const navigate = useNavigate();
@@ -52,6 +54,8 @@ export default function DraftEditor() {
   }), t('saved'));
   const regen = (field) => act(`regen-${field}`, () => api.post(`/api/drafts/${d.id}/regenerate`, { field }));
   const locked = ['publishing', 'published', 'generating'].includes(d.status);
+  const readOnly = !can('editor');
+  const editLocked = locked || readOnly;
   const origin = d.origin === 'source' ? d.source_name : d.origin === 'calendar' ? t('calendar_origin') : t('manual');
 
   return (
@@ -92,7 +96,7 @@ export default function DraftEditor() {
               {t('unschedule')}
             </Button>
           )}
-          {!locked && d.status !== 'rejected' && (
+          {!editLocked && d.status !== 'rejected' && (
             <Button variant="gold" icon={Send} disabled={!d.qa.passed || dirty} onClick={() => setModal('publish')}>
               {t('publish')}
             </Button>
@@ -130,25 +134,26 @@ export default function DraftEditor() {
               </button>
             ))}
           </div>
-          {slide && !locked && <SlideEditor key={slide.id + slide.heading + slide.body} draftId={d.id} slide={slide} busy={busy} act={act} />}
+          {slide && !editLocked && <SlideEditor key={slide.id + slide.heading + slide.body} draftId={d.id} slide={slide} busy={busy} act={act} />}
           <div className="row" style={{ marginTop: 12 }}>
-            <Button size="sm" icon={Images} busy={busy === 'newbg'} disabled={locked}
+            <Button size="sm" icon={Images} busy={busy === 'newbg'} disabled={editLocked}
               onClick={() => act('newbg', () => api.post(`/api/drafts/${d.id}/render`, { refresh_backgrounds: true }))}>
               {t('new_images')}
             </Button>
-            <label className={`btn btn-sm ${locked ? 'disabled' : ''}`} style={{ cursor: locked ? 'default' : 'pointer' }}
+            <label className={`btn btn-sm ${editLocked ? 'disabled' : ''}`} style={{ cursor: editLocked ? 'default' : 'pointer' }}
               title={t('upload_many_hint')}>
               {busy === 'many' ? <Spinner size={14} /> : <ImagePlus size={15} />} {t('upload_many')}
-              <input type="file" accept="image/*" multiple hidden disabled={locked}
+              <input type="file" accept="image/*" multiple hidden disabled={editLocked}
                 onChange={(e) => {
                   const files = e.target.files;
                   if (files?.length) act('many', () => api.uploadMany(`/api/drafts/${d.id}/backgrounds`, files), t('saved'));
                   e.target.value = '';
                 }} />
             </label>
-            <Button size="sm" icon={Wand2} busy={busy === 'render'} disabled={locked}
-              onClick={() => act('render', () => api.post(`/api/drafts/${d.id}/render`, { refresh_backgrounds: false }))}>
-              {t('rerender')}
+            <Button size="sm" icon={Wand2} busy={busy === 'render'} disabled={editLocked}
+              title={t('redesign_hint')}
+              onClick={() => act('render', () => api.post(`/api/drafts/${d.id}/render`, { refresh_backgrounds: false, next_design: true }))}>
+              {t('rerender')}{d.palette?.design != null ? ` (${(d.palette.design % 18) + 1}/18)` : ''}
             </Button>
             {d.language === 'ar' && (
               <select className="select" style={{ width: 'auto', height: 32, fontSize: 13 }} value=""
@@ -180,16 +185,16 @@ export default function DraftEditor() {
                 </button>
               )}>
                 {k === 'caption' || k === 'first_comment' ? (
-                  <textarea dir="auto" className="textarea" rows={k === 'caption' ? 8 : 3} value={form[k] || ''} disabled={locked}
+                  <textarea dir="auto" className="textarea" rows={k === 'caption' ? 8 : 3} value={form[k] || ''} disabled={editLocked}
                     onChange={(e) => set(k, e.target.value)} />
                 ) : (
-                  <input dir="auto" className="input" value={form[k] || ''} disabled={locked} onChange={(e) => set(k, e.target.value)} />
+                  <input dir="auto" className="input" value={form[k] || ''} disabled={editLocked} onChange={(e) => set(k, e.target.value)} />
                 )}
               </Field>
             ))}
             <div className="grid grid-2">
               <Field label={t('badge')}>
-                <select className="select" value={form.badge || ''} disabled={locked} onChange={(e) => set('badge', e.target.value)}>
+                <select className="select" value={form.badge || ''} disabled={editLocked} onChange={(e) => set('badge', e.target.value)}>
                   {BADGES.map((b) => <option key={b} value={b}>{b}</option>)}
                 </select>
               </Field>
@@ -385,7 +390,7 @@ function PlatformPosts({ draft, locked, onChange }) {
       <div className="row">
         <h3 style={{ margin: 0 }}><Send size={16} /> {t('platform_posts')}</h3>
         <div className="spacer" />
-        <Button size="sm" icon={Wand2} busy={busy === 'regen-v'} disabled={locked} onClick={regenerate}>{t('regen_platforms')}</Button>
+        <Button size="sm" icon={Wand2} busy={busy === 'regen-v'} disabled={editLocked} onClick={regenerate}>{t('regen_platforms')}</Button>
       </div>
       <p className="xs muted" style={{ margin: 0 }}>
         {draft.variants_generated ? t('platform_posts_hint') : t('platform_posts_derived')}
@@ -420,7 +425,7 @@ function PlatformPosts({ draft, locked, onChange }) {
           ) : null;
         })}
       </div>
-      <textarea className="textarea" dir="auto" rows={v.limit <= 500 ? 4 : 9} value={text} disabled={locked}
+      <textarea className="textarea" dir="auto" rows={v.limit <= 500 ? 4 : 9} value={text} disabled={editLocked}
         onChange={(e) => { setText(e.target.value); setEdited(true); }} />
       <div className="row">
         <span className="xs" style={{ color: over ? 'var(--danger)' : 'var(--muted)' }}>{text.length} / {v.limit}</span>

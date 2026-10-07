@@ -88,3 +88,16 @@ def fake_network(monkeypatch):
     monkeypatch.setattr(images, "download_image",
                         lambda url: jpeg_bytes((hash(url) % 255, 120, 180)))
     return transport
+
+
+@pytest.fixture(autouse=True)
+def home_org(client):
+    """Code in tests runs as company #1 (the migrated, original company)."""
+    from sqlalchemy import select
+
+    from app.db import Organization, current_org, session_scope
+    with session_scope() as db:
+        org_id = db.scalar(select(Organization.id).order_by(Organization.id))
+    token = current_org.set(org_id)
+    yield org_id
+    current_org.reset(token)

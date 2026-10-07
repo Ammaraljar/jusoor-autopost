@@ -269,3 +269,70 @@ def sample_background(kind: str) -> bytes:
     out = io.BytesIO()
     img.save(out, "JPEG", quality=88)
     return out.getvalue()
+
+
+
+# ------------------------------------------------------------------ design rotation
+LAYOUT_ORDER = ["panel", "arch", "ticket", "polaroid", "wave", "circle"]
+COVER_ORDER = ["full", "stamp", "diagonal"]
+DESIGN_COUNT = 18      # 6 colour sets x 6 layouts, 3 covers — every one is used before any repeats
+
+
+def design(index: int, navy: str = BRAND_NAVY, gold: str = BRAND_GOLD, seed: int = 0) -> dict[str, Any]:
+    """Design #index of the company's own rotation (its seed shuffles the order, so every company
+    gets its own sequence). Consecutive designs always change colour set and card layout."""
+    import random
+    rnd = random.Random(seed or 0)
+    variants = brand_variants(navy, gold)
+    v_order = list(range(len(variants)))
+    l_order = list(LAYOUT_ORDER)
+    c_order = list(COVER_ORDER)
+    rnd.shuffle(v_order)
+    rnd.shuffle(l_order)
+    rnd.shuffle(c_order)
+    i = index % DESIGN_COUNT
+    out = dict(variants[v_order[i % 6]])
+    out["layout"] = l_order[(i + i // 6) % 6]
+    out["cover"] = c_order[(i // 2 + i // 6) % 3]
+    out["design"] = i
+    out["source"] = "design"
+    return out
+
+
+# ------------------------------------------------------------------ colours from a logo
+def colors_from_logo(data: bytes) -> dict[str, str] | None:
+    """Brand colours read from the logo: a deep main colour (cards, overlays) and an accent.
+
+    Works with transparent PNGs; white, near-black and transparent pixels are ignored when a real
+    colour exists. Returns None for images it cannot read (e.g. SVG)."""
+    try:
+        img = Image.open(io.BytesIO(data)).convert("RGBA")
+    except Exception:  # noqa: BLE001
+        return None
+    img.thumbnail((160, 160))
+    pixels = [(r, g, b) for r, g, b, a in img.getdata() if a > 128]
+    if not pixels:
+        return None
+    flat = Image.new("RGB", (len(pixels), 1))
+    flat.putdata(pixels)
+    quant = flat.quantize(colors=8, method=Image.Quantize.MEDIANCUT)
+    pal = quant.getpalette() or []
+    found = []
+    for count, idx in sorted(quant.getcolors() or [], reverse=True):
+        r, g, b = (pal[idx * 3 + i] / 255 for i in range(3))
+        h, l, sat = colorsys.rgb_to_hls(r, g, b)
+        found.append((count, h, l, sat))
+    total = sum(c for c, *_ in found) or 1
+    colourful = [f for f in found if f[3] >= 0.25 and 0.12 <= f[2] <= 0.85 and f[0] / total > 0.03]
+    if not colourful:                       # monochrome logo: keep it elegant (charcoal + warm gold)
+        return {"navy": "#1C1C24", "gold": "#C6A23C"}
+    main = max(colourful, key=lambda f: f[0] * (1.2 - f[2]))            # frequent and not too light
+    _, mh, ml, ms = main
+    navy = _hex(_hsl(mh, max(ms, 0.45), min(ml, 0.24)))                # deep version of the main colour
+    others = [f for f in colourful if min(abs(f[1] - mh), 1 - abs(f[1] - mh)) > 0.07]
+    if others:
+        acc = max(others, key=lambda f: f[0] * f[3])
+        gold = _hex(_hsl(acc[1], max(acc[3], 0.55), min(max(acc[2], 0.45), 0.6)))
+    else:                                   # one-colour logo: a bright tint of the same hue
+        gold = _hex(_hsl(mh, max(ms, 0.6), 0.55))
+    return {"navy": navy, "gold": gold}

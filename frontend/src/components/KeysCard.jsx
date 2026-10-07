@@ -4,12 +4,13 @@ import { Button, Field, Spinner, useAction, useLoad } from './ui';
 import { api } from '../lib/api';
 import { useI18n } from '../lib/i18n';
 
-const ENGINE_ORDER = ['gemini', 'mistral', 'groq', 'cloudflare', 'openrouter'];
+const DEFAULT_ORDER = ['gemini', 'claude', 'openai', 'mistral', 'groq', 'deepseek', 'kimi', 'grok', 'qwen', 'cloudflare', 'openrouter'];
 const EXTRA_FIELDS = ['cloudflare_account_id'];
-const MODEL_FIELDS = ENGINE_ORDER.map((n) => `${n}_model`);
-const PUBLISH_KEYS = [
+const PHOTO_KEYS = [
   { field: 'pexels_api_key', label: 'stock_photos', hint: 'pexels.com/api' },
   { field: 'pixabay_api_key', label: 'Pixabay', hint: 'pixabay.com/api/docs' },
+];
+const PUBLISH_KEYS = [
   { field: 'buffer_api_key', label: 'Buffer', hint: 'publish.buffer.com' },
   { field: 'meta_access_token', label: 'Meta (Facebook / Instagram)', hint: 'developers.facebook.com' },
   { field: 'uploadpost_api_key', label: 'upload-post.com', hint: 'upload-post.com' },
@@ -20,14 +21,16 @@ function KeyState({ state }) {
   if (!state?.set) return <span className="pill" style={{ alignSelf: 'flex-start' }}>{t('key_missing')}</span>;
   return (
     <span className="pill ok" style={{ alignSelf: 'flex-start' }}>
-      {t('key_set')} {state.hint} · {state.source === 'dashboard' ? t('from_db') : t('from_env')}
+      {t('key_set')} {state.hint} · {state.source === 'dashboard' ? t('from_db')
+        : state.source === 'platform' ? t('from_platform') : t('from_env')}
     </span>
   );
 }
 
 const CUSTOM = '__custom__';
 
-function initialForm(v) {
+function initialForm(v, order) {
+  const MODEL_FIELDS = order.map((n) => `${n}_model`);
   return {
     ai_mode: v.ai_mode || 'single',
     ai_primary: v.ai_primary || 'mistral',
@@ -37,9 +40,11 @@ function initialForm(v) {
   };
 }
 
-export default function KeysCard({ onSaved }) {
+export default function KeysCard({ onSaved, platform = false }) {
   const { t } = useI18n();
-  const creds = useLoad(() => api.get('/api/settings/credentials'), []);
+  const endpoint = platform ? '/api/admin/credentials' : '/api/settings/credentials';
+  const creds = useLoad(() => api.get(endpoint), [endpoint]);
+  const [showAll, setShowAll] = useState(false);
   const [form, setForm] = useState(null);
   const [test, setTest] = useState(null);
   const [customModel, setCustomModel] = useState({});
@@ -47,11 +52,17 @@ export default function KeysCard({ onSaved }) {
   const [modelsError, setModelsError] = useState({});
   const [busy, run] = useAction();
 
-  useEffect(() => { if (creds.data) setForm(initialForm(creds.data.values)); }, [creds.data]);
+  const orderOf = (v) => {
+    const keys = Object.keys(v?.engines || {});
+    return keys.length ? keys : DEFAULT_ORDER;
+  };
+  useEffect(() => { if (creds.data) setForm(initialForm(creds.data.values, orderOf(creds.data.values))); }, [creds.data]);
   if (!form) return <div className="card card-pad"><Spinner /></div>;
 
   const values = creds.data.values;
   const engines = values.engines || {};
+  const ENGINE_ORDER = orderOf(values);
+  const MODEL_FIELDS = ENGINE_ORDER.map((n) => `${n}_model`);
   const outdated = !engines.mistral;                 // the server still runs a release without these engines
   const ensembleMode = form.ai_mode === 'ensemble';
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -69,19 +80,19 @@ export default function KeysCard({ onSaved }) {
     ...Object.fromEntries(EXTRA_FIELDS.map((f) => [f, (form[f] || '').trim()])),
     ...form.secrets,
   });
-  const initial = initialForm(values);
+  const initial = initialForm(values, ENGINE_ORDER);
   const dirty = JSON.stringify({ ...form, secrets: {} }) !== JSON.stringify(initial)
     || Object.values(form.secrets).some(Boolean);
 
   const save = () => run('save', async () => {
-    const res = await api.put('/api/settings/credentials', payload());
+    const res = await api.put(endpoint, payload());
     creds.setData({ ...creds.data, values: res.values });
     setTest(null);
     onSaved?.();
   }, t('saved'));
 
   const clear = (field) => run(`clear-${field}`, async () => {
-    const res = await api.put('/api/settings/credentials', { [field]: null });
+    const res = await api.put(endpoint, { [field]: null });
     creds.setData({ ...creds.data, values: res.values });
     onSaved?.();
   }, t('saved'));
@@ -106,7 +117,7 @@ export default function KeysCard({ onSaved }) {
       <div className="row" style={{ flexWrap: 'nowrap', gap: 8 }}>
         <input className="input ltr" type="password" autoComplete="new-password" placeholder="••••••••"
           value={form.secrets[field] ?? ''} onChange={(e) => setSecret(field, e.target.value)} />
-        {values[field]?.set && values[field]?.source === 'dashboard' && (
+        {values[field]?.set && (values[field]?.source === 'dashboard' || (platform && values[field]?.source !== 'environment')) && (
           <Button size="sm" variant="danger" icon={Trash2} busy={busy === `clear-${field}`}
             onClick={() => clear(field)} title={t('remove_key')} />
         )}
@@ -152,7 +163,7 @@ export default function KeysCard({ onSaved }) {
                 <input className="input ltr" type="password" autoComplete="new-password"
                   placeholder={info.key_placeholder || '••••••••'}
                   value={form.secrets[`${name}_api_key`] ?? ''} onChange={(e) => setSecret(`${name}_api_key`, e.target.value)} />
-                {values[`${name}_api_key`]?.set && values[`${name}_api_key`]?.source === 'dashboard' && (
+                {values[`${name}_api_key`]?.set && (values[`${name}_api_key`]?.source === 'dashboard' || platform) && values[`${name}_api_key`]?.source !== 'environment' && (
                   <Button size="sm" variant="danger" icon={Trash2} busy={busy === `clear-${name}_api_key`}
                     onClick={() => clear(`${name}_api_key`)} title={t('remove_key')} />
                 )}
@@ -194,8 +205,8 @@ export default function KeysCard({ onSaved }) {
   return (
     <div className="card card-pad stack">
       <div>
-        <h3><KeyRound size={16} /> {t('keys_title')}</h3>
-        <p className="small muted" style={{ marginTop: -8 }}>{t('keys_sub')}</p>
+        <h3><KeyRound size={16} /> {platform ? t('platform_keys_title') : t('keys_title')}</h3>
+        <p className="small muted" style={{ marginTop: -8 }}>{platform ? t('platform_keys_sub') : t('keys_sub_company')}</p>
       </div>
 
       {outdated && (
@@ -205,7 +216,12 @@ export default function KeysCard({ onSaved }) {
       )}
 
       <b className="small">{t('engines')}</b>
-      <div className="target-grid">{ENGINE_ORDER.map(engineBlock)}</div>
+      <div className="target-grid">{ENGINE_ORDER.filter((n) => showAll || hasKey(n) || active.length === 0).map(engineBlock)}</div>
+      {active.length > 0 && (
+        <button type="button" className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setShowAll((v) => !v)}>
+          {showAll ? t('hide_engines') : `${t('show_engines')} (${ENGINE_ORDER.length - active.length})`}
+        </button>
+      )}
 
       <div className="grid grid-2">
         <Field label={t('ai_mode')}>
@@ -249,8 +265,12 @@ export default function KeysCard({ onSaved }) {
       ))}
 
       <div className="divider" />
-      <b className="small">{t('publishers_keys')}</b>
-      {PUBLISH_KEYS.map(({ field, label, hint }) => (
+      <b className="small">{t('photo_keys')}</b>
+      {PHOTO_KEYS.map(({ field, label, hint }) => (
+        <Field key={field} label={t(label) === label ? label : t(label)} hint={hint}>{secretInput(field)}</Field>
+      ))}
+      {!platform && <b className="small">{t('publishers_keys')}</b>}
+      {!platform && PUBLISH_KEYS.map(({ field, label, hint }) => (
         <Field key={field} label={t(label) === label ? label : t(label)} hint={hint}>{secretInput(field)}</Field>
       ))}
       <p className="xs muted">{t('key_hint')}</p>

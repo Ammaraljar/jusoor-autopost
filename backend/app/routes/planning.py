@@ -8,11 +8,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
-from ..auth import RequireUser
+from ..auth import RequireUser, RequireWriter
 from ..db import CalendarItem, Campaign, Draft, get_db
 from ..services import pipeline, scheduling
 
-router = APIRouter(prefix="/api", tags=["planning"], dependencies=[RequireUser])
+router = APIRouter(prefix="/api", tags=["planning"], dependencies=[RequireUser, RequireWriter])
 
 
 class CampaignIn(BaseModel):
@@ -86,7 +86,7 @@ class CalendarIn(BaseModel):
     time: str = Field("10:00", pattern=r"^\d{2}:\d{2}$")
     topic: str = Field(min_length=3)
     notes: str = ""
-    content_type: str = "travel"
+    content_type: str = ""
     platform: str = "instagram"
     campaign_id: int | None = None
     brand_id: int | None = None

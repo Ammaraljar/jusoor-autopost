@@ -180,7 +180,8 @@ def test_credentials_saved_from_the_dashboard_are_used(client, monkeypatch):
     }).json()["values"]
     assert saved["groq_api_key"] == {"set": True, "source": "dashboard", "hint": "…alue"}
     assert saved["engines"]["groq"]["ready"] is True
-    assert set(saved["engines"]) == {"gemini", "mistral", "groq", "cloudflare", "openrouter"}
+    assert {"gemini", "claude", "openai", "kimi", "deepseek", "grok", "qwen", "mistral", "groq", "cloudflare",
+            "openrouter"} == set(saved["engines"])
     assert "gsk_secret-value" not in str(saved)
 
     status = client.get("/api/status").json()
@@ -195,8 +196,8 @@ def test_credentials_saved_from_the_dashboard_are_used(client, monkeypatch):
     assert credentials.current()["groq_api_key"] == ""
 
     # Fields of removed engines (an old dashboard) are ignored, not an error
-    r = client.put("/api/settings/credentials", json={"deepseek_api_key": "sk-x", "ai_primary": "claude"})
-    assert r.status_code == 200 and "deepseek_api_key" not in r.json()["values"]
+    r = client.put("/api/settings/credentials", json={"anthropic_old_field": "sk-x", "ai_primary": "nope"})
+    assert r.status_code == 200 and "anthropic_old_field" not in r.json()["values"]
     client.put("/api/settings/credentials", json={f: None for f in credentials.FIELDS})
     credentials.refresh()
 

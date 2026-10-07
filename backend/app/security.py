@@ -52,3 +52,27 @@ def read_token(token: str) -> dict[str, Any] | None:
 def password_matches(given: str) -> bool:
     expected = get_settings().admin_password
     return bool(expected) and secrets.compare_digest(given.encode(), expected.encode())
+
+
+
+# ------------------------------------------------------------------ user passwords (PBKDF2, stdlib only)
+def hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 240_000).hex()
+    return f"pbkdf2$240000${salt}${digest}"
+
+
+def verify_password(password: str, stored: str) -> bool:
+    try:
+        _algo, rounds, salt, digest = stored.split("$")
+        check = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), int(rounds)).hex()
+        return hmac.compare_digest(check, digest)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def create_user_token(user_id: int, email: str, hours: int | None = None) -> str:
+    s = get_settings()
+    body = {"uid": user_id, "email": email, "exp": int(time.time()) + (hours or s.session_hours) * 3600}
+    payload = _b64(json.dumps(body, separators=(",", ":")).encode())
+    return f"{payload}.{_sign(payload)}"

@@ -17,7 +17,7 @@ def internal(monkeypatch):
 
 
 def test_mode_is_internal(client, internal):
-    assert client.get("/api/auth/mode").json() == {"mode": "internal"}
+    assert client.get("/api/auth/mode").json()["mode"] == "internal"
     assert client.get("/api/health").json()["auth"]["mode"] == "internal"
 
 

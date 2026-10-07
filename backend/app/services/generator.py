@@ -131,41 +131,61 @@ a programme that {brand} offers:
 
 
 def build_system_prompt(brand: BrandContext, gen: dict[str, Any]) -> str:
-    lang = LANG_NAMES.get(gen.get("language", "ar"), "Arabic")
+    from . import industries
+    language = gen.get("language", "ar")
+    lang = LANG_NAMES.get(language, "Arabic")
+    profile = industries.get(gen.get("industry"))
+    audience = gen.get("audience") or profile["audience"]["ar" if language == "ar" else "en"]
     extra = ""
-    if gen.get("language", "ar") == "ar":
+    if language == "ar":
         extra += "\n" + dialect_rules(gen.get("dialect"))
+    else:
+        extra += "\n- Write natural, engaging English for social media — clear, warm and concrete, never corporate."
+    if profile.get("rules"):
+        extra += "\n- " + profile["rules"]
     if gen.get("purpose") == "programs":
         extra += "\n" + PROGRAM_RULES.format(brand=brand.name)
-    return f"""You are the senior social media editor for {brand.name} ({brand.handle}), a premium travel brand.
-Brand voice: {brand.voice or 'sophisticated, warm, trustworthy and inspiring'}.
-Target audience: {gen.get('audience') or 'Arab travellers'}.
-Marketing objective: {gen.get('objective') or 'engagement and trust'}.
-Write everything in {lang}. Tone: {gen.get('tone', 'friendly')}. Content type: {gen.get('content_type', 'news')}.
+    if language == "ar":
+        examples = ('Hook formulas (pick the one the material supports best): a number ("٥ أشياء…"), a secret or a\n'
+                    '  common mistake ("خطأ يقع فيه أغلب…"), a direct question, a clear benefit ("وفّر…"), or\n'
+                    '  news-you-can-use ("ابتداءً من…").')
+        caption = ('Caption: first line repeats the promise, then value, then a question that invites comments,\n'
+                   '  then a save/share nudge ("احفظ المنشور لترجع له") and a soft invitation to act.')
+        reader = 'Speak to one reader ("أنت/أنتم")'
+    else:
+        examples = ('Hook formulas (pick the one the material supports best): a number ("5 things…"), a secret or a\n'
+                    '  common mistake ("The mistake most people make…"), a direct question, a clear benefit\n'
+                    '  ("Save…", "Without…"), or news-you-can-use ("Starting from…").')
+        caption = ('Caption: first line repeats the promise, then value, then a question that invites comments,\n'
+                   '  then a save/share nudge ("Save this for later") and a soft invitation to act.')
+        reader = 'Speak to one reader ("you")'
+    return f"""You are the senior social media editor for {brand.name} ({brand.handle}), a {profile['brand_type']}.
+Industry: {profile['en']}.
+Brand voice: {brand.voice or 'warm, trustworthy, expert and inspiring'}.
+Target audience: {audience}.
+Marketing objective: {gen.get('objective') or profile['objective']}.
+Write everything in {lang}. Tone: {gen.get('tone', profile['tone'])}. Content type: {gen.get('content_type', 'news')}.
 Platform: {gen.get('platform', 'instagram')} carousel (1080x1350).
 
 Writing playbook (this is what makes people stop, save and share):
-- Value first: every slide must teach or give something the reader can use — a practical tip, an insider detail,
-  a number, a best time, a mistake to avoid, or what the news means for THEIR trip. No filler, no empty praise.
-- Hook formulas (pick the one the material supports best): a number ("٥ أشياء…"), a secret or a common mistake
-  ("خطأ يقع فيه أغلب…"), a direct question, a clear benefit ("وفّر…", "بدون زحام"), or news-you-can-use
-  ("ابتداءً من…"). Concrete beats generic: name the place, the season, the saving.
-- Speak to one reader ("أنت/أنتم"), warm and confident like a trusted travel friend — never like a press release.
+- Value first: every slide must give the reader something useful — {profile['value']}. No filler, no empty praise.
+- {examples} Concrete beats generic: name the thing, the place, the number, the benefit.
+- {reader}, warm and confident like a trusted expert friend in this field — never like a press release.
 - Slides follow a story: the promise → the useful points (one idea per slide) → a practical next step.
-- Short sentences. One idea per sentence. Arabic that sounds natural, not translated.
-- Caption: first line repeats the promise, then value, then a question that invites comments (e.g. "أي محطة
-  تبدأون بها؟"), then a save/share nudge ("احفظ المنشور لرحلتك القادمة") and a soft invitation to book.
+- Short sentences. One idea per sentence. Language that sounds native, not translated.
+- {caption}
 - 1-3 emojis in the caption at most, none on the slides.
 
 Rules:
 - Use ONLY facts present in the source material. Never invent prices, dates, names, numbers or quotes.
 - Rewrite in your own words; do not translate sentence by sentence and do not copy long passages.
-- Keep brand and place names recognisable (you may add the English name in brackets once).
-- Hashtags: mix of Arabic and English where useful, no spaces inside a hashtag, each starts with #.
+- Keep brand, product and place names recognisable.
+- Hashtags: relevant to the field and the audience's language, no spaces inside a hashtag, each starts with #.
 - Never output placeholder text such as "لا يوجد" or "N/A". If there is no good first comment, return an empty string.
-- Produce exactly {int(gen.get('content_slides', 4))} content slides that tell a clear story (what / why it matters / tips / how to go).
-- The CTA should invite followers to contact or book with {brand.name}{(' — ' + brand.cta_text) if brand.cta_text else ''}.
-- Score relevance honestly: general culture or politics with no travel angle should score low (0-4).{extra}"""
+- Produce exactly {int(gen.get('content_slides', 4))} content slides that tell a clear story.
+- The CTA should invite followers to act with {brand.name}{(' — ' + brand.cta_text) if brand.cta_text else ''}.
+- Score relevance honestly for this brand: 8-10 when it is clearly about {profile['relevance']} and useful to the
+  audience; 0-4 when it has no real angle for them.{extra}"""
 
 
 def _normalise_hashtags(tags: Any) -> list[str]:
@@ -334,10 +354,13 @@ async def list_models(name: str, client: httpx.AsyncClient | None = None, fresh:
     own = client is None
     client = client or httpx.AsyncClient(timeout=30)
     models_url = cfg["base_url"].rstrip("/") + "/models"
+    headers = {"Authorization": f"Bearer {cfg['api_key']}"}
+    if name == "claude":         # Anthropic lists models on its native API
+        headers = {"x-api-key": cfg["api_key"], "anthropic-version": "2023-06-01"}
     if name == "cloudflare":     # Workers AI lists its catalogue on a different path
         models_url = cfg["base_url"].rsplit("/ai/", 1)[0] + "/ai/models/search?task=Text%20Generation&per_page=100"
     try:
-        resp = await client.get(models_url, headers={"Authorization": f"Bearer {cfg['api_key']}"})
+        resp = await client.get(models_url, headers=headers)
     except httpx.HTTPError as exc:
         raise AIError(f"{cfg['label']}: تعذّر جلب قائمة النماذج ({exc})") from exc
     finally:
@@ -362,7 +385,8 @@ def pick_model(name: str, wanted: str, available: list[str]) -> str:
     if wanted in available:
         return wanted
     low = [a.lower() for a in available]
-    family = next((f for f in ("small", "medium", "large", "120b", "20b", "70b", "8b", "mini")
+    family = next((f for f in ("small", "medium", "large", "120b", "20b", "70b", "8b", "mini", "sonnet", "opus",
+                               "haiku", "flash", "plus", "max", "k3", "chat")
                    if f in wanted.lower()), "")
     if family:
         same = [a for a, l in zip(available, low) if family in l]

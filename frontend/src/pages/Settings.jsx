@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, Bot, CheckCircle2, HardDrive, PlugZap, Save } from 'lucide-react';
+import CompanyCard from '../components/CompanyCard';
 import KeysCard from '../components/KeysCard';
 import { Button, ErrorBox, Field, Loading, PageHead, useAction, useLoad } from '../components/ui';
 import { api } from '../lib/api';
@@ -35,6 +36,7 @@ export default function SettingsPage() {
       <PageHead title={t('settings_title')} sub={t('settings_sub')} />
       <div className="grid grid-2" style={{ alignItems: 'start' }}>
         <div className="stack">
+          <CompanyCard onSaved={() => settings.reload(true)} />
           <div className="card card-pad stack">
             <h3>{t('generation')}</h3>
             <div className="grid grid-2">

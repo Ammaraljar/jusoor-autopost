@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
 from .db import init_db, session_scope
-from .routes import auth_routes, brands, drafts, planning, sources, system
+from .routes import auth_routes, brands, drafts, media, planning, sources, system, team
 from .services.jobs import jobs
 from .services.pipeline import ensure_default_brand
 from .services.renderer import renderer
@@ -23,8 +23,14 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    from .db import Organization, use_org
+    from .services import tenancy
+    tenancy.bootstrap()
     with session_scope() as db:
-        ensure_default_brand(db)
+        org_ids = [o.id for o in db.query(Organization).all()]
+    for oid in org_ids:
+        with use_org(oid), session_scope() as db:
+            ensure_default_brand(db)
     jobs.start()
     yield
     jobs.stop()
@@ -67,7 +73,8 @@ class CachedStatic(StaticFiles):
         return resp
 
 
-for r in (system.router, auth_routes.router, drafts.router, sources.router, planning.router, brands.router):
+for r in (system.router, auth_routes.router, drafts.router, sources.router, planning.router, brands.router,
+          team.router, team.admin, media.router):
     app.include_router(r)
 
 if settings.storage_backend == "local":

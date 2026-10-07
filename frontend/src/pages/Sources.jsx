@@ -8,7 +8,7 @@ import { useI18n } from '../lib/i18n';
 
 const EMPTY = {
   name: '', kind: 'website', base_url: '', feed_url: '', listing_urls: [], link_pattern: '', link_selector: '',
-  body_selector: '', purpose: 'news', dialect: '', category: 'travel', country: 'Malaysia', language: 'en', priority: 5, enabled: true,
+  body_selector: '', purpose: 'news', dialect: '', category: 'general', country: '', language: 'en', priority: 5, enabled: true,
   check_interval_minutes: 120, max_items_per_run: 5, brand_id: null,
 };
 

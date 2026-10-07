@@ -18,7 +18,8 @@ class Settings(BaseSettings):
     # Auth — internal (email + password from the environment) or Supabase
     admin_email: str = ""
     admin_password: str = ""
-    secret_key: str = ""                # signs the dashboard session token
+    secret_key: str = ""
+    allow_signup: bool = True              # companies can create their own accounts
     session_hours: int = 720            # 30 days
 
     # Auth (Supabase — only when internal credentials are not set)
@@ -42,6 +43,18 @@ class Settings(BaseSettings):
     openrouter_model: str = "openrouter/free"   # free router; any ":free" model id also works
     groq_api_key: str = ""
     groq_model: str = "openai/gpt-oss-120b"
+    anthropic_api_key: str = ""
+    claude_model: str = "claude-sonnet-4-6"
+    openai_api_key: str = ""
+    openai_model: str = "gpt-5-mini"
+    kimi_api_key: str = ""
+    kimi_model: str = "kimi-k3"
+    deepseek_api_key: str = ""
+    deepseek_model: str = "deepseek-chat"
+    grok_api_key: str = ""
+    grok_model: str = "grok-4"
+    qwen_api_key: str = ""
+    qwen_model: str = "qwen-plus"
     gemini_api_key: str = ""
     gemini_model: str = "gemini-flash-latest"
     cloudflare_api_key: str = ""

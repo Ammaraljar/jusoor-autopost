@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import date, datetime, timezone
 from typing import Any, Iterator
 
@@ -38,7 +39,58 @@ class Base(DeclarativeBase):
         return out
 
 
-class Brand(Base):
+# ------------------------------------------------------------------ multi-tenancy
+# The organisation the current request / job works for. Every tenant table is filtered by it
+# automatically (see _scope_to_org below), so a company only ever sees its own data.
+current_org: ContextVar[int | None] = ContextVar("current_org", default=None)
+
+
+@contextmanager
+def use_org(org_id: int | None):
+    token = current_org.set(org_id)
+    try:
+        yield
+    finally:
+        current_org.reset(token)
+
+
+class TenantMixin:
+    org_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+
+
+class Organization(Base):
+    __tablename__ = "organizations"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(160))
+    industry: Mapped[str] = mapped_column(String(40), default="travel")
+    language: Mapped[str] = mapped_column(String(5), default="ar")       # main posting language
+    dialect: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="active")   # active | suspended
+    plan: Mapped[str] = mapped_column(String(30), default="standard")
+    max_users: Mapped[int] = mapped_column(Integer, default=10)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class User(Base):
+    __tablename__ = "users"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    org_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    email: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(160), default="")
+    password_hash: Mapped[str] = mapped_column(String(300), default="")
+    role: Mapped[str] = mapped_column(String(20), default="editor")      # owner | editor | reviewer
+    is_superadmin: Mapped[bool] = mapped_column(Boolean, default=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    def public(self) -> dict[str, Any]:
+        return {"id": self.id, "email": self.email, "name": self.name, "role": self.role, "org_id": self.org_id,
+                "is_superadmin": self.is_superadmin, "active": self.active,
+                "last_login_at": self.to_dict()["last_login_at"], "created_at": self.to_dict()["created_at"]}
+
+
+class Brand(TenantMixin, Base):
     __tablename__ = "brands"
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(120))
@@ -51,6 +103,7 @@ class Brand(Base):
     logo_placement: Mapped[str] = mapped_column(String(20), default="top-left")
     card_style: Mapped[str] = mapped_column(String(20), default="frosted")
     card_theme: Mapped[str | None] = mapped_column(String(20), nullable=True, default="magazine")  # magazine | classic
+    design_seed: Mapped[int | None] = mapped_column(Integer, nullable=True)   # makes each company's design unique
     color_mode: Mapped[str | None] = mapped_column(String(20), nullable=True, default="auto")      # auto | brand
     logo_backdrop: Mapped[str | None] = mapped_column(String(20), nullable=True, default="auto")   # auto | always | never
     cta_text: Mapped[str] = mapped_column(Text, default="")
@@ -59,7 +112,7 @@ class Brand(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
-class Source(Base):
+class Source(TenantMixin, Base):
     __tablename__ = "sources"
     id: Mapped[int] = mapped_column(primary_key=True)
     brand_id: Mapped[int | None] = mapped_column(ForeignKey("brands.id", ondelete="SET NULL"), nullable=True)
@@ -88,9 +141,9 @@ class Source(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
-class Article(Base):
+class Article(TenantMixin, Base):
     __tablename__ = "articles"
-    __table_args__ = (UniqueConstraint("url", name="uq_articles_url"),)
+    __table_args__ = (UniqueConstraint("org_id", "url", name="uq_articles_org_url"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     source_id: Mapped[int | None] = mapped_column(ForeignKey("sources.id", ondelete="SET NULL"), nullable=True)
     url: Mapped[str] = mapped_column(String(800))
@@ -104,7 +157,7 @@ class Article(Base):
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
-class Campaign(Base):
+class Campaign(TenantMixin, Base):
     __tablename__ = "campaigns"
     id: Mapped[int] = mapped_column(primary_key=True)
     brand_id: Mapped[int | None] = mapped_column(ForeignKey("brands.id", ondelete="SET NULL"), nullable=True)
@@ -117,7 +170,7 @@ class Campaign(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
-class CalendarItem(Base):
+class CalendarItem(TenantMixin, Base):
     __tablename__ = "calendar_items"
     id: Mapped[int] = mapped_column(primary_key=True)
     brand_id: Mapped[int | None] = mapped_column(ForeignKey("brands.id", ondelete="SET NULL"), nullable=True)
@@ -134,7 +187,7 @@ class CalendarItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
-class Draft(Base):
+class Draft(TenantMixin, Base):
     __tablename__ = "drafts"
     id: Mapped[int] = mapped_column(primary_key=True)
     brand_id: Mapped[int | None] = mapped_column(ForeignKey("brands.id", ondelete="SET NULL"), nullable=True)
@@ -213,6 +266,22 @@ class PublishLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class MediaAsset(TenantMixin, Base):
+    """The company's own photo library — used when the sources have no suitable photo."""
+    __tablename__ = "media_assets"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    url: Mapped[str] = mapped_column(String(800))
+    key: Mapped[str | None] = mapped_column(String(500), nullable=True)      # storage key when uploaded/copied
+    source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)   # original link (Drive, Unsplash…)
+    title: Mapped[str] = mapped_column(String(200), default="")
+    tags: Mapped[str] = mapped_column(Text, default="")                      # space/comma separated keywords
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    used_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class AppSetting(Base):
     __tablename__ = "app_settings"
     key: Mapped[str] = mapped_column(String(60), primary_key=True)
@@ -251,6 +320,32 @@ engine = _make_engine()
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 
+def _install_tenant_scope() -> None:
+    from sqlalchemy import event
+    from sqlalchemy.orm import Session, with_loader_criteria
+
+    @event.listens_for(Session, "do_orm_execute")
+    def _scope_to_org(state):  # noqa: ANN001
+        org = current_org.get()
+        if org is None or state.execution_options.get("all_orgs"):
+            return
+        if state.is_select or state.is_update or state.is_delete:
+            state.statement = state.statement.options(
+                with_loader_criteria(TenantMixin, lambda cls: cls.org_id == org, include_aliases=True))
+
+    @event.listens_for(Session, "before_flush")
+    def _stamp_org(session, _ctx, _instances):  # noqa: ANN001
+        org = current_org.get()
+        if org is None:
+            return
+        for obj in session.new:
+            if isinstance(obj, TenantMixin) and getattr(obj, "org_id", None) is None:
+                obj.org_id = org
+
+
+_install_tenant_scope()
+
+
 # Columns added after the first release: (table, column, SQL type). create_all() never alters
 # existing tables, so these are added in place on start-up.
 _ADDED_COLUMNS = [
@@ -263,6 +358,13 @@ _ADDED_COLUMNS = [
     ("sources", "dialect", "VARCHAR(20)"),
     ("calendar_items", "dialect", "VARCHAR(20)"),
     ("brands", "card_theme", "VARCHAR(20)"),
+    ("brands", "design_seed", "INTEGER"),
+    ("brands", "org_id", "INTEGER"),
+    ("sources", "org_id", "INTEGER"),
+    ("articles", "org_id", "INTEGER"),
+    ("campaigns", "org_id", "INTEGER"),
+    ("calendar_items", "org_id", "INTEGER"),
+    ("drafts", "org_id", "INTEGER"),
     ("drafts", "hook_highlight", "VARCHAR(200)"),
     ("brands", "color_mode", "VARCHAR(20)"),
     ("brands", "logo_backdrop", "VARCHAR(20)"),
@@ -281,6 +383,37 @@ def _migrate() -> None:
             existing = {c["name"] for c in inspector.get_columns(table)}
             if column not in existing:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {sql_type}"))
+    _migrate_article_uniqueness()
+
+
+def _migrate_article_uniqueness() -> None:
+    """Article URLs were unique across the whole app; with several companies they are unique per company."""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    if "articles" not in inspector.get_table_names():
+        return
+    uniques = inspector.get_unique_constraints("articles")
+    if not any(u.get("column_names") == ["url"] for u in uniques):
+        return
+    cols = [c["name"] for c in inspector.get_columns("articles")]
+    keep = [c for c in cols if c in Article.__table__.columns]
+    with engine.begin() as conn:
+        if engine.dialect.name == "sqlite":
+            conn.execute(text("PRAGMA legacy_alter_table=ON"))      # keep other tables' references intact
+            conn.execute(text("ALTER TABLE articles RENAME TO articles_old"))
+            for idx in inspect(conn).get_indexes("articles_old"):
+                conn.execute(text(f'DROP INDEX IF EXISTS "{idx["name"]}"'))
+            Article.__table__.create(conn)
+            names = ", ".join(keep)
+            conn.execute(text(f"INSERT INTO articles ({names}) SELECT {names} FROM articles_old"))
+            conn.execute(text("DROP TABLE articles_old"))
+            conn.execute(text("PRAGMA legacy_alter_table=OFF"))
+        else:
+            for u in uniques:
+                if u.get("column_names") == ["url"]:
+                    conn.execute(text(f'ALTER TABLE articles DROP CONSTRAINT "{u["name"]}"'))
+            conn.execute(text("ALTER TABLE articles ADD CONSTRAINT uq_articles_org_url UNIQUE (org_id, url)"))
 
 
 def init_db() -> None:

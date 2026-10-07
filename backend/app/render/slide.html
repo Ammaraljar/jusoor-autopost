@@ -147,101 +147,99 @@ html[dir="rtl"] .m-num {{ left: auto; right: 76px; }}
 .m-bar.dark {{ color: var(--card-title); }}
 .m-bar.dark .handle {{ color: var(--card-heading); }}
 .m-bar.dark .m-credit {{ color: var(--card-text); }}
-/* shared text block for the creative layouts */
-[class^="L-"] .m-body h2 {{ font-size: 60px; }}
-[class^="L-"] .m-body p {{ font-size: 42px; }}
-[class^="L-"] {{ position: absolute; inset: 0; background: var(--card-solid); overflow: hidden; }}
-[class^="L-"] .m-foot {{ bottom: 58px; }}
-/* 1) Arch — travel-poster window */
-.L-arch {{ background:
-  radial-gradient(circle at 15% 12%, rgba(var(--navy-rgb),.06) 0 120px, transparent 121px),
-  radial-gradient(circle at 92% 88%, rgba(var(--navy-rgb),.06) 0 160px, transparent 161px), var(--card-solid); }}
-.arch-photo {{ position: absolute; left: 170px; right: 170px; top: 120px; height: 600px; overflow: hidden;
-  border-radius: 370px 370px 36px 36px; outline: 6px solid var(--gold); outline-offset: 14px;
-  box-shadow: 0 30px 60px rgba(0,0,0,.18); }}
-.arch-photo .bg {{ position: absolute; inset: 0; }}
-.arch-num {{ position: absolute; top: 676px; left: 50%; transform: translateX(-50%); width: 132px; height: 132px;
-  border-radius: 50%; background: var(--navy); color: var(--gold-light); font-size: 56px; font-weight: 900;
-  display: flex; align-items: center; justify-content: center; border: 7px solid var(--card-solid); direction: ltr; }}
-.arch-text {{ position: absolute; left: 90px; right: 90px; top: 840px; text-align: center; }}
-.arch-text .m-body h2::after {{ margin: 18px auto 0; }}
-/* 2) Ticket — boarding pass */
-.tk-shade {{ position: absolute; inset: 0; background: linear-gradient(180deg, rgba(var(--navy-rgb),.35), rgba(var(--navy-rgb),.15) 40%, rgba(var(--navy-rgb),.45)); }}
-.L-ticket {{ position: absolute; left: 64px; right: 64px; top: 360px; bottom: 120px; background: #fff; border-radius: 34px;
-  box-shadow: 0 30px 70px rgba(0,0,0,.30);
-  -webkit-mask: radial-gradient(circle 34px at 0 168px, transparent 33px, #000 34px) left / 51% 100% no-repeat,
-                radial-gradient(circle 34px at 100% 168px, transparent 33px, #000 34px) right / 51% 100% no-repeat; }}
-.tk-head {{ height: 168px; background: var(--navy); border-radius: 34px 34px 0 0; display: flex; align-items: center;
-  justify-content: space-between; padding: 0 56px; color: #fff; }}
-.tk-plane {{ font-size: 64px; color: var(--gold-light); }}
-.tk-label {{ font-size: 34px; font-weight: 800; letter-spacing: 2px; opacity: .92; }}
-.tk-seat {{ font-size: 76px; font-weight: 900; color: var(--gold-light); direction: ltr; }}
-.tk-cut {{ position: absolute; top: 168px; left: 44px; right: 44px; border-top: 5px dashed rgba(var(--navy-rgb),.22); }}
-.tk-text {{ position: absolute; top: 220px; left: 60px; right: 60px; }}
-.L-ticket .m-foot {{ left: 60px; right: 60px; bottom: 44px; }}
-.L-ticket .m-progress {{ display: none; }}
-/* 3) Polaroid — instant photo with tape */
-.L-polaroid {{ background-image: radial-gradient(rgba(var(--navy-rgb),.10) 2px, transparent 2.5px); background-size: 34px 34px; }}
-.pol {{ position: absolute; left: 150px; right: 150px; top: 96px; background: #fff; padding: 26px 26px 0; height: 700px;
-  transform: rotate(-3.5deg); box-shadow: 0 26px 60px rgba(0,0,0,.22); }}
-.pol-photo {{ position: relative; height: 560px; overflow: hidden; }}
-.pol-photo .bg {{ position: absolute; inset: 0; }}
-.pol-cap {{ text-align: center; font-size: 64px; font-weight: 900; color: var(--card-heading); line-height: 112px; direction: ltr; }}
-.tape {{ position: absolute; width: 190px; height: 54px; background: rgba(var(--navy-rgb),.0); background: var(--gold); opacity: .78; }}
-.tape.t1 {{ top: -24px; left: -46px; transform: rotate(-32deg); }}
-.tape.t2 {{ top: -24px; right: -46px; transform: rotate(32deg); }}
-.pol-text {{ position: absolute; left: 90px; right: 90px; top: 850px; text-align: center; }}
-.pol-text .m-body h2::after {{ margin: 18px auto 0; }}
-/* 4) Wave — photo flowing into the page */
-.wave-photo {{ position: absolute; left: 0; right: 0; top: 0; height: 720px; overflow: hidden; }}
-.wave-photo .bg {{ position: absolute; inset: 0; }}
-.wave-photo svg {{ position: absolute; left: 0; right: 0; bottom: -2px; width: 100%; height: 160px; fill: var(--card-solid); }}
-.wave-num {{ position: absolute; top: 600px; right: 76px; font-size: 230px; font-weight: 900; line-height: 1; color: transparent;
-  -webkit-text-stroke: 6px var(--gold); direction: ltr; opacity: .95; }}
-html[dir="ltr"] .wave-num {{ right: auto; left: 76px; }}
-.wave-text {{ position: absolute; left: 76px; right: 76px; top: 820px; }}
-/* 5) Circle — round photo with gold rings */
-.circ-photo {{ position: absolute; width: 640px; height: 640px; border-radius: 50%; overflow: hidden; top: 90px; left: -60px;
-  border: 14px solid #fff; box-shadow: 0 30px 70px rgba(0,0,0,.22); }}
-html[dir="ltr"] .circ-photo {{ left: auto; right: -60px; }}
-.circ-photo .bg {{ position: absolute; inset: 0; }}
-.ring {{ position: absolute; border-radius: 50%; border: 6px solid var(--gold); }}
-.ring.r1 {{ width: 760px; height: 760px; top: 30px; left: -120px; opacity: .55; }}
-.ring.r2 {{ width: 200px; height: 200px; top: 120px; right: 90px; background: var(--gold); opacity: .9; border: none; }}
-html[dir="ltr"] .ring.r1 {{ left: auto; right: -120px; }}
-html[dir="ltr"] .ring.r2 {{ right: auto; left: 90px; }}
-.circ-num {{ position: absolute; top: 170px; right: 90px; width: 200px; height: 200px; display: flex; align-items: center;
-  justify-content: center; font-size: 84px; font-weight: 900; color: var(--navy); direction: ltr; }}
-html[dir="ltr"] .circ-num {{ right: auto; left: 90px; }}
-.circ-text {{ position: absolute; left: 76px; right: 76px; top: 800px; }}
+/* ---- photo-first creative layouts: the photo stays the hero, text sits in a compact shape ---- */
+.ph-shade {{ position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(var(--navy-rgb),.40) 0%, rgba(var(--navy-rgb),0) 18%, rgba(var(--navy-rgb),0) 55%, rgba(var(--navy-rgb),.35) 100%); }}
+/* sizes in em so the auto-fit can shrink long texts */
+[class^="L2-"] .m-body {{ font-size: 52px; }}
+[class^="L2-"] .m-body h2 {{ font-size: 1em; margin-bottom: 14px; }}
+[class^="L2-"] .m-body h2::after {{ width: 90px; height: 7px; margin-top: 14px; }}
+[class^="L2-"] .m-body p {{ font-size: .7em; line-height: 1.65; }}
+.theme-magazine .m-foot {{ color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,.5); bottom: 46px; }}
+.theme-magazine .m-foot .handle {{ color: var(--gold-light); }}
+.theme-magazine .m-count {{ color: #fff; }}
+.theme-magazine .m-progress {{ background: rgba(255,255,255,.25); height: 10px; }}
+/* panel: floating card in the lower third */
+.L2-panel {{ position: absolute; left: 56px; right: 56px; bottom: 110px; background: var(--card-bg); border-radius: 44px;
+  padding: 84px 60px 44px; box-shadow: 0 24px 60px rgba(0,0,0,.25); }}
+.L2-panel .m-num {{ top: -70px; width: 132px; height: 132px; font-size: 56px; border-width: 7px; }}
+html[dir="rtl"] .L2-panel .m-num {{ right: 56px; }}
+/* arch: small poster arch, centred */
+.L2-arch {{ position: absolute; left: 150px; right: 150px; bottom: 110px; background: var(--card-bg);
+  border-radius: 400px 400px 34px 34px; padding: 150px 56px 44px; text-align: center;
+  outline: 5px solid var(--gold); outline-offset: 10px; box-shadow: 0 24px 60px rgba(0,0,0,.25); }}
+.L2-arch .m-body h2::after {{ margin: 14px auto 0; }}
+.L2-arch .arch-num {{ position: absolute; top: 34px; left: 50%; transform: translateX(-50%); width: 104px; height: 104px;
+  border-radius: 50%; background: var(--navy); color: var(--gold-light); font-size: 46px; font-weight: 900;
+  display: flex; align-items: center; justify-content: center; direction: ltr; }}
+/* ticket: compact boarding pass */
+.L2-ticket {{ position: absolute; left: 56px; right: 56px; bottom: 110px; background: #fff; border-radius: 30px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.28);
+  -webkit-mask: radial-gradient(circle 28px at 0 118px, transparent 27px, #000 28px) left / 51% 100% no-repeat,
+                radial-gradient(circle 28px at 100% 118px, transparent 27px, #000 28px) right / 51% 100% no-repeat; }}
+.L2-ticket .tk-head {{ height: 118px; background: var(--navy); border-radius: 30px 30px 0 0; display: flex; align-items: center;
+  justify-content: space-between; padding: 0 50px; color: #fff; border-bottom: 4px dashed rgba(255,255,255,.35); }}
+.L2-ticket .tk-plane {{ font-size: 50px; color: var(--gold-light); }}
+.L2-ticket .tk-label {{ font-size: 30px; font-weight: 800; letter-spacing: 2px; }}
+.L2-ticket .tk-seat {{ font-size: 60px; font-weight: 900; color: var(--gold-light); direction: ltr; }}
+.L2-ticket .tk-text {{ padding: 34px 56px 40px; }}
+/* note: taped paper, slightly tilted */
+.L2-note {{ position: absolute; left: 90px; right: 90px; bottom: 120px; background: #FFFDF6; padding: 70px 56px 44px;
+  transform: rotate(-2deg); box-shadow: 0 24px 56px rgba(0,0,0,.28); border-bottom: 10px solid var(--gold); }}
+.L2-note .tape {{ position: absolute; width: 170px; height: 48px; background: var(--gold); opacity: .8; top: -22px; }}
+.L2-note .tape.t1 {{ left: -30px; transform: rotate(-28deg); }}
+.L2-note .tape.t2 {{ right: -30px; transform: rotate(28deg); }}
+.L2-note .note-num {{ position: absolute; top: 14px; font-size: 44px; font-weight: 900; color: var(--card-heading); direction: ltr; }}
+html[dir="rtl"] .L2-note .note-num {{ left: 56px; }}
+html[dir="ltr"] .L2-note .note-num {{ right: 56px; }}
+/* wave: bottom wave, photo above stays visible */
+.L2-wave {{ position: absolute; left: 0; right: 0; bottom: 0; background: var(--card-solid); padding: 30px 76px 130px; }}
+.L2-wave svg {{ position: absolute; left: 0; right: 0; top: -118px; width: 100%; height: 120px; fill: var(--card-solid); }}
+.L2-wave .wave-num {{ position: absolute; top: -150px; font-size: 170px; font-weight: 900; line-height: 1; color: transparent;
+  -webkit-text-stroke: 5px var(--gold); direction: ltr; }}
+html[dir="rtl"] .L2-wave .wave-num {{ right: 76px; }}
+html[dir="ltr"] .L2-wave .wave-num {{ left: 76px; }}
+.L2-wave ~ .m-foot {{ color: var(--card-title); text-shadow: none; }}
+.L2-wave ~ .m-foot .handle {{ color: var(--card-heading); }}
+.L2-wave ~ .m-foot .m-count {{ color: var(--card-title); }}
+/* leaf: card with two rounded corners and a gold medal */
+.L2-leaf {{ position: absolute; left: 56px; right: 56px; bottom: 110px; background: var(--card-bg);
+  border-radius: 90px 18px 90px 18px; padding: 56px 60px 44px; box-shadow: 0 24px 60px rgba(0,0,0,.25); }}
+.L2-leaf .leaf-num {{ position: absolute; top: -64px; width: 128px; height: 128px; border-radius: 50%; background: var(--gold);
+  color: var(--navy); font-size: 54px; font-weight: 900; display: flex; align-items: center; justify-content: center;
+  border: 7px solid #fff; box-shadow: 0 10px 26px rgba(0,0,0,.25); direction: ltr; }}
+html[dir="rtl"] .L2-leaf .leaf-num {{ left: 70px; }}
+html[dir="ltr"] .L2-leaf .leaf-num {{ right: 70px; }}
 /* Cover: postage stamp on a postcard */
 .C-stamp {{ position: absolute; inset: 0; background: var(--card-solid);
   background-image: repeating-linear-gradient(-45deg, rgba(var(--navy-rgb),.035) 0 22px, transparent 22px 44px); }}
-.stamp {{ position: absolute; left: 110px; right: 110px; top: 150px; height: 640px; background: #fff; padding: 22px;
+.stamp {{ position: absolute; left: 70px; right: 70px; top: 130px; height: 760px; background: #fff; padding: 22px;
   transform: rotate(-2deg); box-shadow: 0 24px 60px rgba(0,0,0,.2);
   -webkit-mask: radial-gradient(circle 13px, transparent 12px, #000 13px) -20px -20px / 40px 40px,
                 linear-gradient(#000 0 0) center / calc(100% - 36px) calc(100% - 36px) no-repeat; }}
 .stamp-photo {{ position: relative; width: 100%; height: 100%; overflow: hidden; }}
 .stamp-photo .bg {{ position: absolute; inset: 0; }}
-.postmark {{ position: absolute; top: 640px; left: 80px; width: 210px; height: 210px; border-radius: 50%;
+.postmark {{ position: absolute; top: 760px; left: 50px; width: 180px; height: 180px; border-radius: 50%;
   border: 6px solid var(--navy); color: var(--navy); display: flex; flex-direction: column; align-items: center;
   justify-content: center; transform: rotate(-14deg); background: rgba(255,255,255,.55); font-weight: 900; }}
 .postmark span {{ font-size: 40px; letter-spacing: 2px; }}
 .postmark small {{ font-size: 22px; letter-spacing: 6px; color: var(--card-heading); }}
 html[dir="ltr"] .postmark {{ left: auto; right: 80px; }}
-.stamp-title {{ position: absolute; left: 76px; right: 76px; top: 860px; color: var(--card-title); }}
-.stamp-title h1, .diag-title h1 {{ font-size: 78px; line-height: 1.22; font-weight: 900; color: var(--card-title); }}
+.stamp-title {{ position: absolute; left: 76px; right: 76px; top: 935px; color: var(--card-title); }}
+.stamp-title, .diag-title {{ font-size: 66px; }}
+.stamp-title .m-kicker, .diag-title .m-kicker {{ font-size: .45em; margin-bottom: 12px; }}
+.stamp-title h1, .diag-title h1 {{ font-size: 1em; line-height: 1.22; font-weight: 900; color: var(--card-title); }}
 .stamp-title h1 mark, .diag-title h1 mark {{ background: none; color: var(--card-heading); position: relative; white-space: nowrap; }}
 .stamp-title h1 mark::after, .diag-title h1 mark::after {{ content: ""; position: absolute; left: 0; right: 0; bottom: .06em;
   height: .2em; background: var(--gold); opacity: .45; border-radius: 6px; z-index: -1; }}
-.stamp-title .m-sub, .diag-title .m-sub {{ color: var(--card-text); font-size: 36px; margin-top: 18px; }}
+.stamp-title .m-sub, .diag-title .m-sub {{ color: var(--card-text); font-size: .5em; margin-top: 12px; }}
 .stamp-title .m-kicker, .diag-title .m-kicker {{ color: var(--card-heading); }}
 /* Cover: diagonal gold band */
 .C-diag {{ position: absolute; inset: 0; }}
-.diag-gold {{ position: absolute; inset: 0; background: var(--gold); clip-path: polygon(0 52%, 100% 40%, 100% 46%, 0 58%); }}
-.diag-band {{ position: absolute; inset: 0; background: var(--card-solid); clip-path: polygon(0 58%, 100% 46%, 100% 100%, 0 100%);
+.diag-gold {{ position: absolute; inset: 0; background: var(--gold); clip-path: polygon(0 66%, 100% 56%, 100% 61%, 0 71%); }}
+.diag-band {{ position: absolute; inset: 0; background: var(--card-solid); clip-path: polygon(0 71%, 100% 61%, 100% 100%, 0 100%);
   box-shadow: 0 -10px 30px rgba(0,0,0,.2); }}
-.diag-title {{ position: absolute; left: 76px; right: 76px; top: 800px; }}
+.diag-title {{ position: absolute; left: 76px; right: 76px; top: 900px; }}
 </style>
 </head>
 <body class="{theme}">

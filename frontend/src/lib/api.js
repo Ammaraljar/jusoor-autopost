@@ -16,6 +16,21 @@ export function setInternalToken(token) {
   } catch { /* ignore */ }
 }
 
+const ORG_KEY = 'autopost-acting-org';
+let actingOrg = (() => {
+  try { return localStorage.getItem(ORG_KEY); } catch { return null; }
+})();
+
+/** Super-admin only: work inside another company (sent as X-Org-Id). */
+export function setActingOrg(id) {
+  actingOrg = id ? String(id) : null;
+  try {
+    if (actingOrg) localStorage.setItem(ORG_KEY, actingOrg);
+    else localStorage.removeItem(ORG_KEY);
+  } catch { /* ignore */ }
+}
+export const getActingOrg = () => actingOrg;
+
 export class ApiError extends Error {
   constructor(message, status) {
     super(message);
@@ -32,6 +47,7 @@ async function authHeader() {
 
 async function request(method, path, body, { raw = false } = {}) {
   const headers = { ...(await authHeader()) };
+  if (actingOrg) headers['X-Org-Id'] = actingOrg;
   const init = { method, headers };
   if (body instanceof FormData) {
     init.body = body;

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { api, setInternalToken } from './api';
+import { api, setActingOrg, setInternalToken } from './api';
 import { supabase } from './supabase';
 
 const AuthContext = createContext(null);
@@ -17,6 +17,7 @@ function readStored() {
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(undefined);
   const [mode, setMode] = useState(supabase ? 'supabase' : 'internal');
+  const [allowSignup, setAllowSignup] = useState(false);
 
   useEffect(() => {
     if (supabase) {
@@ -28,7 +29,7 @@ export function AuthProvider({ children }) {
     const token = readStored();
     setInternalToken(token);
     api.get('/api/auth/mode')
-      .then((r) => setMode(r.mode === 'disabled' ? 'disabled' : r.mode))
+      .then((r) => { setMode(r.mode === 'disabled' ? 'disabled' : r.mode); setAllowSignup(Boolean(r.allow_signup)); })
       .catch(() => {});
     if (!token) {
       // No token: still allow local servers running with AUTH_DISABLED=true.
@@ -48,14 +49,36 @@ export function AuthProvider({ children }) {
     try {
       const res = await api.post('/api/auth/login', { email, password });
       setInternalToken(res.token);
-      setSession({ user: { email: res.email } });
+      setActingOrg(null);
+      const user = await api.get('/api/me').catch(() => ({ email: res.email }));
+      setSession({ user });
       return { error: null };
     } catch (error) {
       return { error };
     }
   }, []);
 
+  const signUp = useCallback(async (body) => {
+    try {
+      const res = await api.post('/api/auth/signup', body);
+      setInternalToken(res.token);
+      setActingOrg(null);
+      const user = await api.get('/api/me').catch(() => ({ email: res.email }));
+      setSession({ user });
+      return { error: null };
+    } catch (error) {
+      return { error };
+    }
+  }, []);
+
+  const refresh = useCallback(async () => {
+    const user = await api.get('/api/me');
+    setSession((s) => ({ ...(s || {}), user }));
+    return user;
+  }, []);
+
   const signOut = useCallback(async () => {
+    setActingOrg(null);
     if (supabase) return supabase.auth.signOut();
     setInternalToken(null);
     setSession(null);
@@ -65,7 +88,10 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       session, loading: session === undefined, user: session?.user || null,
-      local: !supabase && session?.local === true, mode, signIn, signOut,
+      local: !supabase && session?.local === true, mode, allowSignup, signIn, signUp, signOut, refresh,
+      role: session?.user?.role || 'owner', isSuperadmin: Boolean(session?.user?.is_superadmin),
+      can: (min) => ({ reviewer: 1, editor: 2, owner: 3 }[session?.user?.role || 'owner'] || 0)
+        >= ({ reviewer: 1, editor: 2, owner: 3 }[min] || 0),
     }}>
       {children}
     </AuthContext.Provider>

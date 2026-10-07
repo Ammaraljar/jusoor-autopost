@@ -111,29 +111,41 @@ def stock_photos(keywords: str, count: int, page: int = 1) -> list[dict]:
 
 
 def collect_backgrounds(article_image: str | None, keywords: str, mode: str, needed: int,
-                        exclude: set[str] | None = None, fresh: bool = False) -> list[dict]:
+                        exclude: set[str] | None = None, fresh: bool = False,
+                        library: list[dict] | None = None, fallback_keywords: str = "") -> list[dict]:
     """Return a list of {url, bytes, hash, credit} backgrounds (may be shorter than needed).
 
-    fresh=True ("new backgrounds"): skip the photos already used and look further in the results,
-    so the post really gets different images."""
+    Order: the article's own photo, matching photos from the company's library, stock photos
+    (Pexels, Pixabay, Openverse), then the rest of the library. fresh=True ("new backgrounds")
+    skips every photo already used and shuffles, so the post really gets different images."""
     import random
     exclude = set(exclude or ())
+    library = [c for c in (library or []) if c["url"] not in exclude]
+    lib_match = [c for c in library if c.get("match")]
+    lib_rest = [c for c in library if not c.get("match")]
     article = [{"url": article_image, "credit": ""}] if article_image and article_image not in exclude else []
-    page = random.randint(2, 6) if fresh else 1
     if mode == "source":
-        candidates = article
+        candidates = article + lib_match + lib_rest
     else:
-        stock = stock_photos(keywords, count=max(needed + 2, 6), page=page)
-        if fresh and len(stock) < needed:
-            stock += stock_photos(keywords, count=max(needed + 2, 6), page=1)
+        # one wide search (page 1 always exists — later pages often return nothing or an error)
+        stock = stock_photos(keywords, count=max(needed * 3, 18), page=1)
+        if len([c for c in stock if c["url"] not in exclude]) < needed and fallback_keywords:
+            stock += stock_photos(fallback_keywords, count=max(needed * 3, 18), page=1)
         if fresh:
             random.shuffle(stock)
-        # Auto: the article's own photo is the cover, stock photos fill the other slides.
-        candidates = stock if mode == "pexels" else article + stock
+            random.shuffle(lib_match)
+        lead = [] if fresh else article
+        candidates = lead + lib_match + stock + lib_rest if mode != "pexels" else lib_match + stock + lib_rest
+        if fresh:
+            candidates += article
     candidates = [c for c in candidates if c["url"] not in exclude]
     out: list[dict] = []
     seen: set[str] = set()
+    tried: set[str] = set()
     for c in candidates:
+        if c["url"] in tried:
+            continue
+        tried.add(c["url"])
         data = download_image(c["url"])
         if not data:
             continue
@@ -141,7 +153,7 @@ def collect_backgrounds(article_image: str | None, keywords: str, mode: str, nee
         if digest in seen:
             continue
         seen.add(digest)
-        out.append({**c, "bytes": data, "hash": digest})
+        out.append({**{k: v for k, v in c.items() if k != "match"}, "bytes": data, "hash": digest})
         if len(out) >= needed:
             break
     return out
