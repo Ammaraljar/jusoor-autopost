@@ -338,6 +338,7 @@ class Newsletter(TenantMixin, Base):
     design: Mapped[str] = mapped_column(String(40), default="classic")
     kind: Mapped[str] = mapped_column(String(30), default="hybrid")     # curated | educational | … (newsletter_types)
     language: Mapped[str] = mapped_column(String(5), default="ar")
+    font: Mapped[str] = mapped_column(String(40), default="")          # "" = safe system font (newsletter.EMAIL_FONTS)
     content: Mapped[dict[str, Any]] = mapped_column(default=dict)     # headline, intro, sections[], cta, ps
     list_ids: Mapped[list[Any]] = mapped_column(default=list)
     status: Mapped[str] = mapped_column(String(20), default="draft", index=True)  # draft|scheduled|sending|sent|failed
@@ -449,6 +450,7 @@ _ADDED_COLUMNS = [
     ("brands", "templates", "JSON"),
     ("drafts", "link_url", "VARCHAR(1000)"),
     ("newsletters", "kind", "VARCHAR(30) DEFAULT 'hybrid'"),
+    ("newsletters", "font", "VARCHAR(40) DEFAULT ''"),
     ("deliveries", "answer", "VARCHAR(200)"),
     ("brands", "default_colors", "JSON"),
     ("brands", "font_latin", "VARCHAR(60)"),
