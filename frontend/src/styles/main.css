@@ -22,6 +22,11 @@ p { margin: 0; }
   display: grid; place-items: center; font-weight: 900; font-size: 20px; }
 .brandmark b { display: block; font-size: 17px; font-weight: 800; }
 .brandmark small { color: var(--gold-light); font-size: 12px; }
+.sidebar { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.25) transparent; }
+.sidebar::-webkit-scrollbar { width: 6px; }
+.sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,.25); border-radius: 6px; }
+.sidebar > * { flex-shrink: 0; }
+.sidebar select option { background: #fff; color: #16244F; }
 .nav { display: flex; flex-direction: column; gap: 3px; }
 .nav a { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 10px;
   color: rgba(255,255,255,.72); font-weight: 600; transition: background .15s, color .15s; }
