@@ -117,7 +117,11 @@ def send(cfg: dict[str, Any], to_email: str, to_name: str, subject: str, html: s
     if provider == "brevo":
         body = {"sender": {"name": sender_name, "email": cfg["from_email"]},
                 "to": [{"email": to_email, **({"name": to_name} if to_name else {})}],
-                "subject": subject, "htmlContent": html, "textContent": text, "headers": headers}
+                "subject": subject, "htmlContent": html}
+        if text:
+            body["textContent"] = text
+        if headers:                      # Brevo rejects an empty headers object
+            body["headers"] = headers
         if cfg.get("reply_to"):
             body["replyTo"] = {"email": cfg["reply_to"]}
         r = httpx.post("https://api.brevo.com/v3/smtp/email", json=body, timeout=30,
@@ -127,7 +131,11 @@ def send(cfg: dict[str, Any], to_email: str, to_name: str, subject: str, html: s
         return (r.json() or {}).get("messageId", "")
     if provider == "resend":
         body = {"from": formataddr((sender_name, cfg["from_email"])), "to": [to_email], "subject": subject,
-                "html": html, "text": text, "headers": headers}
+                "html": html}
+        if text:
+            body["text"] = text
+        if headers:
+            body["headers"] = headers
         if cfg.get("reply_to"):
             body["reply_to"] = cfg["reply_to"]
         r = httpx.post("https://api.resend.com/emails", json=body, timeout=30,
@@ -159,5 +167,8 @@ def send(cfg: dict[str, Any], to_email: str, to_name: str, subject: str, html: s
             server.login(cfg["smtp_user"], cfg["smtp_password"])
             server.send_message(msg)
     except (OSError, smtplib.SMTPException) as exc:
+        if isinstance(exc, (TimeoutError, ConnectionRefusedError)) or getattr(exc, "errno", None) in (101, 110, 111, 113):
+            raise MailError("SMTP: الخادم لا يستطيع الوصول إلى منفذ البريد — الاستضافة تحجب SMTP غالبًا. "
+                            "استخدم Brevo أو Resend بدلًا منه") from exc
         raise MailError(f"SMTP: {exc}") from exc
     return msg["Message-ID"]
