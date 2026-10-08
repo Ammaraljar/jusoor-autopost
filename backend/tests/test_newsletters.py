@@ -74,3 +74,57 @@ def test_designs_per_field_render_and_track(client, monkeypatch):
     r = client.post(f"/api/newsletters/{nid2}/send", json={"when": "2099-01-01T09:00:00Z"})
     assert r.json()["status"] == "scheduled"
     assert client.post(f"/api/newsletters/{nid2}/cancel").json()["status"] == "draft"
+
+
+def test_newsletter_types_event_and_poll(client, monkeypatch):
+    kinds = {t["id"] for t in client.get("/api/newsletters/types").json()}
+    assert kinds == {"curated", "educational", "reporting", "roundup", "story", "analysis", "promotional",
+                     "update", "internal", "survey", "event", "hybrid"}
+    nid = client.post("/api/newsletters", json={
+        "kind": "event", "topic": "Leadership webinar",
+        "event": {"date": "2026-11-20", "time": "10:00", "place": "Zoom", "url": "https://acme.test/register"}}).json()["id"]
+    nl = client.get(f"/api/newsletters/{nid}").json()
+    assert nl["kind"] == "event" and nl["content"]["event"]["place"] == "Zoom"
+    html = client.get(f"/api/newsletters/{nid}/preview").json()["html"]
+    assert "Zoom" in html and "2026-11-20" in html
+    # survey with the company's own question
+    sent = []
+    monkeypatch.setattr(mailer, "send", lambda *a, **k: sent.append(a) or "id")
+    monkeypatch.setattr(newsletter.time, "sleep", lambda s: None)
+    lid = client.post("/api/contacts/lists", json={"name": "Poll"}).json()["id"]
+    client.post("/api/contacts", json={"email": "voter@x.test", "list_ids": [lid]})
+    client.put("/api/email/settings", json={"provider": "brevo", "from_email": "news@acme.test",
+                                            "brevo_api_key": "xkeysib-secret-1234"})
+    sid = client.post("/api/newsletters", json={"kind": "survey", "topic": "Your opinion", "list_ids": [lid],
+                                                "poll": {"question": "Best day?", "options": ["Mon", "Fri"]}}).json()["id"]
+    client.patch(f"/api/newsletters/{sid}", json={"subject": "Quick question"})
+    assert client.post(f"/api/newsletters/{sid}/send", json={}).status_code == 200
+    assert "/api/t/p/" in sent[0][4]
+    with session_scope() as db:
+        token = db.query(Delivery).filter(Delivery.newsletter_id == sid).first().token
+    assert client.get(f"/api/t/p/{token}?a=1").status_code == 200
+    poll = client.get(f"/api/newsletters/{sid}").json()["stats"]["poll"]
+    assert poll[1] == {"option": "Fri", "votes": 1, "percent": 100.0}
+
+
+def test_newsletter_font_and_translate(client, monkeypatch):
+    fonts = client.get("/api/newsletters/fonts?language=en").json()
+    assert fonts[0]["id"] == "" and any(f["id"] == "Poppins" for f in fonts)
+    assert not any(f["id"] == "Poppins" for f in client.get("/api/newsletters/fonts?language=ar").json())
+    nid = client.post("/api/newsletters", json={"topic": "Offers", "language": "en", "font": "Poppins"}).json()["id"]
+    client.patch(f"/api/newsletters/{nid}", json={"content": {"headline": "Hello", "intro": "Hi",
+                 "sections": [{"title": "Deal", "text": "Text", "link": "https://acme.test/d", "button": "See"}],
+                 "cta_text": "Shop"}})
+    html = client.get(f"/api/newsletters/{nid}/preview").json()["html"]
+    assert "family=Poppins" in html and "'Poppins'" in html
+
+    async def fake(system, user, tool, max_tokens=0):
+        import json
+        return {"texts": ["ع:" + t for t in json.loads(user.split("\n", 1)[1])]}
+    monkeypatch.setattr(newsletter.generator, "ai_available", lambda: True)
+    monkeypatch.setattr(newsletter.generator, "_call_model", fake)
+    assert client.post(f"/api/newsletters/{nid}/translate", json={"language": "ar"}).status_code == 200
+    nl = client.get(f"/api/newsletters/{nid}").json()
+    assert nl["language"] == "ar" and nl["status"] == "draft" and nl["font"] == ""
+    assert nl["content"]["headline"] == "ع:Hello" and nl["content"]["sections"][0]["button"] == "ع:See"
+    assert nl["content"]["sections"][0]["link"] == "https://acme.test/d"
