@@ -221,14 +221,8 @@ def render(nl: Newsletter, brand: Brand, family: str, token: str | None = None) 
                        + f'<p style="{p}">{_e(intro)}</p>' + (button(cta_text, cta_url) if layout == "minimal" else "")
                        + '</td></tr>')
 
-    # the kind of newsletter as a small label, plus event box and poll
-    from . import newsletter_types
-    kicker_text = newsletter_types.label(nl.kind, lang)
-    kicker = (f'<div style="font:bold 12px {body_font};letter-spacing:1px;color:{gold};text-transform:uppercase;'
-              f'margin:0 0 8px">{_e(kicker_text)}</div>')
-    if intro_block:
-        intro_block = intro_block.replace(f'<h1 style="{h1}">', kicker + f'<h1 style="{h1}">', 1)
-    header = header.replace("@@KICKER@@", kicker.replace(f"color:{gold}", f"color:{gold if layout == 'spotlight' else navy}"))
+    # the newsletter type is internal only: readers never see a label like "Blog round-up"
+    header = header.replace("@@KICKER@@", "")
     extra_rows = ""
     event = content.get("event") or {}
     if any(event.get(k) for k in ("date", "time", "place")):
