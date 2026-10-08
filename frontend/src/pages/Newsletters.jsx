@@ -110,7 +110,7 @@ function NewNewsletter({ onClose }) {
   const products = useLoad(() => api.get('/api/products').catch(() => []), []);
   const articles = useLoad(() => api.get('/api/newsletters/articles').catch(() => []), []);
   const [f, setF] = useState({ kind: '', topic: '', list_ids: [], draft_ids: [], product_ids: [], article_ids: [],
-    design: '', language: user?.org?.language || 'ar',
+    design: '', language: user?.org?.language || 'ar', font: '',
     event: { date: '', time: '', place: '', url: '' }, poll: { question: '', options: ['', '', ''] } });
   const [busy, run] = useAction();
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
@@ -125,6 +125,7 @@ function NewNewsletter({ onClose }) {
     navigate(`/newsletters/${r.id}`);
   });
   const postItems = posts.data?.items || posts.data || [];
+  const fonts = useLoad(() => api.get(`/api/newsletters/fonts?language=${f.language}`), [f.language]);
 
   if (!f.kind) {
     return (
@@ -183,8 +184,13 @@ function NewNewsletter({ onClose }) {
             </select>
           </Field>
           <Field label={t('content_language')}>
-            <select className="select" value={f.language} onChange={(e) => set('language', e.target.value)}>
+            <select className="select" value={f.language} onChange={(e) => setF((x) => ({ ...x, language: e.target.value, font: '' }))}>
               {LANGUAGES.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
+            </select>
+          </Field>
+          <Field label={t('nl_font')} hint={t('nl_font_hint')}>
+            <select className="select" value={f.font} onChange={(e) => set('font', e.target.value)}>
+              {(fonts.data || []).map((x) => <option key={x.id} value={x.id} style={x.id ? { fontFamily: x.id } : undefined}>{x.label}</option>)}
             </select>
           </Field>
         </div>
@@ -199,11 +205,11 @@ function NewNewsletter({ onClose }) {
         </Field>
         {wants('articles') && (articles.data || []).length > 0 && (
           <Field label={t('nl_feature_articles')}>
-            <div className="pick-grid">
+            <div className="nl-pick-grid">
               {articles.data.map((a) => (
-                <label key={a.id} className={`pick ${f.article_ids.includes(a.id) ? 'on' : ''}`}>
+                <label key={a.id} className={`nl-pick ${f.article_ids.includes(a.id) ? 'on' : ''}`}>
                   <input type="checkbox" checked={f.article_ids.includes(a.id)} onChange={() => toggle('article_ids', a.id)} />
-                  {a.image_url && <img src={mediaUrl(a.image_url)} alt="" />}
+                  {a.image_url ? <img src={mediaUrl(a.image_url)} alt="" loading="lazy" /> : <span className="nl-pick-ph">📰</span>}
                   <span className="clamp-2" dir="auto">{a.title}</span>
                   <small className="muted">{a.source}</small>
                 </label>
@@ -213,11 +219,11 @@ function NewNewsletter({ onClose }) {
         )}
         {wants('posts') && postItems.length > 0 && (
           <Field label={t('nl_feature_posts')}>
-            <div className="pick-grid">
+            <div className="nl-pick-grid">
               {postItems.map((d) => (
-                <label key={d.id} className={`pick ${f.draft_ids.includes(d.id) ? 'on' : ''}`}>
+                <label key={d.id} className={`nl-pick ${f.draft_ids.includes(d.id) ? 'on' : ''}`}>
                   <input type="checkbox" checked={f.draft_ids.includes(d.id)} onChange={() => toggle('draft_ids', d.id)} />
-                  {d.cover_url && <img src={mediaUrl(d.cover_url)} alt="" />}
+                  {d.cover_url ? <img src={mediaUrl(d.cover_url)} alt="" loading="lazy" /> : <span className="nl-pick-ph">🖼️</span>}
                   <span className="clamp-2" dir="auto">{d.hook}</span>
                 </label>
               ))}
@@ -226,11 +232,11 @@ function NewNewsletter({ onClose }) {
         )}
         {wants('products') && (products.data || []).length > 0 && (
           <Field label={t('nl_feature_products')}>
-            <div className="pick-grid">
+            <div className="nl-pick-grid">
               {products.data.slice(0, 40).map((p) => (
-                <label key={p.id} className={`pick ${f.product_ids.includes(p.id) ? 'on' : ''}`}>
+                <label key={p.id} className={`nl-pick ${f.product_ids.includes(p.id) ? 'on' : ''}`}>
                   <input type="checkbox" checked={f.product_ids.includes(p.id)} onChange={() => toggle('product_ids', p.id)} />
-                  {p.image_url && <img src={mediaUrl(p.image_url)} alt="" />}
+                  {p.image_url ? <img src={mediaUrl(p.image_url)} alt="" loading="lazy" /> : <span className="nl-pick-ph">🛍️</span>}
                   <span className="clamp-2" dir="auto">{p.name}</span>
                 </label>
               ))}
@@ -255,6 +261,7 @@ function Editor() {
   const lists = useLoad(() => api.get('/api/contacts/lists'), []);
   const types = useLoad(() => api.get('/api/newsletters/types'), []);
   const [f, setF] = useState(null);
+  const fonts = useLoad(() => api.get(`/api/newsletters/fonts?language=${f?.language || nl.data?.language || 'ar'}`), [f?.language]);
   const [html, setHtml] = useState('');
   const [when, setWhen] = useState('');
   const [testTo, setTestTo] = useState('');
@@ -263,7 +270,7 @@ function Editor() {
 
   useEffect(() => {
     if (nl.data) setF({ kind: nl.data.kind, subject: nl.data.subject, preheader: nl.data.preheader, design: nl.data.design,
-      language: nl.data.language, list_ids: nl.data.list_ids || [], content: structuredClone(nl.data.content || {}) });
+      language: nl.data.language, font: nl.data.font || '', list_ids: nl.data.list_ids || [], content: structuredClone(nl.data.content || {}) });
   }, [nl.data]);
   useEffect(() => {
     if (nl.data?.status !== 'generating' && nl.data?.status !== 'sending') return undefined;
@@ -284,6 +291,18 @@ function Editor() {
     return { ...x, content: { ...x.content, sections } };
   });
   const sections = f.content.sections || [];
+  const changeLang = (language) => {
+    if (language === f.language || !window.confirm(t('nl_translate_confirm'))) return;
+    run('lang', async () => {
+      await api.patch(`/api/newsletters/${id}`, f);
+      await api.post(`/api/newsletters/${id}/translate`, { language });
+      await nl.reload(true);
+    });
+  };
+  const changeFont = (font) => {
+    set('font', font);
+    run('font', async () => { await api.patch(`/api/newsletters/${id}`, { font }); await loadPreview(f.design); });
+  };
   const save = () => run('save', async () => { await api.patch(`/api/newsletters/${id}`, f); await nl.reload(true); }, t('saved'));
   const send = (schedule) => run('send', async () => {
     await api.patch(`/api/newsletters/${id}`, f);
@@ -294,7 +313,7 @@ function Editor() {
   }, schedule ? t('nl_scheduled_ok') : t('nl_sending_now'));
 
   if (d.status === 'generating') {
-    return (<><PageHead title={t('nl_title')} /><div className="banner info"><Spinner size={16} /> {t('nl_generating')}</div></>);
+    return (<><PageHead title={t('nl_title')} /><div className="banner info"><Spinner size={16} /> {busy === 'lang' || nl.data?.content?.headline ? t('nl_translating') : t('nl_generating')}</div></>);
   }
 
   return (
@@ -329,6 +348,18 @@ function Editor() {
                 ))}
               </div>
             </Field>
+            <div className="grid grid-2">
+              <Field label={t('content_language')} hint={t('nl_lang_hint')}>
+                <select className="select" disabled={locked || busy === 'lang'} value={f.language} onChange={(e) => changeLang(e.target.value)}>
+                  {LANGUAGES.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
+                </select>
+              </Field>
+              <Field label={t('nl_font')} hint={t('nl_font_hint')}>
+                <select className="select" disabled={locked} value={f.font} onChange={(e) => changeFont(e.target.value)}>
+                  {(fonts.data || []).map((x) => <option key={x.id} value={x.id} style={x.id ? { fontFamily: x.id } : undefined}>{x.label}</option>)}
+                </select>
+              </Field>
+            </div>
             <Field label={t('nl_to_lists')} hint={t('nl_all_lists_hint')}>
               <div className="row" style={{ gap: 6 }}>
                 {(lists.data || []).map((l) => (
