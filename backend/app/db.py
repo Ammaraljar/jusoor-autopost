@@ -99,7 +99,9 @@ class Brand(TenantMixin, Base):
     voice: Mapped[str] = mapped_column(Text, default="")
     colors: Mapped[dict[str, Any]] = mapped_column(default=dict)
     font_family: Mapped[str] = mapped_column(String(60), default="Cairo")
-    logo_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    logo_path: Mapped[str | None] = mapped_column(String(500), nullable=True)      # the primary logo
+    # every version of the logo: [{"key", "tone": color|light|dark, "name"}] — the best one is picked per slide
+    logos: Mapped[list[Any] | None] = mapped_column(nullable=True)
     logo_placement: Mapped[str] = mapped_column(String(20), default="top-left")
     card_style: Mapped[str] = mapped_column(String(20), default="frosted")
     card_theme: Mapped[str | None] = mapped_column(String(20), nullable=True, default="magazine")  # magazine | classic
@@ -359,6 +361,7 @@ _ADDED_COLUMNS = [
     ("calendar_items", "dialect", "VARCHAR(20)"),
     ("brands", "card_theme", "VARCHAR(20)"),
     ("brands", "design_seed", "INTEGER"),
+    ("brands", "logos", "JSON"),
     ("brands", "org_id", "INTEGER"),
     ("sources", "org_id", "INTEGER"),
     ("articles", "org_id", "INTEGER"),

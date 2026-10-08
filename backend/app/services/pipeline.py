@@ -54,18 +54,32 @@ def family_of(db: Session, org_id: int | None) -> str:
     return cards.FAMILY_OF_INDUSTRY.get(org.industry if org else "general", "general")
 
 
+def _read(key: str | None) -> bytes | None:
+    if not key:
+        return None
+    try:
+        return storage.read_bytes(key)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def brand_logos(brand: Brand) -> list[dict]:
+    """All logo versions of a brand; a brand from before multi-logo support has just its one logo."""
+    items = [dict(x) for x in (brand.logos or []) if isinstance(x, dict) and x.get("key")]
+    if brand.logo_path and not any(x["key"] == brand.logo_path for x in items):
+        items.insert(0, {"key": brand.logo_path, "tone": "color", "name": ""})
+    return items
+
+
 def brand_style(brand: Brand, language: str, family: str = "general") -> BrandStyle:
-    logo = None
-    if brand.logo_path:
-        try:
-            logo = storage.read_bytes(brand.logo_path)
-        except Exception:  # noqa: BLE001
-            logo = None
+    logo = _read(brand.logo_path)
+    versions = [(x.get("tone") or "color", _read(x["key"])) for x in brand_logos(brand)]
     return BrandStyle(name=brand.name, handle=brand.handle, website=brand.website, colors=brand.colors,
                       font_family=brand.font_family, logo=logo, logo_placement=brand.logo_placement,
                       card_style=brand.card_style, language=language,
                       logo_backdrop=brand.logo_backdrop or "auto",
-                      theme=getattr(brand, "card_theme", None) or "magazine", family=family)
+                      theme=getattr(brand, "card_theme", None) or "magazine", family=family,
+                      logos=[v for v in versions if v[1]])
 
 
 # ---------------------------------------------------------------- collecting
@@ -132,6 +146,7 @@ def collect_source(source_id: int, window: dict | None = None) -> dict:
         sched = app_settings.get_section(db, "scheduler")
         max_age = timedelta(days=int(sched.get("max_article_age_days", 3)))
         programs = (source.purpose or "news") == "programs"
+        evergreen = programs or source.purpose == "own_site"     # no "too old" limit for these
         per_run = int((window or {}).get("max_items") or source.max_items_per_run)
         source.last_checked_at = utcnow()
         created = 0
@@ -181,7 +196,7 @@ def collect_source(source_id: int, window: dict | None = None) -> dict:
                     status_value, note = "skipped", "نص المقال قصير جدًا"
                 elif window and not _in_window(art.published_at, window):
                     status_value, note = "skipped", "خارج الفترة المطلوبة"
-                elif (not window and not programs and art.published_at
+                elif (not window and not evergreen and art.published_at
                       and utcnow() - art.published_at > max_age):
                     status_value, note = "skipped", "المقال أقدم من الحد المسموح"
                 elif db.scalar(select(Article.id).where(Article.fingerprint == art.fingerprint)):
@@ -226,12 +241,16 @@ async def draft_from_article(article_id: int) -> int | None:
         brand = _brand_for(db, source.brand_id if source else None)
         gen = dict(app_settings.get_section(db, "generation"))
         programs = bool(source and (source.purpose or "news") == "programs")
+        own_site = bool(source and source.purpose == "own_site")
         if source and source.dialect:
             gen["dialect"] = source.dialect
         if programs:
             gen.update(purpose="programs", content_type="promotional")
+        elif source and source.purpose:
+            gen["purpose"] = source.purpose
         draft = Draft(brand_id=brand.id, source_id=art.source_id, article_id=art.id, origin="source",
-                      source_name=source.name if source else "", source_url=art.url,
+                      # the company's own website is never credited as an outside source
+                      source_name="" if own_site else (source.name if source else ""), source_url=art.url,
                       original_title=art.title, original_body=art.body,
                       # a programme from another company is re-designed with stock photos, never theirs
                       original_image_url=None if programs else art.image_url,
@@ -253,9 +272,9 @@ async def draft_from_article(article_id: int) -> int | None:
     with session_scope() as db:
         draft = db.get(Draft, draft_id)
         _apply_post(draft, post)
-        if post.relevance < int(gen.get("min_relevance", 0)):
+        if post.relevance < int(gen.get("min_relevance", 0)) and gen.get("purpose") != "own_site":
             draft.status = "rejected"
-            draft.reject_reason = f"صلة منخفضة بجمهور السفر ({post.relevance}/10): {post.relevance_reason}"
+            draft.reject_reason = f"صلة منخفضة بجمهور الشركة ({post.relevance}/10): {post.relevance_reason}"
             return draft_id
     # Platform texts (AI) and slide images (photos + rendering) are independent: do both at once
     await asyncio.gather(make_variants(draft_id), render_draft(draft_id))
@@ -528,14 +547,15 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
                 # keep the slide's own photo (e.g. one the user uploaded)
                 data = await asyncio.to_thread(images.download_image, bg_url)
                 bg = {"url": bg_url, "bytes": data, "hash": hashlib.sha1(data).hexdigest()} if data else None
+            # the logo version that reads best on this photo (white / dark / colour)
+            chosen_logo, plate = colours.choose_logo(style.logos, style.logo, bg["bytes"] if bg else None,
+                                                     logo_placement, kind, (style.palette or {}).get("template"))
             spec = SlideSpec(kind=kind, heading=heading, body=body, position=pos, total=total,
                              background=bg["bytes"] if bg else None,
                              badge=badge if kind == "cover" else None,
                              credit=credit if kind != "cta" else "", variant=pos,
                              highlight=highlight if kind == "cover" else None,
-                             # the CTA slide sits on a dark overlay, so its logo never needs a plate
-                             logo_plate=kind != "cta" and colours.logo_needs_plate(
-                                 bg["bytes"] if bg else None, logo_placement, rtl))
+                             logo=chosen_logo, logo_plate=plate)
             jpeg = await renderer.render(spec, style)
             key = f"generated/draft-{draft_id}-s{pos}-{uuid.uuid4().hex[:8]}.jpg"
             url = await asyncio.to_thread(storage.save_bytes, key, jpeg)

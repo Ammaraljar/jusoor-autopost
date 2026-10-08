@@ -44,7 +44,7 @@ class SourceIn(BaseModel):
     link_selector: str | None = None
     link_pattern: str | None = None
     body_selector: str | None = None
-    purpose: str = Field("news", pattern="^(news|programs)$")
+    purpose: str = Field("news", pattern="^[a-z_]{2,20}$")
     dialect: str | None = None
     category: str = "general"
     country: str = ""
@@ -66,7 +66,7 @@ class SourcePatch(BaseModel):
     link_selector: str | None = None
     link_pattern: str | None = None
     body_selector: str | None = None
-    purpose: str | None = Field(None, pattern="^(news|programs)$")
+    purpose: str | None = Field(None, pattern="^[a-z_]{2,20}$")
     dialect: str | None = None
     category: str | None = None
     country: str | None = None
@@ -126,6 +126,49 @@ def presets(db: Session = Depends(get_db)):
     if industry == "travel":
         return PRESETS
     return GENERAL_PRESETS.get(industry, [])
+
+
+@router.get("/types")
+def source_types(db: Session = Depends(get_db)):
+    """Source kinds for the company's field (plus "our website" and "industry news" for everyone)."""
+    from ..services import app_settings, industries
+    return industries.source_types(app_settings.get_section(db, "generation").get("industry"))
+
+
+class OwnSiteIn(BaseModel):
+    url: str | None = None
+    brand_id: int | None = None
+
+
+@router.post("/own-site")
+async def add_own_site(body: OwnSiteIn, db: Session = Depends(get_db)):
+    """Add the company's own website as a source: its news, offers and articles become posts.
+    The site's RSS feed is used when it has one, otherwise its pages are scanned."""
+    import asyncio
+    from urllib.parse import urlparse
+
+    from ..db import Brand
+    from ..services import app_settings
+    url = (body.url or "").strip()
+    if not url:
+        brand = db.get(Brand, body.brand_id) if body.brand_id else db.scalar(
+            select(Brand).order_by(Brand.is_default.desc(), Brand.id))
+        url = (brand.website or "").strip() if brand else ""
+    if not url:
+        raise HTTPException(400, "أضف رابط موقعك الإلكتروني (أو احفظه في الهوية البصرية أولًا)")
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+    found = await asyncio.to_thread(scraper.detect_site, url)
+    host = urlparse(url).netloc.replace("www.", "")
+    gen = app_settings.get_section(db, "generation")
+    s = Source(name=f"{host}", kind="rss" if found.get("feed_url") else "website", base_url=url,
+               feed_url=found.get("feed_url"), listing_urls=found.get("listing_urls") or [url],
+               purpose="own_site", category=gen.get("industry") or "general", country="",
+               language=gen.get("language") or "ar", priority=9, check_interval_minutes=360,
+               max_items_per_run=5, brand_id=body.brand_id)
+    db.add(s)
+    db.flush()
+    return {**_with_stats(db, s), "detected": found}
 
 
 @router.post("")

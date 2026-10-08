@@ -179,3 +179,39 @@ def test_redesign_walks_through_every_template():
     seen = [palette.design(i, seed=21, family="travel")["template"] for i in range(palette.DESIGN_COUNT)]
     assert palette.DESIGN_COUNT >= 15 and len(set(seen)) == palette.DESIGN_COUNT
     assert all(a != b for a, b in zip(seen, seen[1:]))
+
+
+def test_logo_versions_are_detected_and_the_best_one_is_used(client):
+    brand = client.get("/api/brands").json()[0]
+    files = [("files", ("color.png", _png((200, 30, 40)), "image/png")),
+             ("files", ("white.png", _png((255, 255, 255)), "image/png")),
+             ("files", ("black.png", _png((15, 15, 20)), "image/png"))]
+    r = client.post(f"/api/brands/{brand['id']}/logos", files=files)
+    assert r.status_code == 200, r.text
+    logos = r.json()["logos"]
+    tones = {x["name"]: x["tone"] for x in logos}
+    assert tones["color.png"] == "color" and tones["white.png"] == "light" and tones["black.png"] == "dark"
+    white = next(x for x in logos if x["name"] == "white.png")
+    r = client.patch(f"/api/brands/{brand['id']}/logos", json={"key": white["key"], "primary": True})
+    assert next(x for x in r.json()["logos"] if x["primary"])["name"] == "white.png"
+    # choice per photo: bright photo → dark logo, dark photo → white logo, last slide → white logo
+    versions = [("color", b"C"), ("light", b"L"), ("dark", b"D")]
+    bright, dark = _jpg((245, 245, 245)), _jpg((10, 12, 30))
+    assert palette.choose_logo(versions, b"L", bright) == (b"D", False)
+    assert palette.choose_logo(versions, b"L", dark) == (b"L", False)
+    assert palette.choose_logo(versions, b"L", bright, kind="cta") == (b"L", False)
+    for x in r.json()["logos"]:
+        client.delete(f"/api/brands/{brand['id']}/logos", params={"key": x["key"]})
+    assert client.get("/api/brands").json()[0]["logos"] == []
+
+
+def test_source_types_follow_the_field(client):
+    with session_scope() as db:
+        org, _ = tenancy.create_org(db, "Hope Foundation", "nonprofit", "ar")
+        oid = org.id
+    ids = [x["id"] for x in client.get("/api/sources/types", headers={"X-Org-Id": str(oid)}).json()]
+    assert ids[:2] == ["own_site", "news"] and {"international", "local", "research", "reports"} <= set(ids)
+    from app.services import generator
+    p = generator.build_system_prompt(generator.BrandContext(name="Hope"), {"language": "ar", "purpose": "own_site",
+                                                                          "industry": "nonprofit"})
+    assert "OWN website" in p

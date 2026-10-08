@@ -55,6 +55,7 @@ class SlideSpec:
     variant: int = 0          # used to vary crop when a background is reused
     logo_plate: bool = False  # navy backdrop behind the logo (bright photo behind it)
     highlight: list[str] | None = None   # words of the cover title shown in gold
+    logo: bytes | None = None            # the logo version chosen for this slide (white/dark/colour)
 
 
 @dataclass
@@ -72,6 +73,7 @@ class BrandStyle:
     logo_backdrop: str = "auto"       # auto | always | never
     theme: str = "magazine"           # magazine = photo-first field designs | classic (rounded cards)
     family: str = "general"           # card design family of the company's field
+    logos: list | None = None         # [(tone, bytes)] all versions of the logo
 
 
 @lru_cache
@@ -106,11 +108,12 @@ def _esc(text: str) -> str:
     return html.escape(text or "").replace("\n", "<br>")
 
 
-def _logo_html(brand: BrandStyle, plate: bool = False) -> str:
+def _logo_html(brand: BrandStyle, plate: bool = False, logo: bytes | None = None) -> str:
     cls = "logo plate" if plate else "logo"
-    if brand.logo:
-        mime = "image/svg+xml" if brand.logo.lstrip().startswith(b"<") else "image/png"
-        return f'<div class="{cls}"><img src="{_data_uri(brand.logo, mime)}" alt=""></div>'
+    logo = logo or brand.logo
+    if logo:
+        mime = "image/svg+xml" if logo.lstrip().startswith(b"<") else "image/png"
+        return f'<div class="{cls}"><img src="{_data_uri(logo, mime)}" alt=""></div>'
     parts = brand.name.split(" ", 1)
     first = _esc(parts[0])
     rest = f" <span>{_esc(parts[1])}</span>" if len(parts) > 1 else ""
@@ -166,7 +169,7 @@ def _magazine(spec: SlideSpec, brand: BrandStyle, lang: str, bg: str, top: str, 
         actions = "".join(f'<span class="m-act">{_ICONS[k]}{_esc(v)}</span>'
                           for k, v in zip(("save", "share", "msg"), labels))
         return (f'{bg}<div class="cta-overlay"></div>'
-                f'<div class="cta-wrap"><div class="cta-logo">{_logo_html(brand, False)}</div>'
+                f'<div class="cta-wrap"><div class="cta-logo">{_logo_html(brand, False, spec.logo)}</div>'
                 f'<h1 style="font-size:70px" data-fit="420,40">{_esc(spec.heading)}</h1>'
                 f'<p style="font-size:36px;opacity:.92">{_esc(spec.body)}</p>'
                 f'<div class="button">{_esc(brand.handle or brand.name)}</div>{site}'
@@ -226,6 +229,10 @@ def build_html(spec: SlideSpec, brand: BrandStyle) -> str:
     lang = brand.language if brand.language in BADGE_LABELS else "ar"
     rtl = lang == "ar"
     brand_colors = {**DEFAULT_COLORS, **(brand.colors or {})}
+    surface = (brand.colors or {}).get("surface")
+    if surface and surface.startswith("#") and len(surface) == 7:      # the brand's own card colour
+        r, g, b = (int(surface[i:i + 2], 16) for i in (1, 3, 5))
+        brand_colors.update(cardBgHex=surface, cardBg=f"rgba({r},{g},{b},0.94)")
     colors = {**brand_colors, **(brand.palette or {})}
     # The logo plate always uses the brand's own navy, so the logo keeps its identity.
     plate = brand.logo_backdrop == "always" or (brand.logo_backdrop != "never" and spec.logo_plate)
@@ -239,7 +246,7 @@ def build_html(spec: SlideSpec, brand: BrandStyle) -> str:
     top_dir = "row" if (logo_left != rtl) else "row-reverse"   # in RTL, row starts from the right
     badge_text = BADGE_LABELS[lang].get(spec.badge or "", "") if spec.badge else ""
     badge = f'<div class="badge">{_esc(badge_text)}</div>' if badge_text else "<div></div>"
-    top = f'<div class="top" >{_logo_html(brand, plate)}{badge}</div>'
+    top = f'<div class="top" >{_logo_html(brand, plate, spec.logo)}{badge}</div>'
 
     dots = "".join(f'<i class="{"on" if i == spec.position else ""}"></i>' for i in range(spec.total))
     credit = f'<span class="credit">{CREDIT_LABEL[lang]}: {_esc(spec.credit)}</span>' if spec.credit else ""
@@ -254,7 +261,8 @@ def build_html(spec: SlideSpec, brand: BrandStyle) -> str:
     if brand.theme == "magazine":
         # photo-first cards of the company's field: one logo, no boxes over the photo
         from . import cards
-        content, theme_class = cards.build(spec, brand, lang, _logo_html(brand, False), _logo_html(brand, plate), bg,
+        content, theme_class = cards.build(spec, brand, lang, _logo_html(brand, False, spec.logo),
+                                          _logo_html(brand, plate, spec.logo), bg,
                                           logo_start=(logo_left != rtl))
         extra_css = cards.css()
     elif spec.kind == "cover":
@@ -267,7 +275,7 @@ def build_html(spec: SlideSpec, brand: BrandStyle) -> str:
         button = _esc(brand.handle or brand.name)
         # Last slide: the brand logo takes the centre (no plane icon, no small logo in the corner)
         content = (f'{bg}<div class="cta-overlay"></div>'
-                   f'<div class="cta-wrap"><div class="cta-logo">{_logo_html(brand, False)}</div>'
+                   f'<div class="cta-wrap"><div class="cta-logo">{_logo_html(brand, False, spec.logo)}</div>'
                    f'<h1 style="font-size:70px" data-fit="520,40">{_esc(spec.heading)}</h1>'
                    f'<p style="font-size:36px;opacity:.9">{_esc(spec.body)}</p>'
                    f'<div class="button">{button}</div>{site}</div>'

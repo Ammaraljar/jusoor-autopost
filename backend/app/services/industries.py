@@ -253,3 +253,150 @@ def generation_defaults(industry: str, language: str = "ar", dialect: str | None
     return {"language": language, "tone": p["tone"], "content_type": p["content_type"],
             "audience": audience(p, language), "objective": p["objective"],
             "industry": industry, "dialect": dialect or "msa"}
+
+
+# ------------------------------------------------------------------ source types per field
+# id → (ar, en, ms, fr, how the writer should treat material from this kind of source)
+_T = dict[str, tuple[str, str, str, str, str]]
+COMMON_SOURCE_TYPES: _T = {
+    "own_site": ("موقعنا الإلكتروني", "Our website", "Laman web kami", "Notre site web",
+                 "This is the company's OWN website: present the content as the company's own news, offers or "
+                 "updates in first person plural (we/our); never call it an outside source."),
+    "news": ("أخبار المجال", "Industry news", "Berita industri", "Actualités du secteur",
+             "News from the field: explain what it means for the audience."),
+}
+INDUSTRY_SOURCE_TYPES: dict[str, _T] = {
+    "travel": {
+        "programs": ("برامج سياحية (من شركات أخرى)", "Tour packages (other companies)", "Pakej pelancongan (syarikat lain)",
+                     "Circuits touristiques (autres agences)", "PROGRAMME"),
+        "destinations": ("هيئات السياحة والوجهات", "Tourism boards & destinations", "Lembaga pelancongan & destinasi",
+                         "Offices du tourisme & destinations", "Official destination information: inspire and inform travellers."),
+        "airlines": ("الطيران والمطارات", "Airlines & airports", "Syarikat penerbangan & lapangan terbang",
+                     "Compagnies aériennes & aéroports", "Flights, routes and airport news: practical impact for travellers."),
+        "hotels": ("الفنادق والمنتجعات", "Hotels & resorts", "Hotel & resort", "Hôtels & resorts",
+                   "Hotels and stays: what is new and who it suits."),
+    },
+    "news": {
+        "agencies": ("وكالات الأنباء", "News agencies", "Agensi berita", "Agences de presse", "Wire copy: strictly factual."),
+        "local": ("مصادر محلية", "Local sources", "Sumber tempatan", "Sources locales", "Local news for the local audience."),
+        "international": ("مصادر دولية", "International sources", "Sumber antarabangsa", "Sources internationales",
+                          "International news: give context for the audience."),
+        "official": ("بيانات رسمية", "Official statements", "Kenyataan rasmi", "Communiqués officiels",
+                     "Official statements: attribute clearly, no opinion."),
+    },
+    "tech": {
+        "product_updates": ("تحديثات المنتجات", "Product updates", "Kemas kini produk", "Mises à jour produits",
+                            "Product releases: what changes for users."),
+        "research": ("أبحاث وتقارير تقنية", "Research & reports", "Penyelidikan & laporan", "Recherches & rapports",
+                     "Research: explain simply, keep numbers exact."),
+        "security": ("تنبيهات الأمن السيبراني", "Security advisories", "Amaran keselamatan", "Alertes de sécurité",
+                     "Security advisories: clear risk and what to do."),
+        "startups": ("الشركات الناشئة والاستثمار", "Startups & funding", "Syarikat pemula & pembiayaan",
+                     "Startups & financements", "Startup news: why it matters."),
+    },
+    "restaurants": {
+        "recipes": ("وصفات وأفكار أطباق", "Recipes & dish ideas", "Resipi & idea hidangan", "Recettes & idées de plats",
+                    "Recipes: inspire, connect to our menu when relevant."),
+        "food_trends": ("اتجاهات الطعام والقهوة", "Food & coffee trends", "Trend makanan & kopi", "Tendances culinaires",
+                        "Food trends: fun, appetising angle."),
+        "local_events": ("فعاليات محلية", "Local events", "Acara tempatan", "Événements locaux",
+                         "Local events: invite people to visit before or after."),
+    },
+    "education": {
+        "authorities": ("وزارات وجهات التعليم", "Education authorities", "Pihak berkuasa pendidikan",
+                        "Autorités éducatives", "Official education news: dates, rules, what parents/students must do."),
+        "scholarships": ("المنح والقبول", "Scholarships & admissions", "Biasiswa & kemasukan", "Bourses & admissions",
+                         "Scholarships/admissions: deadlines, eligibility, steps."),
+        "research": ("دراسات تربوية", "Education research", "Kajian pendidikan", "Recherche en éducation",
+                     "Studies: simple takeaways for students and parents."),
+    },
+    "training": {
+        "accreditation": ("جهات الاعتماد والشهادات", "Accreditation bodies", "Badan akreditasi", "Organismes d’accréditation",
+                          "Accreditation news: what it means for learners' careers."),
+        "skills": ("اتجاهات المهارات وسوق العمل", "Skills & job-market trends", "Trend kemahiran & pasaran kerja",
+                   "Tendances compétences & emploi", "Skills trends: which skills to build and how our programmes help."),
+        "reports": ("تقارير ودراسات مهنية", "Professional reports", "Laporan profesional", "Rapports professionnels",
+                    "Reports: key numbers and practical lessons."),
+        "events": ("مؤتمرات وفعاليات مهنية", "Conferences & events", "Persidangan & acara", "Conférences & événements",
+                   "Events: why attend, what to learn."),
+    },
+    "nonprofit": {
+        "international": ("مصادر دولية", "International organisations", "Organisasi antarabangsa", "Organisations internationales",
+                          "International organisations: the global picture and how it connects to our cause."),
+        "local": ("مصادر محلية", "Local sources", "Sumber tempatan", "Sources locales", "Local community news."),
+        "research": ("دراسات وأبحاث", "Studies & research", "Kajian & penyelidikan", "Études & recherches",
+                     "Research: exact numbers, human meaning."),
+        "reports": ("تقارير", "Reports", "Laporan", "Rapports", "Reports: impact, needs and results, transparent."),
+        "grants": ("فرص التمويل والمنح", "Funding & grants", "Dana & geran", "Financements & subventions",
+                   "Funding opportunities: who can apply and how."),
+    },
+    "ecommerce": {
+        "products": ("الموردون والمنتجات", "Suppliers & products", "Pembekal & produk", "Fournisseurs & produits",
+                     "Products: benefits, use cases, why buy from us."),
+        "trends": ("اتجاهات التسوق", "Shopping trends", "Trend membeli-belah", "Tendances shopping", "Trends: tie to our catalogue."),
+        "deals": ("مواسم وعروض", "Seasons & deals", "Musim & tawaran", "Saisons & promos", "Seasonal deals: urgency, clarity."),
+    },
+    "realestate": {
+        "market": ("تقارير السوق العقاري", "Market reports", "Laporan pasaran", "Rapports de marché",
+                   "Market data: exact numbers, what it means for buyers/investors."),
+        "projects": ("مشاريع ومطورون", "Projects & developers", "Projek & pemaju", "Projets & promoteurs",
+                     "New projects: location, features, who it suits."),
+        "regulations": ("القوانين والأنظمة", "Laws & regulations", "Undang-undang & peraturan", "Lois & réglementations",
+                        "Regulations: what changes for owners and buyers."),
+        "finance": ("التمويل العقاري", "Mortgage & finance", "Pembiayaan hartanah", "Financement immobilier",
+                    "Finance: rates and steps, no advice promises."),
+    },
+    "fashion": {
+        "trends": ("صيحات الموضة", "Fashion trends", "Trend fesyen", "Tendances mode", "Trends: how to wear it, link to our pieces."),
+        "designers": ("المصممون والعلامات", "Designers & labels", "Pereka & jenama", "Créateurs & marques", "Designer news."),
+        "events": ("عروض وأسابيع الموضة", "Shows & fashion weeks", "Pertunjukan fesyen", "Défilés & fashion weeks",
+                   "Show highlights."),
+    },
+    "health": {
+        "authorities": ("الجهات الصحية الرسمية", "Health authorities", "Pihak berkuasa kesihatan", "Autorités sanitaires",
+                        "Official health guidance: accurate, no diagnosis, advise consulting a doctor."),
+        "research": ("دراسات طبية", "Medical research", "Penyelidikan perubatan", "Recherche médicale",
+                     "Studies: careful wording, no overclaiming."),
+        "awareness": ("حملات التوعية", "Awareness campaigns", "Kempen kesedaran", "Campagnes de sensibilisation",
+                      "Awareness: simple prevention tips."),
+    },
+    "beauty": {
+        "trends": ("صيحات الجمال", "Beauty trends", "Trend kecantikan", "Tendances beauté", "Trends: tie to our services."),
+        "products": ("المنتجات والمكونات", "Products & ingredients", "Produk & bahan", "Produits & ingrédients",
+                     "Products: benefits, suitable skin/hair types."),
+        "tips": ("نصائح العناية", "Care tips", "Tip penjagaan", "Conseils soin", "Tips: practical routine steps."),
+    },
+    "automotive": {
+        "manufacturers": ("الشركات المصنعة", "Manufacturers", "Pengeluar", "Constructeurs", "Model news: key specs and who it suits."),
+        "reviews": ("مراجعات وتجارب قيادة", "Reviews & test drives", "Ulasan & pandu uji", "Essais & avis",
+                    "Reviews: honest highlights."),
+        "regulations": ("الأنظمة والطرق", "Rules & roads", "Peraturan & jalan raya", "Règles & routes",
+                        "Rules: what drivers must know."),
+    },
+    "events": {
+        "listings": ("أجندة الفعاليات", "Event listings", "Senarai acara", "Agenda des événements",
+                     "Upcoming events: date, place, why attend."),
+        "industry": ("أخبار القطاع", "Sector news", "Berita sektor", "Actualités du secteur", "Sector news."),
+        "venues": ("القاعات والمواقع", "Venues", "Lokasi acara", "Lieux", "Venue news."),
+    },
+    "general": {
+        "partners": ("شركاؤنا", "Our partners", "Rakan kongsi kami", "Nos partenaires", "Partner news: our connection to it."),
+        "reports": ("تقارير ودراسات", "Reports & studies", "Laporan & kajian", "Rapports & études", "Reports: key takeaways."),
+    },
+}
+
+
+def source_types(industry: str | None) -> list[dict[str, str]]:
+    """Source kinds that fit the company's field, plus the ones every company has."""
+    items = {**COMMON_SOURCE_TYPES, **INDUSTRY_SOURCE_TYPES.get(industry or "general", {})}
+    return [{"id": k, "ar": v[0], "en": v[1], "ms": v[2], "fr": v[3]} for k, v in items.items()]
+
+
+def source_type_hint(type_id: str | None) -> tuple[str, str]:
+    """(English label, writing hint) of a source type, for the AI writer."""
+    if not type_id:
+        return "", ""
+    for table in [COMMON_SOURCE_TYPES, *INDUSTRY_SOURCE_TYPES.values()]:
+        if type_id in table:
+            return table[type_id][1], table[type_id][4]
+    return "", ""

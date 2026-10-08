@@ -89,6 +89,14 @@ def discover_links(source, limit: int = 20) -> ListingResult:
                 if source.link_pattern:
                     if not re.search(source.link_pattern, url):
                         continue
+                elif not source.link_selector and getattr(source, "purpose", "") == "own_site":
+                    # the company's own site: any inner page of the site may be an article/offer
+                    path = parsed.path.rstrip("/")
+                    if path == listing_path or not path or SKIP_PATTERNS.search(path) or \
+                            re.search(r"\.(jpg|jpeg|png|pdf|zip)$|/(cart|checkout|account|wp-)", path, re.I):
+                        continue
+                    if path.count("/") < 2 and path.split("/")[-1].count("-") < 2:
+                        continue
                 elif not source.link_selector:
                     # Heuristic: article URLs are deeper than the listing and usually contain a date or long slug
                     path = parsed.path.rstrip("/")
@@ -103,6 +111,40 @@ def discover_links(source, limit: int = 20) -> ListingResult:
                 if len(found) >= limit:
                     return ListingResult(found, status)
     return ListingResult(found, status)
+
+
+FEED_PATHS = ("/feed", "/rss", "/feed.xml", "/rss.xml", "/blog/feed", "/news/feed", "/atom.xml")
+LISTING_PATHS = ("/blog", "/news", "/articles", "/offers", "/programs", "/events", "/media", "/ar/blog", "/en/blog")
+
+
+def detect_site(url: str) -> dict:
+    """Find a website's RSS feed and its news/blog listing pages."""
+    out: dict = {"feed_url": None, "listing_urls": [url]}
+    try:
+        with _client() as client:
+            resp = client.get(url)
+            soup = BeautifulSoup(resp.text, "html.parser")
+            link = soup.find("link", attrs={"type": re.compile(r"(rss|atom)\+xml")})
+            candidates = [urljoin(url, link["href"])] if link and link.get("href") else []
+            candidates += [urljoin(url, p) for p in FEED_PATHS]
+            for feed in candidates:
+                try:
+                    r = client.get(feed)
+                    if r.status_code == 200 and feedparser.parse(r.content).entries:
+                        out["feed_url"] = feed
+                        break
+                except httpx.HTTPError:
+                    continue
+            host = urlparse(url).netloc
+            listings = [url]
+            for a in soup.find_all("a", href=True):
+                href = urljoin(url, a["href"]).split("#")[0].rstrip("/")
+                if urlparse(href).netloc == host and urlparse(href).path.lower() in LISTING_PATHS:
+                    listings.append(href)
+            out["listing_urls"] = list(dict.fromkeys(listings))[:5]
+    except Exception as exc:  # noqa: BLE001
+        out["error"] = str(exc)
+    return out
 
 
 def fetch_article(url: str, body_selector: str | None = None) -> ScrapedArticle:

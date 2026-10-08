@@ -42,6 +42,10 @@ def _out(b: Brand) -> dict:
     data["color_mode"] = b.color_mode or "auto"
     data["logo_backdrop"] = b.logo_backdrop or "auto"
     data["card_theme"] = b.card_theme or "magazine"
+    data["colors"] = {"navy": colours.BRAND_NAVY, "gold": colours.BRAND_GOLD, "goldLight": "#D9B96A",
+                      "surface": "#FBF8F0", "cardTitle": "#16244F", "cardText": "#1F2B55", **(b.colors or {})}
+    data["logos"] = [{**x, "url": storage.public_url(x["key"]), "primary": x["key"] == b.logo_path}
+                     for x in pipeline.brand_logos(b)]
     return {**data, "logo_url": storage.public_url(b.logo_path) if b.logo_path else None}
 
 
@@ -98,36 +102,100 @@ def delete_brand(bid: int, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
-@router.post("/{bid}/logo")
-async def upload_logo(bid: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
-    b = _get(db, bid)
-    if file.content_type not in ("image/png", "image/svg+xml"):
-        raise HTTPException(400, "ارفع الشعار بصيغة PNG شفافة أو SVG")
-    data = await file.read()
-    if len(data) > 3 * 1024 * 1024:
-        raise HTTPException(400, "الحد الأقصى 3 ميغابايت")
-    ext = "svg" if file.content_type == "image/svg+xml" else "png"
-    key = f"brand/logo-{b.id}-{uuid.uuid4().hex[:8]}.{ext}"
-    storage.save_bytes(key, data, file.content_type)
-    if b.logo_path:
-        storage.delete(b.logo_path)
+LOGO_TYPES = {"image/png": "png", "image/svg+xml": "svg", "image/webp": "webp"}
+
+
+def _set_primary(b: Brand, key: str, data: bytes | None) -> None:
+    """The primary logo drives the brand identity: its colours become the brand colours."""
     b.logo_path = key
-    # The identity follows the logo at once: colours read from it drive every card and overlay
-    from ..services import palette as colours
-    if ext == "png":
+    if data and not data.lstrip().startswith(b"<"):
         found = colours.colors_from_logo(data)
-        if found:
+        if found and colours.logo_tone(data) == "color":
             b.colors = {**(b.colors or {}), **found}
             b.color_mode = "auto"
+
+
+async def _store_logo(b: Brand, file: UploadFile) -> dict:
+    if file.content_type not in LOGO_TYPES:
+        raise HTTPException(400, "ارفع الشعار بصيغة PNG شفافة أو SVG أو WEBP")
+    data = await file.read()
+    if len(data) > 3 * 1024 * 1024:
+        raise HTTPException(400, "الحد الأقصى 3 ميغابايت للشعار")
+    key = f"brand/logo-{b.id}-{uuid.uuid4().hex[:8]}.{LOGO_TYPES[file.content_type]}"
+    storage.save_bytes(key, data, file.content_type)
+    item = {"key": key, "tone": colours.logo_tone(data), "name": (file.filename or "")[:80]}
+    logos = pipeline.brand_logos(b)
+    logos.append(item)
+    b.logos = logos
+    if not b.logo_path:
+        _set_primary(b, key, data)
+    return item
+
+
+@router.post("/{bid}/logos")
+async def upload_logos(bid: int, files: list[UploadFile] = File(...), db: Session = Depends(get_db)):
+    """Add one or more versions of the logo (colour, white, dark…). The tone of each is detected,
+    and the slide renderer picks the version that reads best on each photo."""
+    b = _get(db, bid)
+    if len(files) > 8:
+        raise HTTPException(400, "حتى 8 نسخ من الشعار")
+    for f in files:
+        await _store_logo(b, f)
+    return _out(b)
+
+
+@router.post("/{bid}/logo")
+async def upload_logo(bid: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """Older single-logo upload: adds the file and makes it the primary logo."""
+    b = _get(db, bid)
+    item = await _store_logo(b, file)
+    _set_primary(b, item["key"], storage.read_bytes(item["key"]))
+    return _out(b)
+
+
+class LogoPatch(BaseModel):
+    key: str
+    tone: str | None = Field(None, pattern="^(color|light|dark)$")
+    primary: bool | None = None
+
+
+@router.patch("/{bid}/logos")
+def update_logo(bid: int, body: LogoPatch, db: Session = Depends(get_db)):
+    b = _get(db, bid)
+    logos = pipeline.brand_logos(b)
+    item = next((x for x in logos if x["key"] == body.key), None)
+    if item is None:
+        raise HTTPException(404, "الشعار غير موجود")
+    if body.tone:
+        item["tone"] = body.tone
+    b.logos = logos
+    if body.primary:
+        _set_primary(b, item["key"], storage.read_bytes(item["key"]))
+    return _out(b)
+
+
+@router.delete("/{bid}/logos")
+def delete_logo(bid: int, key: str, db: Session = Depends(get_db)):
+    b = _get(db, bid)
+    logos = pipeline.brand_logos(b)
+    if not any(x["key"] == key for x in logos):
+        raise HTTPException(404, "الشعار غير موجود")
+    storage.delete(key)
+    logos = [x for x in logos if x["key"] != key]
+    b.logos = logos
+    if b.logo_path == key:
+        b.logo_path = logos[0]["key"] if logos else None
     return _out(b)
 
 
 @router.delete("/{bid}/logo")
 def remove_logo(bid: int, db: Session = Depends(get_db)):
+    """Remove every version of the logo."""
     b = _get(db, bid)
-    if b.logo_path:
-        storage.delete(b.logo_path)
+    for x in pipeline.brand_logos(b):
+        storage.delete(x["key"])
     b.logo_path = None
+    b.logos = []
     return _out(b)
 
 
@@ -170,8 +238,9 @@ async def preview(bid: int, body: PreviewIn, db: Session = Depends(get_db)):
     gold = (b.colors or {}).get("gold") or colours.BRAND_GOLD
     style.palette = colours.design(body.variant or 0, navy, gold, b.design_seed or 0, family) \
         if (b.color_mode or "auto") == "auto" else {"family": family}
-    plate = body.kind != "cta" and colours.logo_needs_plate(background, b.logo_placement or "top-left", lang == "ar")
+    logo, plate = colours.choose_logo(style.logos, style.logo, background, b.logo_placement or "top-left",
+                                      body.kind, (style.palette or {}).get("template"))
     jpeg = await renderer.render(SlideSpec(kind=body.kind, heading=heading, body=text, position=1, total=6,
-                                           background=background, logo_plate=plate,
+                                           background=background, logo_plate=plate, logo=logo,
                                            badge=None, credit="Reuters" if body.kind == "cover" else ""), style)
     return {"image": "data:image/jpeg;base64," + base64.b64encode(jpeg).decode()}

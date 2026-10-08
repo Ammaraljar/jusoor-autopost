@@ -156,6 +156,13 @@ def build_system_prompt(brand: BrandContext, gen: dict[str, Any]) -> str:
         extra += "\n- " + profile["rules"]
     if gen.get("purpose") == "programs":
         extra += "\n" + PROGRAM_RULES.format(brand=brand.name)
+    elif gen.get("purpose"):
+        label, hint = industries.source_type_hint(gen.get("purpose"))
+        if label:
+            extra += f"\n- Source type: {label}. {hint}"
+        if gen.get("purpose") == "own_site":
+            extra += (f"\n- Never write 'according to {brand.name}' or credit an outside source; relevance is always "
+                      "high (8-10) because it is the brand's own content.")
     if language == "ar":
         examples = ('Hook formulas (pick the one the material supports best): a number ("٥ أشياء…"), a secret or a\n'
                     '  common mistake ("خطأ يقع فيه أغلب…"), a direct question, a clear benefit ("وفّر…"), or\n'

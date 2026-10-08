@@ -25,7 +25,7 @@ from ..config import get_settings
 from ..db import AppSetting, session_scope
 
 SETTINGS_KEY = "credentials"
-VERSION = "4.2-18-templates"
+VERSION = "4.3-logos-sources"
 
 # Each engine carries what its own environment needs: suggested models, the key's format,
 # where to get the key, and request tweaks applied in generator._tune_payload().
@@ -91,7 +91,7 @@ ENGINES: dict[str, dict[str, Any]] = {
             {"id": "gemini-flash-lite-latest", "note": "الأسرع والأخف"},
             {"id": "gemini-pro-latest", "note": "الأعلى جودة — أبطأ وحدوده المجانية أقل"},
         ],
-        "key_url": "https://aistudio.google.com/apikey", "key_prefix": "", "key_placeholder": "AIza… أو AQ.…",
+        "key_url": "https://aistudio.google.com/apikey", "key_prefix": "", "key_placeholder": "AIza… / AQ.…",
         "free": "خطة مجانية من Google AI Studio بحدود في الدقيقة واليوم",
     },
     "cloudflare": {
@@ -103,7 +103,7 @@ ENGINES: dict[str, dict[str, Any]] = {
             {"id": "@cf/meta/llama-4-scout-17b-16e-instruct", "note": "أحدث وأخف"},
         ],
         "key_url": "https://dash.cloudflare.com/profile/api-tokens", "key_prefix": "",
-        "key_placeholder": "API Token بصلاحية Workers AI",
+        "key_placeholder": "API Token (Workers AI)",
         "free": "10,000 وحدة مجانية يوميًا (Neurons)",
         "extra": [{"field": "cloudflare_account_id", "label": "Account ID",
                    "hint": "من لوحة Cloudflare ← الصفحة الرئيسية للحساب (32 حرفًا)"}],
@@ -116,7 +116,7 @@ ENGINES: dict[str, dict[str, Any]] = {
             {"id": "mistral-medium-latest", "note": "جودة أعلى"},
             {"id": "mistral-large-latest", "note": "الأقوى — أبطأ"},
         ],
-        "key_url": "https://console.mistral.ai/api-keys", "key_prefix": "", "key_placeholder": "مفتاح من 32 حرفًا",
+        "key_url": "https://console.mistral.ai/api-keys", "key_prefix": "", "key_placeholder": "32-character key",
         "free": "خطة Experiment مجانية بحدود استخدام",
     },
     "openrouter": {
@@ -180,6 +180,48 @@ FIELDS: dict[str, tuple[bool, str]] = {
 
 # Two layers: the platform's keys (shared by every company) and each company's own keys, which win.
 # Publishing accounts (Buffer, Meta, upload-post) are always the company's own.
+# Engine notes in the other interface languages (the Arabic text is the key)
+TEXT_I18N: dict[str, dict[str, str]] = {
+    "ممتاز بالعربية وسريع — الأنسب للمنشورات": {"en": "Excellent in Arabic and fast — best for posts", "ms": "Sangat baik dalam bahasa Arab dan pantas — terbaik untuk hantaran", "fr": "Excellent en arabe et rapide — idéal pour les posts"},
+    "الأعلى جودة — أبطأ وأغلى": {"en": "Highest quality — slower and pricier", "ms": "Kualiti tertinggi — lebih perlahan dan mahal", "fr": "Qualité maximale — plus lent et plus cher"},
+    "مدفوع بالاستخدام (رصيد مسبق)": {"en": "Pay as you go (prepaid credit)", "ms": "Bayar ikut penggunaan (kredit prabayar)", "fr": "Paiement à l’usage (crédit prépayé)"},
+    "سريع واقتصادي": {"en": "Fast and economical", "ms": "Pantas dan jimat", "fr": "Rapide et économique"},
+    "الأعلى جودة": {"en": "Highest quality", "ms": "Kualiti tertinggi", "fr": "Qualité maximale"},
+    "مدفوع بالاستخدام": {"en": "Pay as you go", "ms": "Bayar ikut penggunaan", "fr": "Paiement à l’usage"},
+    "الأحدث والأقوى من Kimi": {"en": "Kimi’s newest and strongest", "ms": "Terbaharu dan terkuat daripada Kimi", "fr": "Le plus récent et le plus puissant de Kimi"},
+    "عام وأخف": {"en": "General and lighter", "ms": "Umum dan lebih ringan", "fr": "Généraliste et plus léger"},
+    "رصيد تجريبي عند التسجيل ثم مدفوع": {"en": "Trial credit at sign-up, then paid", "ms": "Kredit percubaan semasa daftar, kemudian berbayar", "fr": "Crédit d’essai à l’inscription, puis payant"},
+    "اقتصادي جدًا وجيد بالعربية": {"en": "Very economical, good in Arabic", "ms": "Sangat jimat, baik dalam bahasa Arab", "fr": "Très économique, bon en arabe"},
+    "مدفوع برصيد مسبق — رخيص": {"en": "Prepaid credit — cheap", "ms": "Kredit prabayar — murah", "fr": "Crédit prépayé — bon marché"},
+    "نموذج xAI الرئيسي": {"en": "xAI’s main model", "ms": "Model utama xAI", "fr": "Modèle principal de xAI"},
+    "متوازن": {"en": "Balanced", "ms": "Seimbang", "fr": "Équilibré"},
+    "حصة مجانية عند التسجيل ثم مدفوع": {"en": "Free quota at sign-up, then paid", "ms": "Kuota percuma semasa daftar, kemudian berbayar", "fr": "Quota gratuit à l’inscription, puis payant"},
+    "سريع وممتاز بالعربية — آخر إصدار Flash تلقائيًا": {"en": "Fast, excellent in Arabic — always the latest Flash", "ms": "Pantas, sangat baik dalam bahasa Arab — sentiasa Flash terkini", "fr": "Rapide, excellent en arabe — toujours le dernier Flash"},
+    "الأسرع والأخف": {"en": "Fastest and lightest", "ms": "Paling pantas dan ringan", "fr": "Le plus rapide et léger"},
+    "الأعلى جودة — أبطأ وحدوده المجانية أقل": {"en": "Highest quality — slower, lower free limits", "ms": "Kualiti tertinggi — lebih perlahan, had percuma lebih rendah", "fr": "Qualité maximale — plus lent, limites gratuites plus basses"},
+    "خطة مجانية من Google AI Studio بحدود في الدقيقة واليوم": {"en": "Free Google AI Studio plan with per-minute and daily limits", "ms": "Pelan percuma Google AI Studio dengan had per minit dan harian", "fr": "Offre gratuite Google AI Studio avec limites par minute et par jour"},
+    "متعدد اللغات وسريع": {"en": "Multilingual and fast", "ms": "Pelbagai bahasa dan pantas", "fr": "Multilingue et rapide"},
+    "أحدث وأخف": {"en": "Newer and lighter", "ms": "Lebih baharu dan ringan", "fr": "Plus récent et plus léger"},
+    "10,000 وحدة مجانية يوميًا (Neurons)": {"en": "10,000 free units a day (Neurons)", "ms": "10,000 unit percuma sehari (Neurons)", "fr": "10 000 unités gratuites par jour (Neurons)"},
+    "سريع واقتصادي — مناسب للمنشورات": {"en": "Fast and economical — good for posts", "ms": "Pantas dan jimat — sesuai untuk hantaran", "fr": "Rapide et économique — adapté aux posts"},
+    "جودة أعلى": {"en": "Higher quality", "ms": "Kualiti lebih tinggi", "fr": "Meilleure qualité"},
+    "الأقوى — أبطأ": {"en": "Strongest — slower", "ms": "Paling kuat — lebih perlahan", "fr": "Le plus puissant — plus lent"},
+    "خطة Experiment مجانية بحدود استخدام": {"en": "Free Experiment plan with usage limits", "ms": "Pelan Experiment percuma dengan had penggunaan", "fr": "Offre Experiment gratuite avec limites"},
+    "يختار نموذجًا مجانيًا يدعم JSON تلقائيًا": {"en": "Picks a free JSON-capable model automatically", "ms": "Memilih model percuma yang menyokong JSON secara automatik", "fr": "Choisit automatiquement un modèle gratuit compatible JSON"},
+    "مجاني بحد يومي للطلبات — أي نموذج ينتهي بـ :free": {"en": "Free with a daily request limit — any model ending in :free", "ms": "Percuma dengan had permintaan harian — mana-mana model berakhir :free", "fr": "Gratuit avec limite quotidienne — tout modèle finissant par :free"},
+    "الأفضل للعربية على Groq": {"en": "Best for Arabic on Groq", "ms": "Terbaik untuk bahasa Arab di Groq", "fr": "Le meilleur pour l’arabe sur Groq"},
+    "أسرع وأخف": {"en": "Faster and lighter", "ms": "Lebih pantas dan ringan", "fr": "Plus rapide et léger"},
+    "تجريبي (Preview)": {"en": "Preview", "ms": "Pratonton", "fr": "Aperçu"},
+    "خطة مجانية بحدود في الدقيقة واليوم": {"en": "Free plan with per-minute and daily limits", "ms": "Pelan percuma dengan had per minit dan harian", "fr": "Offre gratuite avec limites par minute et par jour"},
+    "من لوحة Cloudflare ← الصفحة الرئيسية للحساب (32 حرفًا)": {"en": "From the Cloudflare dashboard → account home (32 characters)", "ms": "Dari papan pemuka Cloudflare → laman utama akaun (32 aksara)", "fr": "Depuis le tableau de bord Cloudflare → accueil du compte (32 caractères)"},
+}
+
+
+def tr(text: str) -> dict[str, str]:
+    """The text in every interface language."""
+    return {"ar": text, **TEXT_I18N.get(text, {"en": text, "ms": text, "fr": text})}
+
+
 COMPANY_ONLY = {"buffer_api_key", "meta_access_token", "uploadpost_api_key"}
 HOME_ORG = 1          # the platform owner's company may also use the server's environment variables
 _cache: dict[str, dict[str, str]] = {}
@@ -362,10 +404,12 @@ def public_view() -> dict[str, Any]:
     out["engines"] = {name: {"label": ENGINES[name]["label"], "ready": _ready(name, values),
                              "model": engine(name, values)["model"],
                              "default_model": ENGINES[name]["default_model"],
-                             "models": ENGINES[name]["models"], "key_url": ENGINES[name]["key_url"],
+                             "models": [{**m, "note_i18n": tr(m.get("note", ""))} for m in ENGINES[name]["models"]],
+                             "key_url": ENGINES[name]["key_url"],
                              "key_prefix": ENGINES[name]["key_prefix"],
                              "key_placeholder": ENGINES[name]["key_placeholder"],
-                             "free": ENGINES[name]["free"], "extra": ENGINES[name].get("extra", [])}
+                             "free": ENGINES[name]["free"], "free_i18n": tr(ENGINES[name]["free"]),
+                             "extra": [{**x, "hint_i18n": tr(x.get("hint", ""))} for x in ENGINES[name].get("extra", [])]}
                       for name in ENGINE_ORDER}
     out["ready"] = ready_engines(values)
     out["version"] = VERSION

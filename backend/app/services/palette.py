@@ -215,14 +215,14 @@ def pick_variant(image_bytes: bytes | None, recent: list[str] | None = None,
     return ranked[0]
 
 
-def logo_needs_plate(image_bytes: bytes | None, placement: str = "top-left", rtl: bool = True) -> bool:
-    """True when the area behind the logo is bright or busy, so a white logo would vanish."""
+def _top_region(image_bytes: bytes | None, placement: str = "top-left") -> tuple[float, float] | None:
+    """Mean brightness and busyness (0-1) of the photo where the logo sits."""
     if not image_bytes:
-        return False
+        return None
     try:
         img = Image.open(io.BytesIO(image_bytes)).convert("L")
     except Exception:  # noqa: BLE001
-        return False
+        return None
     # Match the 4:5 crop used on the slide (background-size: cover, centred)
     w, h = img.size
     target = 4 / 5
@@ -235,13 +235,72 @@ def logo_needs_plate(image_bytes: bytes | None, placement: str = "top-left", rtl
     w, h = img.size
     on_left = placement.endswith("left")
     x0, x1 = (0, int(w * 0.45)) if on_left else (int(w * 0.55), w)
-    region = img.crop((x0, 0, x1, int(h * 0.16)))
-    stat = ImageStat.Stat(region)
-    mean = stat.mean[0] / 255
-    spread = stat.stddev[0] / 255
+    stat = ImageStat.Stat(img.crop((x0, 0, x1, int(h * 0.16))))
+    return stat.mean[0] / 255, stat.stddev[0] / 255
+
+
+def logo_needs_plate(image_bytes: bytes | None, placement: str = "top-left", rtl: bool = True) -> bool:
+    """True when the area behind the logo is bright or busy, so a white logo would vanish."""
+    region = _top_region(image_bytes, placement)
+    if region is None:
+        return False
+    mean, spread = region
     # White text needs a dark surround: anything from mid-tones up gets the plate, and so do
     # busy areas (clouds, buildings) where the logo would compete with detail.
     return mean > PLATE_BRIGHTNESS or (mean > 0.36 and spread > 0.20)
+
+
+def logo_tone(data: bytes) -> str:
+    """light (white/pale version), dark (black/navy version) or color — read from the logo itself."""
+    try:
+        img = Image.open(io.BytesIO(data)).convert("RGBA")
+    except Exception:  # noqa: BLE001
+        return "color"                          # SVG and unreadable files: treated as the colour version
+    img.thumbnail((120, 120))
+    px = [(r, g, b) for r, g, b, a in img.getdata() if a > 128]
+    if not px:
+        return "color"
+    lum = sum(0.2126 * r + 0.7152 * g + 0.0722 * b for r, g, b in px) / (255 * len(px))
+    sat = sum((max(p) - min(p)) / 255 for p in px) / len(px)
+    if lum > 0.78 and sat < 0.18:
+        return "light"
+    if lum < 0.24 and sat < 0.35:
+        return "dark"
+    return "color"
+
+
+def choose_logo(logos: list | None, primary: bytes | None, background: bytes | None,
+                placement: str = "top-left", kind: str = "content", template: str | None = None
+                ) -> tuple[bytes | None, bool]:
+    """The best version of the logo for one slide, and whether it still needs a backdrop plate.
+
+    Bright photo behind the logo → dark version; dark photo or a dark brand surface (last slide,
+    top band) → white version; otherwise the colour version. With a single logo the old rule
+    (plate on bright areas) applies."""
+    by_tone: dict[str, bytes] = {}
+    for tone, data in logos or []:
+        if data and tone not in by_tone:
+            by_tone[tone] = data
+    on_dark_surface = kind == "cta" or template == "topbar"
+    if len(by_tone) <= 1:
+        plate = False if on_dark_surface else logo_needs_plate(background, placement)
+        return primary, plate
+    if on_dark_surface:
+        return by_tone.get("light") or by_tone.get("color") or primary, False
+    region = _top_region(background, placement)
+    mean, spread = region if region else (0.3, 0.1)
+    if mean > 0.55 or (mean > 0.45 and spread > 0.2):          # bright behind the logo
+        if "dark" in by_tone:
+            return by_tone["dark"], False
+        if "color" in by_tone:
+            return by_tone["color"], False
+        return by_tone.get("light") or primary, True
+    if mean < 0.4:                                              # dark behind the logo
+        return by_tone.get("light") or by_tone.get("color") or primary, False
+    if "color" in by_tone:                                      # mid-tones
+        return by_tone["color"], False
+    logo = by_tone.get("light") or primary
+    return logo, logo_needs_plate(background, placement)
 
 
 # ------------------------------------------------------------------ previews
