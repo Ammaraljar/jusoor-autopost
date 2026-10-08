@@ -525,6 +525,22 @@ def preview(nid: int, design: str | None = None, db: Session = Depends(get_db)):
     return {"html": html}
 
 
+@router.post("/newsletters/{nid}/preview")
+def live_preview(nid: int, body: NewsletterPatch, db: Session = Depends(get_db)):
+    """Preview unsaved edits: the changes are applied to a detached copy and never stored."""
+    nl = _nl(db, nid)
+    brand = db.scalar(select(Brand).order_by(Brand.is_default.desc(), Brand.id))
+    db.expunge(nl)
+    for k, v in body.model_dump(exclude_unset=True).items():
+        if v is None or (k == "design" and v not in newsletter.LAYOUTS):
+            continue
+        if k == "font" and v not in newsletter.EMAIL_FONTS:
+            v = ""
+        setattr(nl, k, v)
+    html, _ = newsletter.render(nl, brand, _family(db))
+    return {"html": html}
+
+
 @router.post("/newsletters/{nid}/test")
 async def send_test(nid: int, body: TestMail, db: Session = Depends(get_db)):
     nl = _nl(db, nid)
