@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import html as html_lib
+import json
 import logging
 import re
 import secrets
@@ -57,6 +58,11 @@ SKINS = {
 UNSUB = {"ar": "إلغاء الاشتراك", "en": "Unsubscribe", "ms": "Nyahlanggan", "fr": "Se désabonner"}
 WHY = {"ar": "تصلك هذه الرسالة لأنك مشترك في نشرة", "en": "You receive this email because you subscribed to",
        "ms": "Anda menerima e-mel ini kerana melanggan", "fr": "Vous recevez cet e-mail car vous êtes abonné à"}
+SOURCE_LABEL = {"ar": "المصدر", "en": "Source", "ms": "Sumber", "fr": "Source"}
+EVENT_LABELS = {"date": {"ar": "التاريخ", "en": "Date", "ms": "Tarikh", "fr": "Date"},
+                "time": {"ar": "الوقت", "en": "Time", "ms": "Masa", "fr": "Heure"},
+                "place": {"ar": "المكان", "en": "Place", "ms": "Tempat", "fr": "Lieu"},
+                "register": {"ar": "سجّل الآن", "en": "Register now", "ms": "Daftar sekarang", "fr": "Je m’inscris"}}
 VIEW = {"ar": "اقرأ المزيد", "en": "Read more", "ms": "Baca lagi", "fr": "Lire la suite"}
 
 
@@ -153,13 +159,13 @@ def render(nl: Newsletter, brand: Brand, family: str, token: str | None = None) 
         if layout == "spotlight":
             header += (f'<tr><td style="padding:0">{img(hero, 340, 0)}</td></tr>'
                        f'<tr><td style="background:{navy};padding:30px 36px 34px;text-align:{align}">'
-                       f'<div style="font:bold 32px/1.3 {head_font};color:#ffffff">{_e(headline)}</div>'
+                       f'@@KICKER@@<div style="font:bold 32px/1.3 {head_font};color:#ffffff">{_e(headline)}</div>'
                        f'<div style="width:70px;height:5px;background:{gold};margin:16px 0"></div>'
                        f'<div style="font:16px/1.7 {body_font};color:#e9ecf5">{_e(intro)}</div>'
                        f'{button(cta_text, cta_url)}</td></tr>')
         else:
             header += (f'<tr><td style="background:{gold};padding:34px 36px;text-align:{align}">'
-                       f'<div style="font:900 34px/1.25 {head_font};color:{navy}">{_e(headline)}</div>'
+                       f'@@KICKER@@<div style="font:900 34px/1.25 {head_font};color:{navy}">{_e(headline)}</div>'
                        f'<div style="font:16px/1.7 {body_font};color:{navy};margin-top:12px">{_e(intro)}</div></td></tr>'
                        f'<tr><td style="padding:0">{img(hero, 300, 0)}</td></tr>')
         intro_block = ""
@@ -181,6 +187,36 @@ def render(nl: Newsletter, brand: Brand, family: str, token: str | None = None) 
                        + f'<p style="{p}">{_e(intro)}</p>' + (button(cta_text, cta_url) if layout == "minimal" else "")
                        + '</td></tr>')
 
+    # the kind of newsletter as a small label, plus event box and poll
+    from . import newsletter_types
+    kicker_text = newsletter_types.label(nl.kind, lang)
+    kicker = (f'<div style="font:bold 12px {body_font};letter-spacing:1px;color:{gold};text-transform:uppercase;'
+              f'margin:0 0 8px">{_e(kicker_text)}</div>')
+    if intro_block:
+        intro_block = intro_block.replace(f'<h1 style="{h1}">', kicker + f'<h1 style="{h1}">', 1)
+    header = header.replace("@@KICKER@@", kicker.replace(f"color:{gold}", f"color:{gold if layout == 'spotlight' else navy}"))
+    extra_rows = ""
+    event = content.get("event") or {}
+    if any(event.get(k) for k in ("date", "time", "place")):
+        lines = "".join(f'<div style="font:15px/1.8 {body_font};color:{title_c}"><b>{_e(EVENT_LABELS[k][lang])}:</b> '
+                        f'{_e(event.get(k))}</div>' for k in ("date", "time", "place") if event.get(k))
+        extra_rows += (f'<tr><td style="padding:10px 36px 6px"><div style="border:2px solid {gold};border-radius:{radius}px;'
+                       f'padding:18px 22px;text-align:{align};background:{surface}">{lines}'
+                       + (button(content.get("cta_text") or EVENT_LABELS["register"][lang], event.get("url"))
+                          if event.get("url") else "") + '</div></td></tr>')
+    poll = content.get("poll") or {}
+    if poll.get("question") and poll.get("options"):
+        opts = "".join(
+            f'<tr><td style="padding:4px 0"><a href="{_e(f"{base}/api/t/p/{token}?a={i}" if token and base else "#")}" '
+            f'style="display:block;padding:12px 16px;border:2px solid {navy};border-radius:{btn_radius if btn_radius < 100 else 12}px;'
+            f'font:bold 15px {body_font};color:{navy};text-decoration:none;text-align:center">{_e(o)}</a></td></tr>'
+            for i, o in enumerate(poll["options"]))
+        extra_rows += (f'<tr><td style="padding:14px 36px"><div style="background:{surface};border-radius:{radius}px;padding:20px 22px;'
+                       f'text-align:{align}"><div style="font:bold 19px/1.4 {head_font};color:{title_c};margin-bottom:10px">'
+                       f'{_e(poll["question"])}</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0">'
+                       f'{opts}</table></div></td></tr>')
+    intro_block += extra_rows
+
     # sections
     rows = []
     for i, sec in enumerate(sections, 1):
@@ -191,6 +227,8 @@ def render(nl: Newsletter, brand: Brand, family: str, token: str | None = None) 
                f'background:{gold};color:{navy};font:bold 14px {body_font};text-align:center;margin-{"left" if rtl else "right"}:8px">'
                f'{i}</span>') if family in SKINS["numbered"] else ""
         h2 = f'<h2 style="font:bold 21px/1.35 {head_font};color:{title_c};margin:0 0 8px">{num}{_e(t)}</h2>'
+        if sec.get("source"):
+            txt = f"{txt}\n— {SOURCE_LABEL[lang]}: {sec['source']}"
         divider = (f'<div style="border-top:2px dotted {gold};margin:6px 0 0"></div>' if family in SKINS["dotted"]
                    else f'<div style="border-top:1px solid #ececec;margin:6px 0 0"></div>')
         if layout == "magazine" and im:
@@ -277,14 +315,22 @@ NEWSLETTER_TOOL = {
             "cta_title": {"type": "string", "description": "A short line above the main button."},
             "cta_text": {"type": "string", "description": "Main button label (2-4 words)."},
             "ps": {"type": "string", "description": "Optional P.S. line, or empty."},
+            "poll_question": {"type": "string", "description": "Survey emails only: one short question."},
+            "poll_options": {"type": "array", "items": {"type": "string"},
+                             "description": "Survey emails only: 2-5 short answer choices."},
         },
         "required": ["subject", "preheader", "headline", "intro", "sections", "cta_text"],
     },
 }
 
 
-def _material(db, draft_ids: list[int], product_ids: list[int]) -> list[dict]:  # noqa: ANN001
+def _material(db, draft_ids: list[int], product_ids: list[int], article_ids: list[int] | None = None) -> list[dict]:  # noqa: ANN001
+    from ..db import Article, Source
     items = []
+    for a in db.scalars(select(Article).where(Article.id.in_(article_ids or [0]))):
+        src = db.get(Source, a.source_id) if a.source_id else None
+        items.append({"title": a.title, "text": (a.body or "")[:900], "image": a.image_url, "link": a.url,
+                      "source": src.name if src else ""})
     for d in db.scalars(select(Draft).where(Draft.id.in_(draft_ids or [0]))):
         cover = next((s.image_url for s in sorted(d.slides, key=lambda s: s.position) if s.image_url), None)
         items.append({"title": d.hook, "text": d.caption[:900], "image": cover,
@@ -296,27 +342,37 @@ def _material(db, draft_ids: list[int], product_ids: list[int]) -> list[dict]:  
 
 
 async def generate(newsletter_id: int, topic: str = "", draft_ids: list[int] | None = None,
-                   product_ids: list[int] | None = None, sections: int = 4) -> None:
-    """Fill a newsletter with AI-written content from posts, products and/or a topic."""
+                   product_ids: list[int] | None = None, sections: int = 4, article_ids: list[int] | None = None,
+                   extra: dict | None = None) -> None:
+    """Fill a newsletter with AI-written content of its kind (curated, educational, promotional…)."""
+    from . import newsletter_types
+    extra = extra or {}
     with session_scope() as db:
         nl = db.get(Newsletter, newsletter_id)
         brand = db.scalar(select(Brand).order_by(Brand.is_default.desc(), Brand.id))
         gen = dict(pipeline.app_settings.get_section(db, "generation"))
         gen["language"] = nl.language
-        material = _material(db, draft_ids or [], product_ids or [])
+        kind = newsletter_types.get(nl.kind)
+        sections = sections or kind["sections"]
+        material = _material(db, draft_ids or [], product_ids or [], article_ids or [])
         ctx = pipeline.brand_context(brand)
         website = brand.website or ""
-    listing = "\n".join(f"[{i}] {m['title']}\n{m['text']}" for i, m in enumerate(material, 1))
-    user = (f"Write an email newsletter for {ctx.name}'s subscribers.\n"
+    listing = "\n".join(f"[{i}] {m['title']}" + (f" (source: {m['source']})" if m.get("source") else "")
+                        + f"\n{m['text']}" for i, m in enumerate(material, 1))
+    event = extra.get("event") or {}
+    user = (f"Write a {kind['name'][1]} email newsletter for {ctx.name}'s subscribers.\n"
+            f"Newsletter type and how to write it: {kind['brief']}\n"
             + (f"Topic / angle: {topic}\n" if topic else "")
+            + (f"Event details: {json.dumps(event, ensure_ascii=False)}\n" if event else "")
             + (f"Material to feature (one section per item, set ref to its number):\n{listing}\n" if material
-               else f"Write {sections} useful sections for the audience.\n")
+               else f"Write {sections} sections.\n")
+            + ("Also write poll_question and 2-5 poll_options.\n" if kind.get("poll") and not extra.get("poll") else "")
             + "Email style: personal, scannable, useful; short paragraphs; one clear main call to action. "
-              "Use only facts from the material. Use the newsletter tool.")
+              "Use only facts from the material or the topic. Use the newsletter tool.")
     system = generator.build_system_prompt(ctx, gen).split("Writing playbook")[0] + \
         "You write email newsletters. Write everything in the language and dialect above."
     if generator.ai_available():
-        data = await generator._call_model(system, user, NEWSLETTER_TOOL, max_tokens=3000)
+        data = await generator._call_model(system, user, NEWSLETTER_TOOL, max_tokens=3500)
     else:
         data = {"subject": topic or (material[0]["title"] if material else ctx.name), "preheader": "",
                 "headline": topic or ctx.name, "intro": "", "cta_text": "",
@@ -329,16 +385,25 @@ async def generate(newsletter_id: int, topic: str = "", draft_ids: list[int] | N
         m = material[ref - 1] if isinstance(ref, int) and 0 < ref <= len(material) else {}
         secs.append({"title": generator._text(s.get("title")), "text": generator._text(s.get("text")),
                      "button": generator._text(s.get("button")) if m.get("link") else "",
-                     "image": m.get("image") or "", "link": m.get("link") or ""})
+                     "image": m.get("image") or "", "link": m.get("link") or "", "source": m.get("source") or ""})
     hero = next((m["image"] for m in material if m.get("image")), "")
     with session_scope() as db:
         nl = db.get(Newsletter, newsletter_id)
         nl.subject = generator._text(data.get("subject"))[:300] or nl.subject
         nl.preheader = generator._text(data.get("preheader"))[:300]
-        nl.content = {"headline": generator._text(data.get("headline")), "intro": generator._text(data.get("intro")),
-                      "hero_image": hero, "sections": secs, "cta_title": generator._text(data.get("cta_title")),
-                      "cta_text": generator._text(data.get("cta_text")), "cta_url": website,
-                      "ps": generator._text(data.get("ps"))}
+        content = {"headline": generator._text(data.get("headline")), "intro": generator._text(data.get("intro")),
+                   "hero_image": hero, "sections": secs, "cta_title": generator._text(data.get("cta_title")),
+                   "cta_text": generator._text(data.get("cta_text")), "cta_url": event.get("url") or website,
+                   "ps": generator._text(data.get("ps"))}
+        if event:
+            content["event"] = event
+        if kind.get("poll"):
+            poll = extra.get("poll") or {"question": generator._text(data.get("poll_question")),
+                                         "options": [generator._text(o) for o in (data.get("poll_options") or [])
+                                                     if generator._text(o)][:5]}
+            if poll.get("question") and poll.get("options"):
+                content["poll"] = poll
+        nl.content = content
         nl.status = "draft" if nl.status == "generating" else nl.status
         nl.error = None
 
@@ -437,7 +502,18 @@ def stats(db, nl: Newsletter) -> dict[str, Any]:  # noqa: ANN001
             "queued": sum(1 for d in rows if d.status == "queued"), "opened": len(opened),
             "open_rate": pct(len(opened), len(sent)), "opens_total": sum(d.open_count for d in rows),
             "clicked": len(clicked), "click_rate": pct(len(clicked), len(sent)),
-            "clicks_total": sum(d.click_count for d in rows), "unsubscribed": len(unsub)}
+            "clicks_total": sum(d.click_count for d in rows), "unsubscribed": len(unsub),
+            "poll": _poll_results(nl, rows)}
+
+
+def _poll_results(nl: Newsletter, rows: list) -> list[dict] | None:
+    poll = (nl.content or {}).get("poll") or {}
+    if not poll.get("options"):
+        return None
+    total = sum(1 for d in rows if d.answer)
+    return [{"option": o, "votes": sum(1 for d in rows if d.answer == o),
+             "percent": round(100 * sum(1 for d in rows if d.answer == o) / total, 1) if total else 0}
+            for o in poll["options"]]
 
 
 def org_language(db, org_id) -> str:  # noqa: ANN001

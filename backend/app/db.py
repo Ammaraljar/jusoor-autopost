@@ -336,6 +336,7 @@ class Newsletter(TenantMixin, Base):
     subject: Mapped[str] = mapped_column(String(300), default="")
     preheader: Mapped[str] = mapped_column(String(300), default="")
     design: Mapped[str] = mapped_column(String(40), default="classic")
+    kind: Mapped[str] = mapped_column(String(30), default="hybrid")     # curated | educational | … (newsletter_types)
     language: Mapped[str] = mapped_column(String(5), default="ar")
     content: Mapped[dict[str, Any]] = mapped_column(default=dict)     # headline, intro, sections[], cta, ps
     list_ids: Mapped[list[Any]] = mapped_column(default=list)
@@ -364,6 +365,7 @@ class Delivery(TenantMixin, Base):
     clicked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     click_count: Mapped[int] = mapped_column(Integer, default=0)
     unsubscribed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    answer: Mapped[str | None] = mapped_column(String(200), nullable=True)   # poll answer (survey newsletters)
 
 
 class AppSetting(Base):
@@ -446,6 +448,8 @@ _ADDED_COLUMNS = [
     ("brands", "logos", "JSON"),
     ("brands", "templates", "JSON"),
     ("drafts", "link_url", "VARCHAR(1000)"),
+    ("newsletters", "kind", "VARCHAR(30) DEFAULT 'hybrid'"),
+    ("deliveries", "answer", "VARCHAR(200)"),
     ("brands", "default_colors", "JSON"),
     ("brands", "font_latin", "VARCHAR(60)"),
     ("brands", "org_id", "INTEGER"),

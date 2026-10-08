@@ -328,3 +328,12 @@ label.btn.disabled { opacity: .5; pointer-events: none; }
 .stat-tile { background: var(--surface-2, #f5f2ea); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
 .stat-tile b { font-size: 22px; }
 .stat-tile span { font-size: 12px; color: var(--muted); }
+.type-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.type-card { display: flex; flex-direction: column; gap: 6px; text-align: start; padding: 14px; border-radius: 14px;
+  border: 1px solid var(--border); background: var(--surface, #fff); cursor: pointer; font: inherit; color: inherit; }
+.type-card:hover { border-color: var(--gold); box-shadow: 0 6px 18px rgba(0,0,0,.08); }
+.type-card small { color: var(--muted); line-height: 1.6; }
+.type-icon { font-size: 26px; }
+.poll-bar { display: grid; grid-template-columns: minmax(80px, 160px) 1fr auto; gap: 10px; align-items: center; font-size: 13px; }
+.poll-bar div { height: 10px; border-radius: 6px; background: var(--surface-2, #eee); overflow: hidden; }
+.poll-bar i { display: block; height: 100%; background: var(--gold); }

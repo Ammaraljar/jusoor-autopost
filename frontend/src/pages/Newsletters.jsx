@@ -48,6 +48,8 @@ export default function Newsletters() {
 function Campaigns() {
   const { t, lang } = useI18n();
   const list = useLoad(() => api.get('/api/newsletters'), []);
+  const types = useLoad(() => api.get('/api/newsletters/types'), []);
+  const typeName = (id) => { const x = (types.data || []).find((y) => y.id === id); return x ? (x[lang] || x.en) : ''; };
   const account = useLoad(() => api.get('/api/email/settings'), []);
   const [creating, setCreating] = useState(false);
   useEffect(() => {
@@ -78,6 +80,7 @@ function Campaigns() {
                   {' · '}{t('nl_audience')}: {n.audience}
                 </div>
               </div>
+              <span className="pill">{TYPE_ICONS[n.kind] || '✉️'} {typeName(n.kind)}</span>
               <StatusPill status={STATUS_PILL[n.status] || n.status} label={t(`nl_st_${n.status}`)} />
               {n.stats.sent > 0 && (
                 <div className="row xs" style={{ gap: 14 }}>
@@ -100,31 +103,78 @@ function NewNewsletter({ onClose }) {
   const { user } = useAuth();
   const ex = useExample();
   const navigate = useNavigate();
+  const types = useLoad(() => api.get('/api/newsletters/types'), []);
   const lists = useLoad(() => api.get('/api/contacts/lists'), []);
   const designs = useLoad(() => api.get('/api/newsletters/designs'), []);
   const posts = useLoad(() => api.get('/api/drafts?status=approved,scheduled,published&limit=30'), []);
   const products = useLoad(() => api.get('/api/products').catch(() => []), []);
-  const [f, setF] = useState({ topic: '', list_ids: [], draft_ids: [], product_ids: [], design: '', sections: 4,
-    language: user?.org?.language || 'ar' });
+  const articles = useLoad(() => api.get('/api/newsletters/articles').catch(() => []), []);
+  const [f, setF] = useState({ kind: '', topic: '', list_ids: [], draft_ids: [], product_ids: [], article_ids: [],
+    design: '', language: user?.org?.language || 'ar',
+    event: { date: '', time: '', place: '', url: '' }, poll: { question: '', options: ['', '', ''] } });
   const [busy, run] = useAction();
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
   const toggle = (k, id) => setF((x) => ({ ...x, [k]: x[k].includes(id) ? x[k].filter((i) => i !== id) : [...x[k], id] }));
+  const kind = (types.data || []).find((x) => x.id === f.kind);
+  const wants = (m) => kind?.material.includes(m);
   const create = () => run('create', async () => {
-    const r = await api.post('/api/newsletters', { ...f, design: f.design || null });
+    const body = { ...f, design: f.design || null,
+      event: kind?.event ? f.event : null,
+      poll: kind?.poll && f.poll.question ? { question: f.poll.question, options: f.poll.options.filter(Boolean) } : null };
+    const r = await api.post('/api/newsletters', body);
     navigate(`/newsletters/${r.id}`);
   });
   const postItems = posts.data?.items || posts.data || [];
+
+  if (!f.kind) {
+    return (
+      <Modal wide title={t('nl_choose_type')} onClose={onClose} footer={<Button onClick={onClose}>{t('cancel')}</Button>}>
+        <p className="small muted" style={{ marginTop: 0 }}>{t('nl_choose_type_hint')}</p>
+        <div className="type-grid">
+          {(types.data || []).map((x) => (
+            <button type="button" key={x.id} className="type-card" onClick={() => set('kind', x.id)}>
+              <span className="type-icon">{TYPE_ICONS[x.id] || '✉️'}</span>
+              <b>{x[lang] || x.en}</b>
+              <small>{x.desc[lang] || x.desc.en}</small>
+            </button>
+          ))}
+        </div>
+      </Modal>
+    );
+  }
+
   return (
-    <Modal wide title={t('nl_new')} onClose={onClose} footer={(
+    <Modal wide title={`${t('nl_new')} — ${kind?.[lang] || kind?.en || ''}`} onClose={onClose} footer={(
       <>
-        <Button onClick={onClose}>{t('cancel')}</Button>
+        <Button onClick={() => set('kind', '')}>{t('back')}</Button>
         <Button variant="primary" icon={Send} busy={busy === 'create'} onClick={create}>{t('nl_generate')}</Button>
       </>
     )}>
       <div className="stack">
+        <div className="banner info small" style={{ margin: 0 }}>{TYPE_ICONS[f.kind]} {kind?.desc[lang] || kind?.desc.en}</div>
         <Field label={t('nl_topic')} hint={t('nl_topic_hint')}>
           <input className="input" value={f.topic} placeholder={ex('topic')} onChange={(e) => set('topic', e.target.value)} />
         </Field>
+        {kind?.event && (
+          <div className="grid grid-2">
+            <Field label={t('nl_event_date')}><input className="input" type="date" value={f.event.date} onChange={(e) => set('event', { ...f.event, date: e.target.value })} /></Field>
+            <Field label={t('nl_event_time')}><input className="input" type="time" value={f.event.time} onChange={(e) => set('event', { ...f.event, time: e.target.value })} /></Field>
+            <Field label={t('nl_event_place')}><input className="input" value={f.event.place} onChange={(e) => set('event', { ...f.event, place: e.target.value })} /></Field>
+            <Field label={t('nl_event_url')}><input className="input ltr" value={f.event.url} placeholder="https://" onChange={(e) => set('event', { ...f.event, url: e.target.value })} /></Field>
+          </div>
+        )}
+        {kind?.poll && (
+          <Field label={t('nl_poll_question')} hint={t('nl_poll_hint')}>
+            <input className="input" value={f.poll.question} onChange={(e) => set('poll', { ...f.poll, question: e.target.value })} />
+            <div className="grid grid-2" style={{ marginTop: 8 }}>
+              {f.poll.options.map((o, i) => (
+                <input key={i} className="input" value={o} placeholder={`${t('nl_poll_option')} ${i + 1}`}
+                  onChange={(e) => { const options = [...f.poll.options]; options[i] = e.target.value; set('poll', { ...f.poll, options }); }} />
+              ))}
+              {f.poll.options.length < 6 && <Button size="sm" icon={Plus} onClick={() => set('poll', { ...f.poll, options: [...f.poll.options, ''] })}>{t('add')}</Button>}
+            </div>
+          </Field>
+        )}
         <div className="grid grid-2">
           <Field label={t('nl_design')}>
             <select className="select" value={f.design} onChange={(e) => set('design', e.target.value)}>
@@ -147,7 +197,21 @@ function NewNewsletter({ onClose }) {
             {!(lists.data || []).length && <span className="xs muted">{t('nl_no_lists')}</span>}
           </div>
         </Field>
-        {postItems.length > 0 && (
+        {wants('articles') && (articles.data || []).length > 0 && (
+          <Field label={t('nl_feature_articles')}>
+            <div className="pick-grid">
+              {articles.data.map((a) => (
+                <label key={a.id} className={`pick ${f.article_ids.includes(a.id) ? 'on' : ''}`}>
+                  <input type="checkbox" checked={f.article_ids.includes(a.id)} onChange={() => toggle('article_ids', a.id)} />
+                  {a.image_url && <img src={mediaUrl(a.image_url)} alt="" />}
+                  <span className="clamp-2" dir="auto">{a.title}</span>
+                  <small className="muted">{a.source}</small>
+                </label>
+              ))}
+            </div>
+          </Field>
+        )}
+        {wants('posts') && postItems.length > 0 && (
           <Field label={t('nl_feature_posts')}>
             <div className="pick-grid">
               {postItems.map((d) => (
@@ -160,7 +224,7 @@ function NewNewsletter({ onClose }) {
             </div>
           </Field>
         )}
-        {(products.data || []).length > 0 && (
+        {wants('products') && (products.data || []).length > 0 && (
           <Field label={t('nl_feature_products')}>
             <div className="pick-grid">
               {products.data.slice(0, 40).map((p) => (
@@ -178,6 +242,9 @@ function NewNewsletter({ onClose }) {
   );
 }
 
+const TYPE_ICONS = { curated: '🔗', educational: '🎓', reporting: '📰', roundup: '📝', story: '📖', analysis: '📊',
+  promotional: '🏷️', update: '🚀', internal: '🏢', survey: '🗳️', event: '📅', hybrid: '🧩' };
+
 /* ------------------------------------------------------------------ editor + stats */
 function Editor() {
   const { id } = useParams();
@@ -186,6 +253,7 @@ function Editor() {
   const nl = useLoad(() => api.get(`/api/newsletters/${id}`), [id]);
   const designs = useLoad(() => api.get('/api/newsletters/designs'), []);
   const lists = useLoad(() => api.get('/api/contacts/lists'), []);
+  const types = useLoad(() => api.get('/api/newsletters/types'), []);
   const [f, setF] = useState(null);
   const [html, setHtml] = useState('');
   const [when, setWhen] = useState('');
@@ -194,7 +262,7 @@ function Editor() {
   const frame = useRef(null);
 
   useEffect(() => {
-    if (nl.data) setF({ subject: nl.data.subject, preheader: nl.data.preheader, design: nl.data.design,
+    if (nl.data) setF({ kind: nl.data.kind, subject: nl.data.subject, preheader: nl.data.preheader, design: nl.data.design,
       language: nl.data.language, list_ids: nl.data.list_ids || [], content: structuredClone(nl.data.content || {}) });
   }, [nl.data]);
   useEffect(() => {
@@ -246,6 +314,11 @@ function Editor() {
       <div className="editor">
         <div className="stack">
           <div className="card card-pad stack">
+            <Field label={t('nl_type')}>
+              <select className="select" disabled={locked} value={f.kind} onChange={(e) => set('kind', e.target.value)}>
+                {(types.data || []).map((x) => <option key={x.id} value={x.id}>{TYPE_ICONS[x.id]} {x[lang] || x.en}</option>)}
+              </select>
+            </Field>
             <Field label={t('nl_subject')}><input className="input" dir="auto" disabled={locked} value={f.subject} onChange={(e) => set('subject', e.target.value)} /></Field>
             <Field label={t('nl_preheader')} hint={t('nl_preheader_hint')}><input className="input" dir="auto" disabled={locked} value={f.preheader} onChange={(e) => set('preheader', e.target.value)} /></Field>
             <Field label={t('nl_design')}>
@@ -272,6 +345,30 @@ function Editor() {
             <Field label={t('nl_intro')}><textarea className="textarea" dir="auto" rows={3} disabled={locked} value={f.content.intro || ''} onChange={(e) => setC('intro', e.target.value)} /></Field>
             <Field label={t('nl_hero')}><input className="input ltr" disabled={locked} value={f.content.hero_image || ''} onChange={(e) => setC('hero_image', e.target.value)} /></Field>
           </div>
+          {(f.kind === 'event' || f.content.event) && (
+            <div className="card card-pad grid grid-2">
+              {['date', 'time', 'place', 'url'].map((k) => (
+                <Field key={k} label={t(`nl_event_${k}`)}>
+                  <input className={`input ${k === 'url' ? 'ltr' : ''}`} disabled={locked} value={(f.content.event || {})[k] || ''}
+                    onChange={(e) => setC('event', { ...(f.content.event || {}), [k]: e.target.value })} />
+                </Field>
+              ))}
+            </div>
+          )}
+          {(f.kind === 'survey' || f.content.poll) && (
+            <div className="card card-pad stack">
+              <Field label={t('nl_poll_question')}>
+                <input className="input" dir="auto" disabled={locked} value={(f.content.poll || {}).question || ''}
+                  onChange={(e) => setC('poll', { options: [], ...(f.content.poll || {}), question: e.target.value })} />
+              </Field>
+              {((f.content.poll || {}).options || []).map((o, i) => (
+                <input key={i} className="input" dir="auto" disabled={locked} value={o} onChange={(e) => {
+                  const options = [...f.content.poll.options]; options[i] = e.target.value; setC('poll', { ...f.content.poll, options });
+                }} />
+              ))}
+              {!locked && <Button size="sm" icon={Plus} onClick={() => setC('poll', { question: '', ...(f.content.poll || {}), options: [...((f.content.poll || {}).options || []), ''] })}>{t('nl_poll_option')}</Button>}
+            </div>
+          )}
           {sections.map((s, i) => (
             <div key={i} className="card card-pad stack">
               <div className="field-head"><b className="small">{t('nl_section')} {i + 1}</b>
@@ -343,6 +440,18 @@ function Stats({ id, stats }) {
       <div className="stat-tiles">
         {tiles.map(([k, v]) => <div key={k} className="stat-tile"><b>{v}</b><span>{t(`nl_${k}`)}</span></div>)}
       </div>
+      {stats.poll && (
+        <div className="stack" style={{ gap: 6 }}>
+          <b className="small">{t('nl_poll_results')}</b>
+          {stats.poll.map((o) => (
+            <div key={o.option} className="poll-bar">
+              <span dir="auto">{o.option}</span>
+              <div><i style={{ width: `${o.percent}%` }} /></div>
+              <b>{o.votes} · {o.percent}%</b>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="row" style={{ gap: 6 }}>
         {['', 'opened', 'clicked', 'unopened', 'unsubscribed', 'failed'].map((k) => (
           <button key={k || 'all'} className={`btn btn-sm ${filter === k ? 'btn-primary' : ''}`} onClick={() => setFilter(k)}>
@@ -360,6 +469,7 @@ function Stats({ id, stats }) {
                 <td>{r.unsubscribed_at ? t('nl_unsubscribed') : t(`nl_d_${r.status}`)}{r.error ? <div className="xs muted">{r.error}</div> : null}</td>
                 <td>{r.opened_at ? `${fmtDateTime(r.opened_at, lang)} (${r.open_count})` : '—'}</td>
                 <td>{r.clicked_at ? `${fmtDateTime(r.clicked_at, lang)} (${r.click_count})` : '—'}</td>
+                {stats.poll && <td dir="auto">{r.answer || '—'}</td>}
               </tr>
             ))}
           </tbody>

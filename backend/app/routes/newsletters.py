@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import RequireOwner, RequireUser, RequireWriter
 from ..db import Brand, Contact, ContactList, Delivery, Newsletter, current_org, get_db, session_scope, utcnow
-from ..services import mailer, newsletter, pipeline
+from ..services import mailer, newsletter, newsletter_types, pipeline
 
 router = APIRouter(prefix="/api", tags=["newsletters"], dependencies=[RequireUser, RequireWriter])
 public = APIRouter(prefix="/api/t", tags=["tracking"])
@@ -344,29 +344,70 @@ def designs(db: Session = Depends(get_db)):
     return newsletter.designs_for(_family(db))
 
 
+@router.get("/newsletters/types")
+def types():
+    """The kinds of newsletter (curated, educational, promotional, event…)."""
+    return newsletter_types.options()
+
+
+@router.get("/newsletters/articles")
+def recent_articles(db: Session = Depends(get_db)):
+    """Recently collected articles from the company's sources — material for curated / news emails."""
+    from ..db import Article, Source
+    names = {s.id: s.name for s in db.scalars(select(Source))}
+    rows = db.scalars(select(Article).where(Article.status != "error").order_by(Article.fetched_at.desc()).limit(60))
+    return [{"id": a.id, "title": a.title, "url": a.url, "image_url": a.image_url,
+             "source": names.get(a.source_id, ""), "published_at": a.to_dict()["published_at"]} for a in rows]
+
+
 @router.get("/newsletters")
 def list_newsletters(db: Session = Depends(get_db)):
     return [_out(db, n) for n in db.scalars(select(Newsletter).order_by(Newsletter.id.desc()))]
 
 
+class EventIn(BaseModel):
+    date: str = ""
+    time: str = ""
+    place: str = ""
+    url: str = ""
+
+
+class PollIn(BaseModel):
+    question: str = ""
+    options: list[str] = []
+
+
 class NewsletterIn(BaseModel):
     subject: str = ""
+    kind: str = "hybrid"
     design: str | None = None
+    article_ids: list[int] = []
+    event: EventIn | None = None
+    poll: PollIn | None = None
     language: str | None = Field(None, pattern="^(ar|en|ms|fr)$")
     list_ids: list[int] = []
     topic: str = ""
     draft_ids: list[int] = []
     product_ids: list[int] = []
-    sections: int = Field(4, ge=1, le=8)
+    sections: int = Field(0, ge=0, le=8)          # 0 = what the newsletter type usually has
 
 
 @router.post("/newsletters")
 def create_newsletter(body: NewsletterIn, background: BackgroundTasks, db: Session = Depends(get_db)):
     family = _family(db)
-    design = body.design if body.design in newsletter.LAYOUTS else newsletter.FIELD_LAYOUTS.get(
-        family, ["classic"])[0]
+    kind = body.kind if body.kind in newsletter_types.TYPES else "hybrid"
+    field_designs = newsletter.FIELD_LAYOUTS.get(family, ["classic"])
+    suggested = newsletter_types.get(kind)["design"]
+    design = body.design if body.design in newsletter.LAYOUTS else (
+        suggested if suggested in field_designs else field_designs[0])
     lang = body.language or newsletter.org_language(db, current_org.get())
-    nl = Newsletter(subject=body.subject.strip() or body.topic.strip(), design=design, language=lang,
+    extra = {}
+    if body.event and any(body.event.model_dump().values()):
+        extra["event"] = {k: v.strip() for k, v in body.event.model_dump().items() if v.strip()}
+    if body.poll and body.poll.question.strip() and [o for o in body.poll.options if o.strip()]:
+        extra["poll"] = {"question": body.poll.question.strip(),
+                         "options": [o.strip() for o in body.poll.options if o.strip()][:6]}
+    nl = Newsletter(subject=body.subject.strip() or body.topic.strip(), design=design, language=lang, kind=kind,
                     list_ids=body.list_ids, status="generating", content={})
     db.add(nl)
     db.flush()
@@ -375,7 +416,8 @@ def create_newsletter(body: NewsletterIn, background: BackgroundTasks, db: Sessi
 
     async def run() -> None:
         try:
-            await newsletter.generate(nid, body.topic, body.draft_ids, body.product_ids, body.sections)
+            await newsletter.generate(nid, body.topic, body.draft_ids, body.product_ids, body.sections,
+                                      body.article_ids, extra)
         except Exception as exc:  # noqa: BLE001
             with session_scope() as s:
                 n = s.get(Newsletter, nid)
@@ -390,6 +432,7 @@ def get_newsletter(nid: int, db: Session = Depends(get_db)):
 
 
 class NewsletterPatch(BaseModel):
+    kind: str | None = None
     subject: str | None = None
     preheader: str | None = None
     design: str | None = None
@@ -406,6 +449,8 @@ def update_newsletter(nid: int, body: NewsletterPatch, db: Session = Depends(get
     data = body.model_dump(exclude_unset=True)
     if data.get("design") and data["design"] not in newsletter.LAYOUTS:
         data.pop("design")
+    if data.get("kind") and data["kind"] not in newsletter_types.TYPES:
+        data.pop("kind")
     for k, v in data.items():
         if v is not None:
             setattr(nl, k, v)
@@ -427,6 +472,7 @@ def delete_newsletter(nid: int, db: Session = Depends(get_db)):
 def duplicate(nid: int, db: Session = Depends(get_db)):
     src = _nl(db, nid)
     nl = Newsletter(subject=src.subject, preheader=src.preheader, design=src.design, language=src.language,
+                    kind=src.kind,
                     content=dict(src.content or {}), list_ids=list(src.list_ids or []), status="draft")
     db.add(nl)
     db.flush()
@@ -540,6 +586,35 @@ def clicked(token: str, u: str = ""):
             d.clicked_at = d.clicked_at or utcnow()
             d.opened_at = d.opened_at or utcnow()          # a click means it was opened
     return RedirectResponse(u, status_code=302)
+
+
+THANKS_PAGE = {
+    "ar": ("شكرًا لمشاركتك!", "سُجّل رأيك.", "rtl"), "en": ("Thanks for your answer!", "Your vote was recorded.", "ltr"),
+    "ms": ("Terima kasih atas jawapan anda!", "Undian anda telah direkodkan.", "ltr"),
+    "fr": ("Merci pour votre réponse !", "Votre vote a été enregistré.", "ltr"),
+}
+
+
+@public.get("/p/{token}", response_class=HTMLResponse)
+def poll_answer(token: str, a: int = 0):
+    lang = "ar"
+    with session_scope() as db:
+        d = _delivery(db, token)
+        if d:
+            nl = db.get(Newsletter, d.newsletter_id)
+            lang = nl.language if nl and nl.language in THANKS_PAGE else "ar"
+            options = ((nl.content or {}).get("poll") or {}).get("options") or [] if nl else []
+            if 0 <= a < len(options):
+                d.answer = options[a][:200]
+                d.clicked_at = d.clicked_at or utcnow()
+                d.opened_at = d.opened_at or utcnow()
+    title, text, dir_ = THANKS_PAGE[lang]
+    return HTMLResponse(f'<!doctype html><html dir="{dir_}"><head><meta charset="utf-8">'
+                        f'<meta name="viewport" content="width=device-width,initial-scale=1"><title>{title}</title></head>'
+                        f'<body style="font-family:Tahoma,Arial,sans-serif;background:#f4f4f4;display:flex;'
+                        f'align-items:center;justify-content:center;height:100vh;margin:0"><div style="background:#fff;'
+                        f'padding:40px;border-radius:16px;text-align:center;max-width:420px"><h2>{title}</h2>'
+                        f'<p style="color:#555">{text}</p></div></body></html>')
 
 
 UNSUB_PAGE = {

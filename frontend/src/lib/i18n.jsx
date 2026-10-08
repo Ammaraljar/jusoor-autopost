@@ -636,7 +636,21 @@ const dict = {
   "nl_smtp_warning": "بعض الاستضافات (مثل Railway) تحجب منافذ SMTP — إذا فشل الاختبار استخدم Brevo أو Resend",
   "nl_address": "عنوان الشركة",
   "nl_address_hint": "يظهر أسفل النشرة — مطلوب في قوانين البريد في كثير من الدول",
-  "nl_deliverability": "لوصول أفضل إلى صندوق الوارد: وثّق نطاقك (SPF وDKIM) لدى مزود الإرسال، وأرسل لمن اشترك فعلًا، وتجنب العناوين المبالغ فيها"
+  "nl_deliverability": "لوصول أفضل إلى صندوق الوارد: وثّق نطاقك (SPF وDKIM) لدى مزود الإرسال، وأرسل لمن اشترك فعلًا، وتجنب العناوين المبالغ فيها",
+  "nl_choose_type": "اختر نوع النشرة",
+  "nl_choose_type_hint": "لكل نوع أسلوب كتابة وتصميم ومحتوى يناسبه — يكتبها الذكاء الاصطناعي على هذا الأساس",
+  "nl_type": "نوع النشرة",
+  "nl_event_date": "تاريخ الفعالية",
+  "nl_event_time": "الوقت",
+  "nl_event_place": "المكان أو رابط البث",
+  "nl_event_url": "رابط التسجيل",
+  "nl_date": "التاريخ",
+  "nl_poll_question": "سؤال الاستطلاع",
+  "nl_poll_hint": "اتركه فارغًا ليقترح الذكاء الاصطناعي سؤالًا وخيارات — يجيب المشترك بنقرة واحدة",
+  "nl_poll_option": "خيار",
+  "nl_poll_results": "نتائج الاستطلاع",
+  "nl_answer": "الإجابة",
+  "nl_feature_articles": "مقالات من مصادرك تظهر في النشرة"
  },
  "en": {
   "appName": "Jusoor AutoPost",
@@ -1267,7 +1281,21 @@ const dict = {
   "nl_smtp_warning": "Some hosts (such as Railway) block SMTP ports — if the test fails, use Brevo or Resend",
   "nl_address": "Company address",
   "nl_address_hint": "Shown at the bottom of the email — required by email laws in many countries",
-  "nl_deliverability": "For better inbox placement: verify your domain (SPF and DKIM) with your provider, email only real subscribers and avoid over-hyped subject lines"
+  "nl_deliverability": "For better inbox placement: verify your domain (SPF and DKIM) with your provider, email only real subscribers and avoid over-hyped subject lines",
+  "nl_choose_type": "Choose the newsletter type",
+  "nl_choose_type_hint": "Each type has its own writing style, design and content — the AI writes it accordingly",
+  "nl_type": "Newsletter type",
+  "nl_event_date": "Event date",
+  "nl_event_time": "Time",
+  "nl_event_place": "Place or online link",
+  "nl_event_url": "Registration link",
+  "nl_date": "Date",
+  "nl_poll_question": "Poll question",
+  "nl_poll_hint": "Leave empty to let the AI suggest a question and choices — subscribers answer in one click",
+  "nl_poll_option": "Choice",
+  "nl_poll_results": "Poll results",
+  "nl_answer": "Answer",
+  "nl_feature_articles": "Articles from your sources to feature"
  },
  "ms": {
   "appName": "Jusoor AutoPost",
@@ -1898,7 +1926,21 @@ const dict = {
   "nl_smtp_warning": "Sesetengah hos (seperti Railway) menyekat port SMTP — jika ujian gagal, gunakan Brevo atau Resend",
   "nl_address": "Alamat syarikat",
   "nl_address_hint": "Dipaparkan di bahagian bawah e-mel — diwajibkan oleh undang-undang e-mel di banyak negara",
-  "nl_deliverability": "Untuk penempatan peti masuk yang lebih baik: sahkan domain anda (SPF dan DKIM) dengan penyedia anda, hantar e-mel kepada pelanggan sebenar sahaja dan elakkan baris subjek yang berlebihan"
+  "nl_deliverability": "Untuk penempatan peti masuk yang lebih baik: sahkan domain anda (SPF dan DKIM) dengan penyedia anda, hantar e-mel kepada pelanggan sebenar sahaja dan elakkan baris subjek yang berlebihan",
+  "nl_choose_type": "Pilih jenis surat berita",
+  "nl_choose_type_hint": "Setiap jenis mempunyai gaya penulisan, reka bentuk dan kandungan tersendiri — AI menulis mengikutnya",
+  "nl_type": "Jenis surat berita",
+  "nl_event_date": "Tarikh acara",
+  "nl_event_time": "Masa",
+  "nl_event_place": "Tempat atau pautan dalam talian",
+  "nl_event_url": "Pautan pendaftaran",
+  "nl_date": "Tarikh",
+  "nl_poll_question": "Soalan undian",
+  "nl_poll_hint": "Biarkan kosong supaya AI mencadangkan soalan dan pilihan — pelanggan menjawab dengan satu klik",
+  "nl_poll_option": "Pilihan",
+  "nl_poll_results": "Keputusan undian",
+  "nl_answer": "Jawapan",
+  "nl_feature_articles": "Artikel daripada sumber anda untuk dipaparkan"
  },
  "fr": {
   "appName": "Jusoor AutoPost",
@@ -2529,7 +2571,21 @@ const dict = {
   "nl_smtp_warning": "Certains hébergeurs (comme Railway) bloquent les ports SMTP — si le test échoue, utilisez Brevo ou Resend",
   "nl_address": "Adresse de l’entreprise",
   "nl_address_hint": "Affichée en bas de l’e-mail — exigée par la loi dans de nombreux pays",
-  "nl_deliverability": "Pour mieux arriver en boîte de réception : vérifiez votre domaine (SPF et DKIM) auprès de votre fournisseur, n’écrivez qu’à de vrais abonnés et évitez les objets trop racoleurs"
+  "nl_deliverability": "Pour mieux arriver en boîte de réception : vérifiez votre domaine (SPF et DKIM) auprès de votre fournisseur, n’écrivez qu’à de vrais abonnés et évitez les objets trop racoleurs",
+  "nl_choose_type": "Choisissez le type de newsletter",
+  "nl_choose_type_hint": "Chaque type a son style, son design et son contenu — l’IA l’écrit en conséquence",
+  "nl_type": "Type de newsletter",
+  "nl_event_date": "Date de l’événement",
+  "nl_event_time": "Heure",
+  "nl_event_place": "Lieu ou lien en ligne",
+  "nl_event_url": "Lien d’inscription",
+  "nl_date": "Date",
+  "nl_poll_question": "Question du sondage",
+  "nl_poll_hint": "Laissez vide pour que l’IA propose une question — réponse en un clic",
+  "nl_poll_option": "Choix",
+  "nl_poll_results": "Résultats du sondage",
+  "nl_answer": "Réponse",
+  "nl_feature_articles": "Articles de vos sources à inclure"
  }
 };
 
