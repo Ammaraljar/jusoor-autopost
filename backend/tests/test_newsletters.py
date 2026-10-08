@@ -129,3 +129,18 @@ def test_newsletter_font_and_translate(client, monkeypatch):
     assert nl["language"] == "ar" and nl["status"] == "draft" and nl["font"] == ""
     assert nl["content"]["headline"] == "ع:Hello" and nl["content"]["sections"][0]["button"] == "ع:See"
     assert nl["content"]["sections"][0]["link"] == "https://acme.test/d"
+
+
+def test_brevo_payload_has_no_empty_headers(monkeypatch):
+    calls = []
+
+    class R:
+        status_code = 201
+        def json(self):
+            return {"messageId": "m1"}
+    monkeypatch.setattr(mailer.httpx, "post", lambda url, json=None, **kw: calls.append(json) or R())
+    cfg = {"provider": "brevo", "from_email": "news@acme.test", "brevo_api_key": "k"}
+    assert mailer.send(cfg, "a@x.test", "", "Hi", "<p>x</p>", "x") == "m1"
+    assert "headers" not in calls[0]
+    mailer.send(cfg, "a@x.test", "", "Hi", "<p>x</p>", "x", headers={"List-Unsubscribe": "<https://u>"})
+    assert calls[1]["headers"]["List-Unsubscribe"] == "<https://u>"
