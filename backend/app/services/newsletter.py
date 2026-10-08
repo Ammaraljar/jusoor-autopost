@@ -97,6 +97,33 @@ def _logo_url(brand: Brand, dark_background: bool) -> str:
     return _abs(storage.public_url(key)) if key else ""
 
 
+# Web fonts for emails (Google Fonts). Apple Mail, iOS and Outlook for Mac show them; Gmail and Outlook on Windows
+# fall back to the safe font given here, so the email always looks right.
+EMAIL_FONTS: dict[str, dict[str, str]] = {
+    "Cairo": {"langs": "ar en ms fr", "fallback": "Tahoma, Arial, sans-serif"},
+    "Tajawal": {"langs": "ar en ms fr", "fallback": "Tahoma, Arial, sans-serif"},
+    "Almarai": {"langs": "ar en ms fr", "fallback": "Tahoma, Arial, sans-serif"},
+    "IBM Plex Sans Arabic": {"langs": "ar en ms fr", "fallback": "Tahoma, Arial, sans-serif"},
+    "Noto Kufi Arabic": {"langs": "ar", "fallback": "Tahoma, Arial, sans-serif"},
+    "Readex Pro": {"langs": "ar en ms fr", "fallback": "Tahoma, Arial, sans-serif"},
+    "El Messiri": {"langs": "ar en ms fr", "fallback": "Tahoma, Georgia, serif"},
+    "Poppins": {"langs": "en ms fr", "fallback": "'Segoe UI', Helvetica, Arial, sans-serif"},
+    "Montserrat": {"langs": "en ms fr", "fallback": "'Segoe UI', Helvetica, Arial, sans-serif"},
+    "Playfair Display": {"langs": "en ms fr", "fallback": "Georgia, 'Times New Roman', serif"},
+    "DM Sans": {"langs": "en ms fr", "fallback": "'Segoe UI', Helvetica, Arial, sans-serif"},
+    "Raleway": {"langs": "en ms fr", "fallback": "'Segoe UI', Helvetica, Arial, sans-serif"},
+    "Inter": {"langs": "en ms fr", "fallback": "'Segoe UI', Helvetica, Arial, sans-serif"},
+    "Lora": {"langs": "en ms fr", "fallback": "Georgia, 'Times New Roman', serif"},
+}
+SYSTEM_FONT = {"ar": "Tahoma (آمن لكل البرامج)", "en": "System (safe everywhere)",
+               "ms": "Sistem (selamat di semua aplikasi)", "fr": "Système (sûre partout)"}
+
+
+def font_options(lang: str) -> list[dict[str, str]]:
+    return [{"id": "", "label": SYSTEM_FONT.get(lang, SYSTEM_FONT["en"])}] + \
+        [{"id": k, "label": k} for k, v in EMAIL_FONTS.items() if lang in v["langs"].split()]
+
+
 def render(nl: Newsletter, brand: Brand, family: str, token: str | None = None) -> tuple[str, str]:
     """(html, plain text) of a newsletter. With a token, links and the open pixel are tracked."""
     s = get_settings()
@@ -113,6 +140,13 @@ def render(nl: Newsletter, brand: Brand, family: str, token: str | None = None) 
     btn_radius = 999 if family in SKINS["round"] else (2 if family in SKINS["square"] else 8)
     body_font = "Tahoma, 'Segoe UI', Arial, sans-serif" if rtl else "'Segoe UI', Helvetica, Arial, sans-serif"
     head_font = ("Georgia, 'Times New Roman', serif" if serif and not rtl else body_font)
+    font_link = ""
+    chosen = getattr(nl, "font", "") or ""
+    if chosen in EMAIL_FONTS and lang in EMAIL_FONTS[chosen]["langs"].split():
+        body_font = head_font = f"'{chosen}', {EMAIL_FONTS[chosen]['fallback']}"
+        fam = chosen.replace(" ", "+")
+        font_link = (f'<link href="https://fonts.googleapis.com/css2?family={fam}:wght@400;700&display=swap" '
+                     f'rel="stylesheet">')
     align = "right" if rtl else "left"
     dir_ = "rtl" if rtl else "ltr"
     content = nl.content or {}
@@ -273,7 +307,7 @@ def render(nl: Newsletter, brand: Brand, family: str, token: str | None = None) 
     pre = _e(nl.preheader)
     page_bg = "#f2f2f2" if layout != "minimal" else "#ffffff"
     html = (f'<!doctype html><html lang="{lang}" dir="{dir_}"><head><meta charset="utf-8">'
-            f'<meta name="viewport" content="width=device-width, initial-scale=1"><title>{_e(nl.subject)}</title></head>'
+            f'<meta name="viewport" content="width=device-width, initial-scale=1"><title>{_e(nl.subject)}</title>{font_link}</head>'
             f'<body style="margin:0;padding:0;background:{page_bg}">'
             f'<div style="display:none;max-height:0;overflow:hidden;opacity:0">{pre}</div>'
             f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:{page_bg}"><tr>'
@@ -406,6 +440,70 @@ async def generate(newsletter_id: int, topic: str = "", draft_ids: list[int] | N
         nl.content = content
         nl.status = "draft" if nl.status == "generating" else nl.status
         nl.error = None
+
+
+TRANSLATE_TOOL = {
+    "name": "translation",
+    "description": "Return the translated texts, in the same order and the same number as given.",
+    "input_schema": {"type": "object", "properties": {"texts": {"type": "array", "items": {"type": "string"}}},
+                     "required": ["texts"]},
+}
+LANG_NAMES = {"ar": "Arabic", "en": "English", "ms": "Malay", "fr": "French"}
+
+
+def _text_slots(nl: Newsletter) -> list[tuple[Any, Any]]:
+    """(container, key) of every text a reader sees, so they can be translated in one go."""
+    content = nl.content or {}
+    slots: list[tuple[Any, Any]] = [(nl, "subject"), (nl, "preheader")]
+    for k in ("headline", "intro", "cta_title", "cta_text", "ps"):
+        if content.get(k):
+            slots.append((content, k))
+    for sec in content.get("sections") or []:
+        for k in ("title", "text", "button"):
+            if sec.get(k):
+                slots.append((sec, k))
+    poll = content.get("poll") or {}
+    if poll.get("question"):
+        slots.append((poll, "question"))
+        slots += [(poll["options"], i) for i in range(len(poll.get("options") or []))]
+    return slots
+
+
+async def translate(newsletter_id: int, language: str) -> None:
+    """Rewrite an existing newsletter in another language, keeping its design, links and images."""
+    with session_scope() as db:
+        nl = db.get(Newsletter, newsletter_id)
+        content = json.loads(json.dumps(nl.content or {}))
+        shadow = type("N", (), {})()
+        shadow.subject, shadow.preheader, shadow.content = nl.subject, nl.preheader, content
+        brand = db.scalar(select(Brand).order_by(Brand.is_default.desc(), Brand.id))
+        gen = dict(pipeline.app_settings.get_section(db, "generation"))
+        gen["language"] = language
+        ctx = pipeline.brand_context(brand)
+    slots = _text_slots(shadow)
+    texts = [str(getattr(o, k) if not isinstance(o, (dict, list)) else o[k]) for o, k in slots]
+    system = generator.build_system_prompt(ctx, gen).split("Writing playbook")[0] + \
+        f"You translate email newsletters into natural, fluent {LANG_NAMES.get(language, 'English')}."
+    user = ("Translate each text below. Keep names, brands, numbers, prices and URLs exactly as they are; adapt "
+            "idioms naturally; keep it short where the original is short.\n"
+            + json.dumps(texts, ensure_ascii=False))
+    data = await generator._call_model(system, user, TRANSLATE_TOOL, max_tokens=4000)
+    out = data.get("texts") or []
+    if len(out) != len(texts):
+        raise ValueError("translation returned a different number of texts")
+    for (o, k), v in zip(slots, out):
+        v = generator._text(v)
+        if isinstance(o, (dict, list)):
+            o[k] = v
+        else:
+            setattr(o, k, v)
+    with session_scope() as db:
+        nl = db.get(Newsletter, newsletter_id)
+        nl.subject, nl.preheader = shadow.subject[:300], shadow.preheader[:300]
+        nl.content, nl.language = shadow.content, language
+        if nl.font and language not in EMAIL_FONTS.get(nl.font, {}).get("langs", "").split():
+            nl.font = ""
+        nl.status, nl.error = "draft", None
 
 
 # ------------------------------------------------------------------ sending
