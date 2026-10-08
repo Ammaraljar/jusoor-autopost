@@ -117,6 +117,7 @@ def test_newsletter_font_and_translate(client, monkeypatch):
                  "cta_text": "Shop"}})
     html = client.get(f"/api/newsletters/{nid}/preview").json()["html"]
     assert "family=Poppins" in html and "'Poppins'" in html
+    assert "Hybrid" not in html and "@@KICKER@@" not in html      # readers never see the newsletter type
 
     async def fake(system, user, tool, max_tokens=0):
         import json
