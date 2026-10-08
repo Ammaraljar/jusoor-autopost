@@ -4,6 +4,7 @@ import { CheckSquare, ChevronLeft, ChevronRight, Clock, ExternalLink, Plus, Spar
 import { BulkBar, Button, ErrorBox, Field, Modal, PageHead, StatusPill, useAction, useLoad, useSelection } from '../components/ui';
 import { api, mediaUrl } from '../lib/api';
 import { isoDay } from '../lib/format';
+import { useExample } from '../lib/useExample';
 import { useI18n } from '../lib/i18n';
 
 const CONTENT_TYPES = ['travel', 'tips', 'news', 'educational', 'promotional', 'storytelling', 'announcement', 'event', 'comparison', 'product'];
@@ -184,6 +185,7 @@ function MovePostModal({ post, onClose, onChanged }) {
 }
 
 function ItemModal({ item, campaigns, onClose, onChanged }) {
+  const ex = useExample();
   const { t } = useI18n();
   const navigate = useNavigate();
   const [f, setF] = useState({ topic: '', notes: '', content_type: 'travel', platform: 'instagram', campaign_id: '', ...item });
@@ -222,10 +224,10 @@ function ItemModal({ item, campaigns, onClose, onChanged }) {
         {item.id && <div><StatusPill status={item.status} label={t(item.status)} /></div>}
         <Field label={t('topic')}>
           <input className="input" value={f.topic} onChange={(e) => set('topic', e.target.value)} autoFocus
-            placeholder="دليل التسوق في كوالالمبور خلال موسم التخفيضات" />
+            placeholder={ex('topic')} />
         </Field>
         <Field label={t('notes')}>
-          <textarea className="textarea" rows={3} value={f.notes} onChange={(e) => set('notes', e.target.value)} />
+          <textarea className="textarea" rows={3} value={f.notes} placeholder={ex('notes')} onChange={(e) => set('notes', e.target.value)} />
         </Field>
         <div className="grid grid-2">
           <Field label={t('date')}><input className="input" type="date" value={f.date} onChange={(e) => set('date', e.target.value)} /></Field>

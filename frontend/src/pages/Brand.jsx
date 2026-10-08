@@ -3,9 +3,10 @@ import { Eye, ImagePlus, Plus, RefreshCw, Save, Star, Trash2 } from 'lucide-reac
 import { Button, ErrorBox, Field, Loading, PageHead, Spinner, useAction, useLoad } from '../components/ui';
 import { api, mediaUrl } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { useExample } from '../lib/useExample';
 import { useI18n } from '../lib/i18n';
 
-const COLOR_KEYS = ['navy', 'gold', 'goldLight', 'cardTitle', 'cardText'];
+const COLOR_KEYS = ['navy', 'gold', 'goldLight', 'surface', 'cardTitle', 'cardText'];
 
 const PREVIEWS = [
   { key: 'v0', kind: 'cover', variant: 0 }, { key: 'v1', kind: 'content', variant: 1 },
@@ -53,6 +54,7 @@ export default function Brand() {
 }
 
 function BrandForm({ brand, onChanged }) {
+  const ex = useExample();
   const { user } = useAuth();
   const { t } = useI18n();
   const [f, setF] = useState(() => ({ ...brand, colors: { ...brand.colors }, publish_config: structuredClone(brand.publish_config || {}) }));
@@ -100,10 +102,10 @@ function BrandForm({ brand, onChanged }) {
             <Field label={t('name')}><input className="input" value={f.name} onChange={(e) => set('name', e.target.value)} /></Field>
             <Field label={t('handle')}><input className="input ltr" value={f.handle} onChange={(e) => set('handle', e.target.value)} /></Field>
             <Field label={t('website')}><input className="input ltr" value={f.website} onChange={(e) => set('website', e.target.value)} /></Field>
-            <Field label={t('cta_text')}><input className="input" value={f.cta_text} onChange={(e) => set('cta_text', e.target.value)} /></Field>
+            <Field label={t('cta_text')}><input className="input" value={f.cta_text} placeholder={ex('cta')} onChange={(e) => set('cta_text', e.target.value)} /></Field>
           </div>
           <Field label={t('voice')}>
-            <textarea className="textarea" rows={3} value={f.voice} onChange={(e) => set('voice', e.target.value)} />
+            <textarea className="textarea" rows={3} value={f.voice} placeholder={ex('voice')} onChange={(e) => set('voice', e.target.value)} />
           </Field>
         </div>
 
@@ -112,7 +114,7 @@ function BrandForm({ brand, onChanged }) {
           {(f.color_mode || 'auto') === 'auto' && <p className="xs muted" style={{ marginTop: -8 }}>{t('colors_auto_hint')}</p>}
           <div className="swatches">
             {COLOR_KEYS.map((k) => (
-              <Field key={k} label={t(`c_${k}`)}>
+              <Field key={k} label={t(`c_${k}`)} hint={t(`ch_${k}`)}>
                 <input className="input" type="color" value={f.colors[k] || '#000000'} onChange={(e) => setColor(k, e.target.value)} />
               </Field>
             ))}
@@ -153,21 +155,36 @@ function BrandForm({ brand, onChanged }) {
             </Field>
             )}
           </div>
-          <Field label={t('logo')}>
-            <div className="row">
-              <div className="logo-box">{brand.logo_url ? <img src={mediaUrl(brand.logo_url)} alt="" /> : <span className="xs muted">—</span>}</div>
-              <div className="stack" style={{ gap: 6 }}>
-                <Button size="sm" icon={ImagePlus} busy={busy === 'logo'} onClick={() => fileRef.current?.click()}>{t('upload_logo')}</Button>
-                {brand.logo_url && (
-                  <Button size="sm" variant="danger" icon={Trash2} busy={busy === 'rmlogo'}
-                    onClick={() => run('rmlogo', async () => { await api.del(`/api/brands/${brand.id}/logo`); onChanged(); refreshPreview(); })}>
-                    {t('remove_logo')}
-                  </Button>
-                )}
+          <Field label={t('logos')} hint={t('logos_hint')}>
+            <div className="stack" style={{ gap: 10 }}>
+              <div className="logo-grid">
+                {(brand.logos || []).map((l) => (
+                  <div key={l.key} className={`logo-tile ${l.primary ? 'on' : ''}`}>
+                    <div className={`logo-box tone-${l.tone}`}><img src={mediaUrl(l.url)} alt="" /></div>
+                    <select className="select" style={{ height: 32, fontSize: 13 }} value={l.tone}
+                      onChange={(e) => run(`tone-${l.key}`, async () => { await api.patch(`/api/brands/${brand.id}/logos`, { key: l.key, tone: e.target.value }); onChanged(); refreshPreview(); })}>
+                      {['color', 'light', 'dark'].map((x) => <option key={x} value={x}>{t(`logo_${x}`)}</option>)}
+                    </select>
+                    <div className="row" style={{ gap: 6 }}>
+                      {l.primary ? <span className="pill gold"><Star size={12} /> {t('primary_logo')}</span> : (
+                        <Button size="sm" icon={Star} busy={busy === `pr-${l.key}`}
+                          onClick={() => run(`pr-${l.key}`, async () => { await api.patch(`/api/brands/${brand.id}/logos`, { key: l.key, primary: true }); onChanged(); refreshPreview(); }, t('saved'))}>
+                          {t('make_primary')}
+                        </Button>
+                      )}
+                      <Button size="sm" variant="danger" icon={Trash2} busy={busy === `rm-${l.key}`} title={t('delete')}
+                        onClick={() => window.confirm(t('confirm_delete')) && run(`rm-${l.key}`, async () => { await api.del(`/api/brands/${brand.id}/logos?key=${encodeURIComponent(l.key)}`); onChanged(); refreshPreview(); })} />
+                    </div>
+                  </div>
+                ))}
+                {!(brand.logos || []).length && <div className="logo-box"><span className="xs muted">—</span></div>}
               </div>
-              <input ref={fileRef} type="file" accept="image/png,image/svg+xml" hidden onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) run('logo', async () => { await api.upload(`/api/brands/${brand.id}/logo`, file); onChanged(); refreshPreview(); }, t('saved'));
+              <div>
+                <Button size="sm" icon={ImagePlus} busy={busy === 'logo'} onClick={() => fileRef.current?.click()}>{t('upload_logos')}</Button>
+              </div>
+              <input ref={fileRef} type="file" accept="image/png,image/svg+xml,image/webp" multiple hidden onChange={(e) => {
+                const files = e.target.files;
+                if (files?.length) run('logo', async () => { await api.uploadMany(`/api/brands/${brand.id}/logos`, files); onChanged(); refreshPreview(); }, t('saved'));
                 e.target.value = '';
               }} />
             </div>

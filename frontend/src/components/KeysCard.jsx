@@ -41,7 +41,7 @@ function initialForm(v, order) {
 }
 
 export default function KeysCard({ onSaved, platform = false }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const endpoint = platform ? '/api/admin/credentials' : '/api/settings/credentials';
   const creds = useLoad(() => api.get(endpoint), [endpoint]);
   const [showAll, setShowAll] = useState(false);
@@ -150,10 +150,10 @@ export default function KeysCard({ onSaved, platform = false }) {
           <div className="spacer" />
           {info.key_url && <a className="xs" href={info.key_url} target="_blank" rel="noreferrer">{t('get_key')}</a>}
         </div>
-        {info.free && <p className="xs muted" style={{ margin: '0 0 10px' }}>{info.free}</p>}
+        {info.free && <p className="xs muted" style={{ margin: '0 0 10px' }}>{info.free_i18n?.[lang] || info.free}</p>}
         <div className="stack" style={{ gap: 10 }}>
           {(info.extra || []).map((x) => (
-            <Field key={x.field} label={x.label} hint={x.hint}>
+            <Field key={x.field} label={x.label} hint={x.hint_i18n?.[lang] || x.hint}>
               <input className="input ltr" value={form[x.field] || ''} onChange={(e) => set(x.field, e.target.value)} />
             </Field>
           ))}
@@ -180,7 +180,7 @@ export default function KeysCard({ onSaved, platform = false }) {
                   setCustomModel((c) => ({ ...c, [name]: false }));
                   set(field, e.target.value);
                 }}>
-                {models.map((m) => <option key={m.id} value={m.id}>{m.id} — {m.note}</option>)}
+                {models.map((m) => <option key={m.id} value={m.id}>{m.id} — {m.note_i18n?.[lang] || m.note}</option>)}
                 <option value={CUSTOM}>{t('other_model')}</option>
               </select>
               {values[`${name}_api_key`]?.set && (

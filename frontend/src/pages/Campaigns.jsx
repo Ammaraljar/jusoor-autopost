@@ -4,6 +4,7 @@ import { Pencil, Plus, Target, Trash2 } from 'lucide-react';
 import { BulkBar, Button, Empty, ErrorBox, Field, Loading, Modal, PageHead, SelectAll, useAction, useLoad, useSelection } from '../components/ui';
 import { api } from '../lib/api';
 import { fmtDate } from '../lib/format';
+import { useExample } from '../lib/useExample';
 import { useI18n } from '../lib/i18n';
 
 export default function Campaigns() {
@@ -66,6 +67,7 @@ export default function Campaigns() {
 }
 
 function CampaignModal({ item, onClose, onSaved }) {
+  const ex = useExample();
   const { t } = useI18n();
   const [f, setF] = useState({ name: '', objective: '', color: '#C6A23C', start_date: '', end_date: '', notes: '', ...item });
   const [busy, run] = useAction();
@@ -85,11 +87,11 @@ function CampaignModal({ item, onClose, onSaved }) {
     </>}>
       <div className="stack">
         <div className="grid grid-2">
-          <Field label={t('name')}><input className="input" value={f.name} onChange={(e) => set('name', e.target.value)} autoFocus /></Field>
+          <Field label={t('name')}><input className="input" value={f.name} placeholder={ex('campaign')} onChange={(e) => set('name', e.target.value)} autoFocus /></Field>
           <Field label={t('color')}><input className="input" type="color" value={f.color} onChange={(e) => set('color', e.target.value)} /></Field>
         </div>
         <Field label={t('objective')}>
-          <textarea className="textarea" rows={2} value={f.objective} onChange={(e) => set('objective', e.target.value)} />
+          <textarea className="textarea" rows={2} value={f.objective} placeholder={ex('objective')} onChange={(e) => set('objective', e.target.value)} />
         </Field>
         <div className="grid grid-2">
           <Field label={t('start')}><input className="input" type="date" value={f.start_date || ''} onChange={(e) => set('start_date', e.target.value)} /></Field>

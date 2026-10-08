@@ -5,6 +5,7 @@ import { BulkBar, Button, Empty, ErrorBox, Field, Modal, PageHead, SelectAll, Sp
 import { api, mediaUrl } from '../lib/api';
 import ScrapeModal from '../components/ScrapeModal';
 import { dayBucket, fmtDate, relative } from '../lib/format';
+import { useExample } from '../lib/useExample';
 import { DIALECTS, useI18n } from '../lib/i18n';
 
 const TABS = ['pending_review', 'all', 'approved', 'scheduled', 'published', 'failed', 'rejected'];
@@ -181,6 +182,7 @@ function DraftCard({ d, picked, onPick }) {
 }
 
 function ManualModal({ onClose, onDone }) {
+  const ex = useExample();
   const { t } = useI18n();
   const [topic, setTopic] = useState('');
   const [notes, setNotes] = useState('');
@@ -207,10 +209,10 @@ function ManualModal({ onClose, onDone }) {
         <p className="muted small">{t('manual_hint')}</p>
         <Field label={t('topic')}>
           <input className="input" value={topic} onChange={(e) => setTopic(e.target.value)}
-            placeholder="أفضل 5 أنشطة عائلية في لنكاوي" autoFocus />
+            placeholder={ex('topic')} autoFocus />
         </Field>
         <Field label={t('notes')}>
-          <textarea className="textarea" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          <textarea className="textarea" value={notes} placeholder={ex('notes')} onChange={(e) => setNotes(e.target.value)} />
         </Field>
         <Field label={t('dialect')}>
           <select className="select" value={dialect} onChange={(e) => setDialect(e.target.value)}>

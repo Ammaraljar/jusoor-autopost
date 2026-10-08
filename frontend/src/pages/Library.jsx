@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { Images, Link2, Search, Tag, Trash2, Upload } from 'lucide-react';
 import { BulkBar, Button, Empty, ErrorBox, Field, Loading, Modal, PageHead, SelectAll, useAction, useLoad, useSelection } from '../components/ui';
 import { api, mediaUrl } from '../lib/api';
+import { useExample } from '../lib/useExample';
 import { useI18n } from '../lib/i18n';
 
 function LinksModal({ onClose, onDone }) {
@@ -75,6 +76,7 @@ function EditModal({ asset, onClose, onSaved }) {
 }
 
 export default function Library() {
+  const ex = useExample();
   const { t } = useI18n();
   const [q, setQ] = useState('');
   const [query, setQuery] = useState('');
@@ -121,7 +123,7 @@ export default function Library() {
       <div className="card card-pad" style={{ marginBottom: 16 }}>
         <div className="grid grid-2">
           <Field label={t('tags_for_upload')} hint={t('tags_hint')}>
-            <input className="input" value={tags} onChange={(e) => setTags(e.target.value)} placeholder={t('tags_example')} />
+            <input className="input" value={tags} onChange={(e) => setTags(e.target.value)} placeholder={ex('tags')} />
           </Field>
           <Field label={t('search_photos')}>
             <form className="row" style={{ flexWrap: 'nowrap', gap: 8 }} onSubmit={(e) => { e.preventDefault(); setQuery(q.trim()); }}>

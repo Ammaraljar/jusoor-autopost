@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Download, FlaskConical, ImageOff, List, Pause, Pencil, Play, Plus, RefreshCw, Rss, Sparkles, Trash2 } from 'lucide-react';
+import { Download, FlaskConical, Globe, ImageOff, List, Pause, Pencil, Play, Plus, RefreshCw, Rss, Sparkles, Trash2 } from 'lucide-react';
 import { BulkBar, Button, Empty, ErrorBox, Field, Loading, Modal, PageHead, SelectAll, StatusPill, useAction, useLoad, useSelection } from '../components/ui';
 import { api } from '../lib/api';
 import ScrapeModal from '../components/ScrapeModal';
 import { fmtDateTime, relative } from '../lib/format';
-import { DIALECTS, useI18n } from '../lib/i18n';
+import { DIALECTS, LANGUAGES, useI18n } from '../lib/i18n';
 
 const EMPTY = {
   name: '', kind: 'website', base_url: '', feed_url: '', listing_urls: [], link_pattern: '', link_selector: '',
@@ -16,6 +16,14 @@ export default function Sources() {
   const { t, lang } = useI18n();
   const sources = useLoad(() => api.get('/api/sources'), []);
   const presets = useLoad(() => api.get('/api/sources/presets'), []);
+  const types = useLoad(() => api.get('/api/sources/types'), []);
+  const typeLabel = (id) => { const x = (types.data || []).find((y) => y.id === id); return x ? (x[lang] || x.en) : id; };
+  const hasOwnSite = (sources.data || []).some((s) => s.purpose === 'own_site');
+  const addOwnSite = () => run('own', async () => {
+    const r = await api.post('/api/sources/own-site', {});
+    sources.reload(true);
+    setTestResult({ name: r.name, ...(await api.post(`/api/sources/${r.id}/test`)) });
+  }, t('own_site_added'));
   const [editing, setEditing] = useState(null);
   const [articlesFor, setArticlesFor] = useState(null);
   const [testResult, setTestResult] = useState(null);
@@ -47,6 +55,7 @@ export default function Sources() {
   return (
     <>
       <PageHead title={t('sources_title')} sub={t('sources_sub')}>
+        {!hasOwnSite && <Button icon={Globe} busy={busy === 'own'} onClick={addOwnSite} title={t('own_site_hint')}>{t('add_own_site')}</Button>}
         <Button variant="primary" icon={Plus} onClick={() => setEditing({ ...EMPTY })}>{t('add_source')}</Button>
       </PageHead>
       {sources.error && <ErrorBox error={sources.error} onRetry={sources.reload} />}
@@ -88,7 +97,7 @@ export default function Sources() {
                   </td>
                   <td>
                     <span className="pill">{s.kind === 'rss' ? 'RSS' : t('website')}</span>{' '}
-                    {s.purpose === 'programs' && <span className="pill gold">{t('purpose_programs')}</span>}
+                    {s.purpose && s.purpose !== 'news' && <span className={`pill ${s.purpose === 'own_site' ? 'ok' : 'gold'}`}>{typeLabel(s.purpose)}</span>}
                     {s.dialect && <span className="pill info">{t(`dialect_${s.dialect}`)}</span>}
                   </td>
                   <td>
@@ -130,7 +139,8 @@ export default function Sources() {
 }
 
 function SourceModal({ initial, onClose, onSaved }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const types = useLoad(() => api.get('/api/sources/types'), []);
   const [f, setF] = useState({ ...initial, listing_text: (initial.listing_urls || []).join('\n') });
   const [result, setResult] = useState(null);
   const [busy, run] = useAction();
@@ -192,10 +202,10 @@ function SourceModal({ initial, onClose, onSaved }) {
           <>
             <Field label={t('listing_urls')}>
               <textarea className="textarea ltr" rows={2} value={f.listing_text} onChange={(e) => set('listing_text', e.target.value)}
-                placeholder="https://www.thestar.com.my/lifestyle/travel" />
+                placeholder="https://example.com/news" />
             </Field>
             <div className="grid grid-2">
-              <Field label={t('link_pattern')} hint="/lifestyle/travel/\d{4}/">
+              <Field label={t('link_pattern')} hint="/news/\d{4}/">
                 <input className="input code" value={f.link_pattern || ''} onChange={(e) => set('link_pattern', e.target.value)} />
               </Field>
               <Field label={t('link_selector')} hint="article h2 a">
@@ -208,10 +218,9 @@ function SourceModal({ initial, onClose, onSaved }) {
           <input className="input code" value={f.body_selector || ''} onChange={(e) => set('body_selector', e.target.value)} />
         </Field>
         <div className="grid grid-2">
-          <Field label={t('source_purpose')} hint={f.purpose === 'programs' ? t('programs_hint') : ''}>
+          <Field label={t('source_purpose')} hint={f.purpose === 'programs' ? t('programs_hint') : f.purpose === 'own_site' ? t('own_site_hint') : ''}>
             <select className="select" value={f.purpose || 'news'} onChange={(e) => set('purpose', e.target.value)}>
-              <option value="news">{t('purpose_news')}</option>
-              <option value="programs">{t('purpose_programs')}</option>
+              {(types.data || [{ id: 'news', en: t('purpose_news') }]).map((x) => <option key={x.id} value={x.id}>{x[lang] || x.en}</option>)}
             </select>
           </Field>
           <Field label={t('dialect')}>
@@ -226,7 +235,7 @@ function SourceModal({ initial, onClose, onSaved }) {
           <Field label={t('country')}><input className="input" value={f.country} onChange={(e) => set('country', e.target.value)} /></Field>
           <Field label={t('src_language')}>
             <select className="select" value={f.language} onChange={(e) => set('language', e.target.value)}>
-              {['en', 'ar', 'ms', 'fr', 'id'].map((l) => <option key={l}>{l}</option>)}
+              {[...LANGUAGES, { id: 'id', label: 'Bahasa Indonesia' }].map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
             </select>
           </Field>
           <Field label={t('interval')}><input className="input" type="number" min={15} value={f.check_interval_minutes} onChange={(e) => set('check_interval_minutes', e.target.value)} /></Field>
