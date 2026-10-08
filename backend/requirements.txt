@@ -11,6 +11,7 @@ beautifulsoup4>=4.12
 apscheduler>=3.10,<4
 playwright==1.56.0
 pillow>=10.4
+openpyxl>=3.1
 python-multipart>=0.0.9
 pytest>=8.0
 tzdata>=2024.1

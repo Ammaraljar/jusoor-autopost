@@ -160,6 +160,12 @@ def build_system_prompt(brand: BrandContext, gen: dict[str, Any]) -> str:
         label, hint = industries.source_type_hint(gen.get("purpose"))
         if label:
             extra += f"\n- Source type: {label}. {hint}"
+        if gen.get("purpose") == "product":
+            extra += ("\n- This is ONE product / service / course / offer that the brand sells on its own website. "
+                      "Hook = the strongest benefit or what makes it special; slides = who it is for, key features or "
+                      "benefits, what is included, price only if given; CTA = see details and order/book via the link. "
+                      "Do not invent features, prices or discounts. The link is added automatically — do not write it. "
+                      "Relevance is always high (8-10).")
         if gen.get("purpose") == "own_site":
             extra += (f"\n- Never write 'according to {brand.name}' or credit an outside source; relevance is always "
                       "high (8-10) because it is the brand's own content.")

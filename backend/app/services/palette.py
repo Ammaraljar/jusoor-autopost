@@ -332,35 +332,72 @@ def sample_background(kind: str) -> bytes:
 
 
 # ------------------------------------------------------------------ design rotation
-# Card templates: 18 complete looks (cover + content slides). Every redesign moves to the next
-# template of the company's own order, and all 18 are used before any of them comes back.
-TEMPLATES = ["magazine", "glass", "navy", "diagonal", "editorial", "ribbon", "side", "band", "frame",
-             "postcard", "ticket", "medallion", "topbar", "leaf", "stripe", "centered", "wave", "outline"]
+# Card templates: complete looks (cover + content slides). Every field gets its own set of at
+# least 20 that suit it; the company may switch any of them off. Every redesign moves to the next
+# template of the company's own order, and all of them are used before any comes back.
+SHARED_TEMPLATES = ["magazine", "glass", "navy", "diagonal", "editorial", "ribbon", "side", "band", "frame",
+                    "postcard", "medallion", "topbar", "leaf", "stripe", "centered", "wave", "outline",
+                    "polaroid", "lens", "sticker", "headline", "minimal", "split", "gradient"]
+FIELD_TEMPLATES: dict[str, list[str]] = {
+    "travel": ["ticket", "quote"], "news": ["breaking", "stat"], "tech": ["breaking", "stat", "blueprint"],
+    "food": ["menu", "pricetag", "quote"], "education": ["certificate", "stat", "quote", "blueprint"],
+    "training": ["certificate", "stat", "quote"], "nonprofit": ["quote", "stat", "certificate"],
+    "retail": ["pricetag", "breaking", "stat"], "luxury": ["blueprint", "certificate", "pricetag", "stat"],
+    "fashion": ["pricetag", "quote"], "health": ["stat", "quote", "certificate"], "beauty": ["menu", "quote", "pricetag"],
+    "auto": ["breaking", "blueprint", "pricetag", "stat"], "events": ["ticket", "certificate", "breaking"],
+    "general": ["stat", "quote", "breaking"],
+}
+# looks that do not suit a field's voice
+FIELD_EXCLUDE: dict[str, set[str]] = {
+    "news": {"leaf", "sticker", "polaroid"}, "luxury": {"sticker"}, "health": {"sticker"},
+    "nonprofit": {"sticker"}, "education": set(), "tech": {"leaf"},
+}
+TEMPLATES = list(dict.fromkeys(SHARED_TEMPLATES + [t for v in FIELD_TEMPLATES.values() for t in v]))
 FAMILIES = ["travel", "news", "tech", "food", "education", "training", "nonprofit", "retail", "luxury",
             "fashion", "health", "beauty", "auto", "events", "general"]
 DESIGN_COUNT = len(TEMPLATES)
 
 
+def family_templates(family: str) -> list[str]:
+    family = family if family in FAMILIES else "general"
+    skip = FIELD_EXCLUDE.get(family, set())
+    return [t for t in FIELD_TEMPLATES.get(family, []) + SHARED_TEMPLATES if t not in skip]
+
+
+def design_count(family: str = "general", enabled: list[str] | None = None) -> int:
+    return len(_active(family, enabled))
+
+
+def _active(family: str, enabled: list[str] | None) -> list[str]:
+    allowed = family_templates(family)
+    chosen = [t for t in allowed if t in set(enabled or [])]
+    return chosen or allowed
+
+
 def design(index: int, navy: str = BRAND_NAVY, gold: str = BRAND_GOLD, seed: int = 0,
-           family: str = "general") -> dict[str, Any]:
+           family: str = "general", enabled: list[str] | None = None,
+           template: str | None = None) -> dict[str, Any]:
     """Design #index of the company's own rotation (its seed shuffles the order, so every company
-    gets its own sequence). Consecutive designs always change template and colour set."""
+    gets its own sequence). Consecutive designs always change template and colour set.
+    enabled: the templates the company kept (empty = all of its field's templates)."""
     import random
     family = family if family in FAMILIES else "general"
     rnd = random.Random(seed or 0)
     variants = brand_variants(navy, gold)
     v_order = list(range(len(variants)))
-    t_order = list(TEMPLATES)
+    t_order = _active(family, enabled)
     rnd.shuffle(v_order)
     rnd.shuffle(t_order)
-    i = index % DESIGN_COUNT
+    n = len(t_order)
+    i = index % n
     out = dict(variants[v_order[i % 6]])
-    out["template"] = t_order[i]
+    out["template"] = template if template in TEMPLATES else t_order[i]
     out["layout"] = out["template"]
     out["cover"] = out["template"]
     out["cta"] = ["center", "bottom"][(i // 3) % 2]
     out["family"] = family
     out["design"] = i
+    out["count"] = n
     out["source"] = "design"
     return out
 

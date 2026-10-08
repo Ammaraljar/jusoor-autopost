@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
 from .db import init_db, session_scope
-from .routes import auth_routes, brands, drafts, media, planning, sources, system, team
+from .routes import auth_routes, brands, drafts, media, newsletters, planning, products, sources, system, team
 from .services.jobs import jobs
 from .services.pipeline import ensure_default_brand
 from .services.renderer import renderer
@@ -38,8 +38,20 @@ async def lifespan(app: FastAPI):
 
 
 settings = get_settings()
-app = FastAPI(title=settings.app_name, lifespan=lifespan,
+from .services.messages import LangMiddleware, LocalizedJSONResponse  # noqa: E402
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan, default_response_class=LocalizedJSONResponse,
               docs_url="/api/docs" if settings.environment != "production" else None, redoc_url=None)
+
+
+from starlette.exceptions import HTTPException as StarletteHTTPException  # noqa: E402
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_error(request: Request, exc: StarletteHTTPException):
+    """Error messages in the user's interface language."""
+    return LocalizedJSONResponse(status_code=exc.status_code, content={"detail": exc.detail},
+                                 headers=getattr(exc, "headers", None))
 
 
 @app.middleware("http")
@@ -50,7 +62,7 @@ async def json_errors(request: Request, call_next):
         return await call_next(request)
     except Exception as exc:  # noqa: BLE001
         logging.getLogger("app").exception("unhandled error on %s", request.url.path)
-        return JSONResponse(status_code=500, content={"detail": f"خطأ داخلي في الخادم: {str(exc)[:300]}"})
+        return LocalizedJSONResponse(status_code=500, content={"detail": f"خطأ داخلي في الخادم: {str(exc)[:300]}"})
 
 
 # Added after the error middleware so CORS wraps it (the last middleware added is the outermost).
@@ -61,6 +73,8 @@ app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origin_list,
 # Compress JSON (draft lists, articles) — much faster on mobile connections
 from fastapi.middleware.gzip import GZipMiddleware  # noqa: E402
 app.add_middleware(GZipMiddleware, minimum_size=1024)
+# outermost: the interface language is known to everything below it
+app.add_middleware(LangMiddleware)
 
 
 class CachedStatic(StaticFiles):
@@ -74,7 +88,7 @@ class CachedStatic(StaticFiles):
 
 
 for r in (system.router, auth_routes.router, drafts.router, sources.router, planning.router, brands.router,
-          team.router, team.admin, media.router):
+          team.router, team.admin, media.router, products.router, newsletters.router, newsletters.public):
     app.include_router(r)
 
 if settings.storage_backend == "local":

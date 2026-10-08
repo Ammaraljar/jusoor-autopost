@@ -75,7 +75,7 @@ def brand_style(brand: Brand, language: str, family: str = "general") -> BrandSt
     logo = _read(brand.logo_path)
     versions = [(x.get("tone") or "color", _read(x["key"])) for x in brand_logos(brand)]
     return BrandStyle(name=brand.name, handle=brand.handle, website=brand.website, colors=brand.colors,
-                      font_family=brand.font_family, logo=logo, logo_placement=brand.logo_placement,
+                      font_family=brand.font_family, font_latin=brand.font_latin or "Cairo", logo=logo, logo_placement=brand.logo_placement,
                       card_style=brand.card_style, language=language,
                       logo_backdrop=brand.logo_backdrop or "auto",
                       theme=getattr(brand, "card_theme", None) or "magazine", family=family,
@@ -321,6 +321,37 @@ async def dialect_copy(src_id: int, dialect: str) -> int | None:
     return new_id
 
 
+async def draft_from_product(product_id: int) -> int | None:
+    """One post for one product / service / course from the company's own site, with its link."""
+    from ..db import Product
+    from . import products as product_lib
+    with session_scope() as db:
+        prod = db.get(Product, product_id)
+        if prod is None:
+            return None
+        brand = _brand_for(db, None)
+        gen = {**app_settings.get_section(db, "generation"), "purpose": "product", "content_type": "promotional"}
+        title, body = product_lib.as_article(prod)
+        draft = Draft(brand_id=brand.id, origin="product", source_name="", source_url=prod.url,
+                      original_title=title, original_body=body, original_image_url=prod.image_url,
+                      language=gen["language"], tone=gen["tone"], content_type="promotional",
+                      platform=gen["platform"], dialect=gen.get("dialect"), link_url=prod.url, status="generating")
+        db.add(draft)
+        db.flush()
+        prod.status, prod.draft_id = "drafted", draft.id
+        draft_id = draft.id
+        ctx = brand_context(brand)
+    try:
+        post = await generator.generate_from_article(ctx, gen, title, body, "")
+    except Exception as exc:  # noqa: BLE001
+        _fail(draft_id, f"فشل توليد النص: {exc}")
+        return draft_id
+    with session_scope() as db:
+        _apply_post(db.get(Draft, draft_id), post)
+    await asyncio.gather(make_variants(draft_id), render_draft(draft_id))
+    return draft_id
+
+
 async def draft_from_calendar(item_id: int) -> int | None:
     with session_scope() as db:
         item = db.get(CalendarItem, item_id)
@@ -471,6 +502,7 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
         brand_navy = (brand.colors or {}).get("navy") or colours.BRAND_NAVY
         brand_gold = (brand.colors or {}).get("gold") or colours.BRAND_GOLD
         design_seed = brand.design_seed or 0
+        enabled_templates = list(brand.templates or [])
         logo_placement = brand.logo_placement or "top-left"
         rtl = draft.language == "ar"
 
@@ -511,7 +543,7 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
             index = int(stored_index)
         else:
             index = _next_design_index(draft_id)
-        palette_to_store = colours.design(index, brand_navy, brand_gold, design_seed, family)
+        palette_to_store = colours.design(index, brand_navy, brand_gold, design_seed, family, enabled_templates)
         style.palette = palette_to_store
     else:
         style.palette = None
@@ -636,6 +668,8 @@ def compose_caption(draft: Draft, credit: bool = True) -> str:
     if credit and draft.origin == "source" and draft.source_name:
         label = {"ar": "المصدر", "en": "Source", "fr": "Source", "ms": "Sumber"}.get(draft.language, "Source")
         parts.append(f"{label}: {draft.source_name}")
+    if getattr(draft, "link_url", None) and draft.link_url not in parts[0]:
+        parts.append(f"🔗 {draft.link_url}")
     if draft.hashtags:
         parts.append(draft.hashtags.strip())
     return "\n\n".join(p for p in parts if p)

@@ -114,12 +114,21 @@ TEMPLATE_SPEC: dict[str, tuple[bool, bool, bool]] = {
     "postcard": (True, True, True), "ticket": (True, False, False), "medallion": (False, False, False),
     "topbar": (False, False, True), "leaf": (True, False, True), "stripe": (False, False, False),
     "centered": (False, False, False), "wave": (False, False, True), "outline": (False, False, True),
+    "breaking": (False, False, False), "quote": (False, False, False), "certificate": (False, False, False),
+    "menu": (True, False, False), "pricetag": (False, False, False), "blueprint": (False, False, False),
+    "polaroid": (False, False, True), "lens": (False, False, True), "sticker": (False, False, False),
+    "headline": (False, False, True), "minimal": (False, False, False), "stat": (False, False, False),
+    "split": (False, False, True), "gradient": (False, False, False),
 }
 DECOR = {
     "diagonal": '<div class="dz-diag"><i class="g"></i><i class="p"></i></div>',
     "frame": '<div class="dz-frame"></div>',
     "postcard": '<div class="dz-postcard"></div>',
     "topbar": '<div class="dz-topbar"></div>',
+    "certificate": '<div class="dz-cert"><i></i><b class="c1"></b><b class="c2"></b><b class="c3"></b><b class="c4"></b></div>',
+    "blueprint": '<div class="dz-grid"></div>',
+    "breaking": '<div class="dz-ticker"></div>',
+    "gradient": '<div class="dz-edge"></div>',
     "wave": ('<div class="dz-wave"><svg viewBox="0 0 1080 140" preserveAspectRatio="none">'
              '<path d="M0,80 C200,0 380,140 600,70 C800,10 930,100 1080,50 L1080,140 L0,140 Z"/></svg><i></i></div>'),
 }
@@ -186,6 +195,16 @@ def build(spec, brand, lang: str, logo_html: str, logo_plate_html: str, bg: str,
         swipe = f'<span class="pf-swipe">{SWIPE_LONG[lang]} <b>{arrow}</b></span>'
         foot = f'<div class="pf-foot">{handle}{credit}{swipe}</div>'
         medal = f'<div class="pf-medal">{_icon(family)}</div>' if tpl == "medallion" else ""
+        if tpl == "sticker":
+            medal = (f'<div class="pf-sticker">{_icon(family)}'
+                     f'<span>{_esc(badge or FAMILY_KICKER[lang][family])}</span></div>')
+            kicker = ""
+        if tpl == "stat":
+            digits = re.findall(r"[0-9٠-٩]+(?:[.,][0-9٠-٩]+)?%?", spec.heading or "")
+            if digits:
+                medal = f'<div class="pf-stat">{_esc(digits[0])}</div>'
+        if tpl == "quote":
+            medal = '<div class="pf-quote">“</div>'
         tk = (f'<div class="tk-head">{_icon(family)}<span>{_esc(badge or FAMILY_KICKER[lang][family])}</span>'
               '<b>✈</b></div>') if tpl == "ticket" else ""
         if tpl == "ticket":
@@ -201,9 +220,13 @@ def build(spec, brand, lang: str, logo_html: str, logo_plate_html: str, bg: str,
     num = f'<div class="pf-num">{number}</div>'
     tk = (f'<div class="tk-head">{_icon(family)}<span>{_esc(FAMILY_KICKER[lang][family])}</span>'
           f'<b>{number}</b></div>') if tpl == "ticket" else ""
-    medal = f'<div class="pf-medal">{number}</div>' if tpl == "medallion" else ""
+    medal = f'<div class="pf-medal">{number}</div>' if tpl in ("medallion", "sticker") else ""
+    if tpl == "stat":
+        medal = f'<div class="pf-stat">{number}</div>'
+    elif tpl == "quote":
+        medal = '<div class="pf-quote">“</div>'
     text = (f'<div class="tx tx-content" data-fit="{_fit(tpl, False)}">{tk}{medal}<div class="tx-in">'
-            f'{"" if tpl in ("ticket", "medallion") else num}<h2>{_esc(spec.heading)}</h2>{_rule(family)}'
+            f'{"" if tpl in ("ticket", "medallion", "sticker", "stat") else num}<h2>{_esc(spec.heading)}</h2>{_rule(family)}'
             f'<p>{_esc(spec.body)}</p></div></div>')
     return (f'{bg}<div class="scrim scrim-{tpl}"></div>{decor}{top}{text}{foot}',
             f"{classes} kind-content")
@@ -212,6 +235,52 @@ def build(spec, brand, lang: str, logo_html: str, logo_plate_html: str, bg: str,
 def _fit(tpl: str, cover: bool) -> str:
     """Max text height (px) and min font size for the auto-fit script."""
     tall = {"topbar": 360, "side": 620, "centered": 640, "band": 600, "diagonal": 420, "postcard": 560,
-            "wave": 420, "ticket": 460, "glass": 640, "navy": 640, "leaf": 640, "outline": 640}
+            "wave": 420, "ticket": 460, "glass": 640, "navy": 640, "leaf": 640, "outline": 640,
+            "polaroid": 330, "lens": 300, "split": 400, "menu": 560, "headline": 640, "minimal": 420,
+            "stat": 480, "quote": 560, "certificate": 600, "pricetag": 460, "sticker": 520}
     h = tall.get(tpl, 560 if cover else 600)
     return f"{h},{40 if cover else 28}"
+
+
+TEMPLATE_LABELS: dict[str, tuple[str, str, str, str]] = {
+    "magazine": ("مجلة", "Magazine", "Majalah", "Magazine"),
+    "glass": ("بطاقة زجاجية", "Glass card", "Kad kaca", "Carte vitrée"),
+    "navy": ("بطاقة داكنة", "Dark card", "Kad gelap", "Carte sombre"),
+    "diagonal": ("شريط مائل", "Diagonal", "Pepenjuru", "Diagonale"),
+    "editorial": ("تحريري", "Editorial", "Editorial", "Éditorial"),
+    "ribbon": ("شرائط", "Ribbons", "Reben", "Rubans"),
+    "side": ("لوحة جانبية", "Side panel", "Panel sisi", "Panneau latéral"),
+    "band": ("شريط عريض", "Wide band", "Jalur lebar", "Bandeau"),
+    "frame": ("إطار رفيع", "Thin frame", "Bingkai nipis", "Cadre fin"),
+    "postcard": ("بطاقة بريدية", "Postcard", "Poskad", "Carte postale"),
+    "ticket": ("بطاقة صعود", "Boarding pass", "Pas masuk", "Carte d’embarquement"),
+    "medallion": ("ميدالية", "Medallion", "Medalion", "Médaillon"),
+    "topbar": ("شريط علوي", "Top band", "Jalur atas", "Bandeau haut"),
+    "leaf": ("ورقة", "Leaf card", "Kad daun", "Carte feuille"),
+    "stripe": ("خط جانبي", "Side stripe", "Jalur sisi", "Bande latérale"),
+    "centered": ("في الوسط", "Centred", "Di tengah", "Centré"),
+    "wave": ("موجة", "Wave", "Ombak", "Vague"),
+    "outline": ("إطار مفتوح", "Outline", "Garis luar", "Contour"),
+    "breaking": ("عاجل", "Breaking", "Terkini", "Flash info"),
+    "quote": ("اقتباس", "Quote", "Petikan", "Citation"),
+    "certificate": ("شهادة", "Certificate", "Sijil", "Certificat"),
+    "menu": ("قائمة طعام", "Menu card", "Kad menu", "Carte menu"),
+    "pricetag": ("بطاقة سعر", "Price tag", "Tanda harga", "Étiquette"),
+    "blueprint": ("مخطط", "Blueprint", "Pelan", "Plan"),
+    "polaroid": ("صورة فورية", "Polaroid", "Polaroid", "Polaroid"),
+    "lens": ("دائرة", "Lens", "Lensa", "Objectif"),
+    "sticker": ("ملصق", "Sticker", "Pelekat", "Sticker"),
+    "headline": ("عنوان ضخم", "Big headline", "Tajuk besar", "Grand titre"),
+    "minimal": ("بسيط", "Minimal", "Minimal", "Minimal"),
+    "stat": ("رقم بارز", "Big number", "Nombor besar", "Grand chiffre"),
+    "split": ("نصفان", "Split", "Belah", "Partagé"),
+    "gradient": ("تدرّج", "Gradient", "Gradien", "Dégradé"),
+}
+
+
+def template_options(family: str, enabled: list[str] | None) -> list[dict]:
+    from . import palette
+    kept = set(enabled or [])
+    return [{"id": t, "ar": TEMPLATE_LABELS[t][0], "en": TEMPLATE_LABELS[t][1], "ms": TEMPLATE_LABELS[t][2],
+             "fr": TEMPLATE_LABELS[t][3], "enabled": not kept or t in kept}
+            for t in palette.family_templates(family)]

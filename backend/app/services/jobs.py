@@ -84,6 +84,11 @@ class Jobs:
                     await publishing.publish_due()
                 except Exception:  # noqa: BLE001
                     log.exception("scheduled publish failed for company %s", org)
+                try:
+                    from . import newsletter
+                    await newsletter.send_due()
+                except Exception:  # noqa: BLE001
+                    log.exception("scheduled newsletters failed for company %s", org)
 
     def start(self) -> None:
         if not get_settings().scheduler_enabled:

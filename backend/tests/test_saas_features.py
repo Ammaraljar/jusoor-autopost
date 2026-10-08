@@ -26,13 +26,14 @@ def _jpg(c=(90, 120, 160)):
 
 # ---------------------------------------------------------------- designs
 def test_redesign_cycles_all_designs_before_repeating():
-    seen = [palette.design(i, seed=4242) for i in range(palette.DESIGN_COUNT)]
-    keys = {(d["variant"], d["layout"], d["cover"]) for d in seen}
-    assert len(keys) == palette.DESIGN_COUNT                       # 18 different looks
+    n = palette.design_count("general")
+    seen = [palette.design(i, seed=4242) for i in range(n)]
+    keys = {d["template"] for d in seen}
+    assert len(keys) == n >= 20                                    # every template once per cycle
     for a, b in zip(seen, seen[1:] + seen[:1]):                    # neighbours always differ visibly
         assert a["layout"] != b["layout"] and a["variant"] != b["variant"]
     # after the full cycle it starts again
-    assert palette.design(palette.DESIGN_COUNT, seed=4242)["layout"] == seen[0]["layout"]
+    assert palette.design(n, seed=4242)["layout"] == seen[0]["layout"]
 
 
 def test_each_company_gets_its_own_design_order():
@@ -131,7 +132,7 @@ def test_redesign_moves_to_a_new_design(client, monkeypatch):
             with session_scope() as db:
                 designs.append(db.get(Draft, did).palette["design"])
         assert len(set(designs)) == 3
-        assert designs[1] == (designs[0] + 1) % palette.DESIGN_COUNT
+        assert designs[1] == (designs[0] + 1) % palette.design_count("travel")
     finally:
         client.delete(f"/api/drafts/{did}")
 
@@ -176,8 +177,15 @@ def test_new_fields_languages_and_families(client):
 
 
 def test_redesign_walks_through_every_template():
-    seen = [palette.design(i, seed=21, family="travel")["template"] for i in range(palette.DESIGN_COUNT)]
-    assert palette.DESIGN_COUNT >= 15 and len(set(seen)) == palette.DESIGN_COUNT
+    for family in palette.FAMILIES:
+        assert palette.design_count(family) >= 20, family
+    n = palette.design_count("travel")
+    seen = [palette.design(i, seed=21, family="travel")["template"] for i in range(n)]
+    assert len(set(seen)) == n
+    # the company keeps only some templates: the rotation uses just those
+    kept = ["magazine", "ticket", "glass"]
+    picked = {palette.design(i, seed=21, family="travel", enabled=kept)["template"] for i in range(9)}
+    assert picked == set(kept)
     assert all(a != b for a, b in zip(seen, seen[1:]))
 
 

@@ -17,7 +17,7 @@ from ..services import pipeline, storage
 from ..services.renderer import SlideSpec, renderer
 
 router = APIRouter(prefix="/api/brands", tags=["brands"], dependencies=[RequireUser, RequireWriter])
-FONTS = ["Cairo"]
+from ..services import fonts as font_lib  # noqa: E402
 
 
 class BrandIn(BaseModel):
@@ -35,6 +35,8 @@ class BrandIn(BaseModel):
     logo_backdrop: str | None = Field(None, pattern="^(auto|always|never)$")
     cta_text: str | None = None
     publish_config: dict[str, Any] | None = None
+    templates: list[str] | None = None
+    font_latin: str | None = None
 
 
 def _out(b: Brand) -> dict:
@@ -42,6 +44,9 @@ def _out(b: Brand) -> dict:
     data["color_mode"] = b.color_mode or "auto"
     data["logo_backdrop"] = b.logo_backdrop or "auto"
     data["card_theme"] = b.card_theme or "magazine"
+    data["font_latin"] = b.font_latin or "Cairo"
+    data["font_options"] = font_lib.options()
+    data["has_default_colors"] = bool(b.default_colors or b.logo_path)
     data["colors"] = {"navy": colours.BRAND_NAVY, "gold": colours.BRAND_GOLD, "goldLight": "#D9B96A",
                       "surface": "#FBF8F0", "cardTitle": "#16244F", "cardText": "#1F2B55", **(b.colors or {})}
     data["logos"] = [{**x, "url": storage.public_url(x["key"]), "primary": x["key"] == b.logo_path}
@@ -79,10 +84,44 @@ def _get(db: Session, bid: int) -> Brand:
 @router.patch("/{bid}")
 def update_brand(bid: int, body: BrandIn, db: Session = Depends(get_db)):
     b = _get(db, bid)
-    for k, v in body.model_dump(exclude_unset=True).items():
+    data = body.model_dump(exclude_unset=True)
+    if data.get("font_family") is not None:
+        data["font_family"] = font_lib.valid_arabic(data["font_family"])
+    if data.get("font_latin") is not None:
+        data["font_latin"] = font_lib.valid_latin(data["font_latin"])
+    if data.get("templates") is not None:
+        data["templates"] = [t for t in data["templates"] if t in colours.TEMPLATES]
+    for k, v in data.items():
         if v is not None:
             setattr(b, k, v)
     return _out(b)
+
+
+@router.post("/{bid}/colors/reset")
+def reset_colors(bid: int, db: Session = Depends(get_db)):
+    """Back to the identity generated from the primary colour logo (or the field's colours)."""
+    from ..db import Organization, current_org
+    from ..services import industries
+    b = _get(db, bid)
+    base = b.default_colors
+    if not base and b.logo_path:
+        data = storage.read_bytes(b.logo_path)
+        base = colours.colors_from_logo(data) if data and colours.logo_tone(data) == "color" else None
+    if not base:
+        org = db.get(Organization, current_org.get()) if current_org.get() else None
+        base = dict(industries.get(org.industry if org else None).get("colors") or {})
+    b.colors = dict(base)
+    b.color_mode = "auto"
+    return _out(b)
+
+
+@router.get("/{bid}/templates")
+def templates(bid: int, db: Session = Depends(get_db)):
+    """The card templates of the company's field, and which ones it keeps."""
+    from ..db import current_org
+    from ..services import cards
+    b = _get(db, bid)
+    return cards.template_options(pipeline.family_of(db, current_org.get()), b.templates)
 
 
 @router.post("/{bid}/default")
@@ -112,6 +151,7 @@ def _set_primary(b: Brand, key: str, data: bytes | None) -> None:
         found = colours.colors_from_logo(data)
         if found and colours.logo_tone(data) == "color":
             b.colors = {**(b.colors or {}), **found}
+            b.default_colors = dict(b.colors)          # the identity "reset" returns to
             b.color_mode = "auto"
 
 
@@ -202,6 +242,7 @@ def remove_logo(bid: int, db: Session = Depends(get_db)):
 class PreviewIn(BaseModel):
     kind: str = "cover"
     language: str = "ar"
+    template: str | None = None
     variant: int | None = None      # 0-5: one of the six JUSOOR colour sets / card shapes
 
 
@@ -236,7 +277,8 @@ async def preview(bid: int, body: PreviewIn, db: Session = Depends(get_db)):
                                            if body.variant is not None else body.kind)
     navy = (b.colors or {}).get("navy") or colours.BRAND_NAVY
     gold = (b.colors or {}).get("gold") or colours.BRAND_GOLD
-    style.palette = colours.design(body.variant or 0, navy, gold, b.design_seed or 0, family) \
+    style.palette = colours.design(body.variant or 0, navy, gold, b.design_seed or 0, family, b.templates,
+                                   body.template) \
         if (b.color_mode or "auto") == "auto" else {"family": family}
     logo, plate = colours.choose_logo(style.logos, style.logo, background, b.logo_placement or "top-left",
                                       body.kind, (style.palette or {}).get("template"))

@@ -10,6 +10,8 @@ import html
 import logging
 import os
 from dataclasses import dataclass
+
+from . import fonts
 from functools import lru_cache
 from pathlib import Path
 
@@ -64,7 +66,8 @@ class BrandStyle:
     handle: str = ""
     website: str = ""
     colors: dict | None = None
-    font_family: str = "Cairo"
+    font_family: str = "Cairo"          # Arabic font
+    font_latin: str = "Cairo"           # font for English / Malay / French
     logo: bytes | None = None
     logo_placement: str = "top-left"
     card_style: str = "frosted"
@@ -289,7 +292,8 @@ def build_html(spec: SlideSpec, brand: BrandStyle) -> str:
     if brand.theme != "magazine":
         theme_class = "theme-classic"
     return _template().format(
-        theme=theme_class, extra_css=extra_css, lang=lang, dir="rtl" if rtl else "ltr", font_faces=_font_faces(), font=brand.font_family or "Cairo",
+        theme=theme_class, extra_css=extra_css, lang=lang, dir="rtl" if rtl else "ltr", font_faces=_font_faces() + "\n" + fonts.faces(fonts.valid_arabic(brand.font_family), fonts.valid_latin(brand.font_latin)),
+        font=fonts.stack(fonts.valid_arabic(brand.font_family), fonts.valid_latin(brand.font_latin), lang),
         navy=colors["navy"], gold=colors["gold"], gold_light=colors.get("goldLight", colors["gold"]),
         card_bg=colors.get("cardBg"), card_solid=colors.get("cardBgHex") or "#F8F4EA", card_title=colors.get("cardTitle"),
         card_text=colors.get("cardText", colors.get("cardSubtle", "#3A4058")),

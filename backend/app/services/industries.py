@@ -394,7 +394,7 @@ def source_types(industry: str | None) -> list[dict[str, str]]:
 
 def source_type_hint(type_id: str | None) -> tuple[str, str]:
     """(English label, writing hint) of a source type, for the AI writer."""
-    if not type_id:
+    if not type_id or type_id == "product":
         return "", ""
     for table in [COMMON_SOURCE_TYPES, *INDUSTRY_SOURCE_TYPES.values()]:
         if type_id in table:

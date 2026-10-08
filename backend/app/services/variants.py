@@ -124,6 +124,9 @@ def finalize(draft, texts: dict[str, str], credit: bool = True,
     total = len(draft.slides) if getattr(draft, "slides", None) else 0
     fallback = fallback_texts(draft)
     credit_line = _credit_line(draft, credit)
+    link = getattr(draft, "link_url", None)
+    if link:                       # the product/service page always goes with the post
+        credit_line = f"🔗 {link}" + (f"\n{credit_line}" if credit_line else "")
     out: dict[str, dict[str, Any]] = {}
     for platform, spec in PLATFORM_SPECS.items():
         text = (texts.get(platform) or "").strip() or fallback[platform]
