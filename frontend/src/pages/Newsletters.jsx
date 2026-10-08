@@ -277,8 +277,16 @@ function Editor() {
     const t2 = setInterval(() => nl.reload(true), 3000);
     return () => clearInterval(t2);
   }, [nl.data?.status]); // eslint-disable-line react-hooks/exhaustive-deps
-  const loadPreview = (design) => api.get(`/api/newsletters/${id}/preview${design ? `?design=${design}` : ''}`).then((r) => setHtml(r.html)).catch(() => {});
-  useEffect(() => { if (nl.data && nl.data.status !== 'generating') loadPreview(); }, [nl.data?.updated_at, nl.data?.status]); // eslint-disable-line
+  // the preview always shows the current (even unsaved) edits
+  const loadPreview = (design) => (f
+    ? api.post(`/api/newsletters/${id}/preview`, design ? { ...f, design } : f)
+    : api.get(`/api/newsletters/${id}/preview${design ? `?design=${design}` : ''}`)).then((r) => setHtml(r.html)).catch(() => {});
+  useEffect(() => { if (nl.data && nl.data.status !== 'generating' && !f) loadPreview(); }, [nl.data?.updated_at, nl.data?.status]); // eslint-disable-line
+  useEffect(() => {
+    if (!f || nl.data?.status === 'generating') return undefined;
+    const timer = setTimeout(() => loadPreview(), 600);
+    return () => clearTimeout(timer);
+  }, [f]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!nl.data || !f) return nl.error ? <ErrorBox error={nl.error} /> : <Loading />;
   const d = nl.data;
