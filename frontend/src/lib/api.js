@@ -48,6 +48,8 @@ async function authHeader() {
 async function request(method, path, body, { raw = false } = {}) {
   const headers = { ...(await authHeader()) };
   if (actingOrg) headers['X-Org-Id'] = actingOrg;
+  // server messages come back in the interface language
+  try { headers['X-Lang'] = localStorage.getItem('ui-lang') || 'ar'; } catch { headers['X-Lang'] = 'ar'; }
   const init = { method, headers };
   if (body instanceof FormData) {
     init.body = body;
@@ -59,14 +61,14 @@ async function request(method, path, body, { raw = false } = {}) {
   try {
     res = await fetch(`${BASE}${path}`, init);
   } catch (err) {
-    throw new ApiError('تعذّر الاتصال بالخادم', 0);
+    throw new ApiError(({ en: 'Cannot reach the server', ms: 'Tidak dapat menghubungi pelayan', fr: 'Impossible de joindre le serveur' })[(() => { try { return localStorage.getItem('ui-lang'); } catch { return 'ar'; } })()] || 'تعذّر الاتصال بالخادم', 0);
   }
   if (!res.ok) {
     let message = `HTTP ${res.status}`;
     try {
       const data = await res.json();
       message = typeof data.detail === 'string' ? data.detail
-        : Array.isArray(data.detail) ? data.detail.map((d) => d.msg).join('، ') : message;
+        : Array.isArray(data.detail) ? data.detail.map((d) => d.msg).join(' · ') : message;
     } catch { /* not json */ }
     if (res.status === 401 && !path.startsWith('/api/auth/')) {
       // A session that the server rejected: end it and keep the reason for the login screen

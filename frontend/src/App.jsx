@@ -17,6 +17,8 @@ const Stats = lazy(() => import('./pages/Stats'));
 const Library = lazy(() => import('./pages/Library'));
 const Team = lazy(() => import('./pages/Team'));
 const Admin = lazy(() => import('./pages/Admin'));
+const Products = lazy(() => import('./pages/Products'));
+const Newsletters = lazy(() => import('./pages/Newsletters'));
 
 export default function App() {
   const { loading, session } = useAuth();
@@ -37,6 +39,8 @@ export default function App() {
         <Route path="library" element={<Library />} />
         <Route path="team" element={<Team />} />
         <Route path="admin" element={<Admin />} />
+        <Route path="products" element={<Products />} />
+        <Route path="newsletters/*" element={<Newsletters />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

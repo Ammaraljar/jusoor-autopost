@@ -153,7 +153,7 @@ export default function DraftEditor() {
             <Button size="sm" icon={Wand2} busy={busy === 'render'} disabled={editLocked}
               title={t('redesign_hint')}
               onClick={() => act('render', () => api.post(`/api/drafts/${d.id}/render`, { refresh_backgrounds: false, next_design: true }))}>
-              {t('rerender')}{d.palette?.design != null ? ` (${(d.palette.design % 18) + 1}/18)` : ''}
+              {t('rerender')}{d.palette?.design != null ? ` (${(d.palette.design % (d.palette.count || 18)) + 1}/${d.palette.count || 18})` : ''}
             </Button>
             {d.language === 'ar' && (
               <select className="select" style={{ width: 'auto', height: 32, fontSize: 13 }} value=""

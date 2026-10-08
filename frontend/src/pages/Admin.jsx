@@ -94,7 +94,7 @@ export default function Admin() {
               <b>{o.name}</b> <span className="pill">{label(o.industry)}</span>
               {o.status !== 'active' && <span className="pill">{t('suspended')}</span>}
               <div className="xs muted">
-                #{o.id} · {o.language === 'ar' ? 'العربية' : 'English'} · {o.users} {t('users')} · {o.sources} {t('nav_sources')} · {o.drafts} {t('posts')}
+                #{o.id} · {LANGUAGES.find((l) => l.id === o.language)?.label || o.language} · {o.users} {t('users')} · {o.sources} {t('nav_sources')} · {o.drafts} {t('posts')}
                 {o.created_at ? ` · ${fmtDate(o.created_at, lang)}` : ''}
               </div>
             </div>

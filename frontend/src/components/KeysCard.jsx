@@ -242,7 +242,7 @@ export default function KeysCard({ onSaved, platform = false }) {
         {active.length === 0 ? t('no_engine_key')
           : ensembleMode
             ? `${t('ensemble_auto')} ${active.map((n) => engines[n]?.label).join(' + ')}`
-            : `${t('single_auto')} ${active.filter((n) => n !== primary).map((n) => engines[n]?.label).join('، ') || '—'}`}
+            : `${t('single_auto')} ${active.filter((n) => n !== primary).map((n) => engines[n]?.label).join(lang === 'ar' ? '، ' : ', ') || '—'}`}
       </p>
 
       {(values.warnings || []).map((w) => (

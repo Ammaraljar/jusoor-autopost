@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Eye, ImagePlus, Plus, RefreshCw, Save, Star, Trash2 } from 'lucide-react';
+import { CheckSquare, Eye, ImagePlus, LayoutTemplate, Plus, RefreshCw, RotateCcw, Save, Square, Star, Trash2 } from 'lucide-react';
 import { Button, ErrorBox, Field, Loading, PageHead, Spinner, useAction, useLoad } from '../components/ui';
 import { api, mediaUrl } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -82,6 +82,7 @@ function BrandForm({ brand, onChanged }) {
       name: f.name, handle: f.handle, website: f.website, voice: f.voice, cta_text: f.cta_text,
       colors: f.colors, logo_placement: f.logo_placement, card_style: f.card_style, card_theme: f.card_theme || 'magazine', publish_config: f.publish_config,
       color_mode: f.color_mode || 'auto', logo_backdrop: f.logo_backdrop || 'auto',
+      font_family: f.font_family || 'Cairo', font_latin: f.font_latin || 'Cairo', templates: f.templates || [],
     });
     onChanged();
     refreshPreview();
@@ -110,7 +111,17 @@ function BrandForm({ brand, onChanged }) {
         </div>
 
         <div className="card card-pad stack">
-          <h3>{t('colors')}</h3>
+          <div className="field-head">
+            <h3 style={{ margin: 0 }}>{t('colors')}</h3>
+            {brand.has_default_colors && (
+              <Button size="sm" icon={RotateCcw} busy={busy === 'reset'} title={t('reset_colors_hint')}
+                onClick={() => window.confirm(t('reset_colors_confirm')) && run('reset', async () => {
+                  const b = await api.post(`/api/brands/${brand.id}/colors/reset`);
+                  setF((x) => ({ ...x, colors: { ...b.colors }, color_mode: b.color_mode }));
+                  onChanged(); refreshPreview();
+                }, t('saved'))}>{t('reset_colors')}</Button>
+            )}
+          </div>
           {(f.color_mode || 'auto') === 'auto' && <p className="xs muted" style={{ marginTop: -8 }}>{t('colors_auto_hint')}</p>}
           <div className="swatches">
             {COLOR_KEYS.map((k) => (
@@ -192,6 +203,26 @@ function BrandForm({ brand, onChanged }) {
         </div>
 
         <div className="card card-pad stack">
+          <h3>{t('fonts')}</h3>
+          <div className="grid grid-2">
+            <Field label={t('font_arabic')}>
+              <select className="select" value={f.font_family || 'Cairo'} onChange={(e) => set('font_family', e.target.value)}>
+                {(brand.font_options?.arabic || ['Cairo']).map((x) => <option key={x} value={x}>{x}</option>)}
+              </select>
+              <div className="font-sample" dir="rtl" style={{ fontFamily: `'${f.font_family || 'Cairo'}', Cairo` }}>عنوان منشورك بهذا الخط</div>
+            </Field>
+            <Field label={t('font_latin')}>
+              <select className="select" value={f.font_latin || 'Cairo'} onChange={(e) => set('font_latin', e.target.value)}>
+                {(brand.font_options?.latin || ['Cairo']).map((x) => <option key={x} value={x}>{x}</option>)}
+              </select>
+              <div className="font-sample" dir="ltr" style={{ fontFamily: `'${f.font_latin || 'Cairo'}', Cairo` }}>Your headline in this font</div>
+            </Field>
+          </div>
+        </div>
+
+        <TemplatePicker brand={brand} value={f.templates || []} onChange={(v) => set('templates', v)} />
+
+        <div className="card card-pad stack">
           <h3>{t('publishing_channels')}</h3>
           <div className="field-head">
             <b className="small">{t('buffer_channels')}</b>
@@ -256,6 +287,63 @@ function BrandForm({ brand, onChanged }) {
           <p className="xs muted" style={{ marginTop: 8 }}>{t('preview_hint')} · {t('save')} → {t('refresh_preview')}</p>
         </div>
       </div>
+    </div>
+  );
+}
+
+
+/** The card templates of the company's field: keep all, or only the ones the company likes. */
+function TemplatePicker({ brand, value, onChange }) {
+  const { t, lang } = useI18n();
+  const { user } = useAuth();
+  const list = useLoad(() => api.get(`/api/brands/${brand.id}/templates`), [brand.id]);
+  const [thumbs, setThumbs] = useState({});
+  const [busy, setBusy] = useState(false);
+  const items = list.data || [];
+  const kept = value.length ? value : items.map((i) => i.id);
+  const toggle = (id) => {
+    const next = kept.includes(id) ? kept.filter((x) => x !== id) : [...kept, id];
+    if (!next.length) return;
+    onChange(next.length === items.length ? [] : next);
+  };
+  const loadThumbs = async () => {
+    setBusy(true);
+    const language = user?.org?.language || 'ar';
+    const queue = [...items];
+    const worker = async () => {
+      while (queue.length) {
+        const it = queue.shift();
+        try {
+          const r = await api.post(`/api/brands/${brand.id}/preview`, { kind: 'cover', variant: 0, template: it.id, language });
+          setThumbs((x) => ({ ...x, [it.id]: r.image }));
+        } catch { /* skip */ }
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+    setBusy(false);
+  };
+  return (
+    <div className="card card-pad stack">
+      <div className="field-head">
+        <h3 style={{ margin: 0 }}><LayoutTemplate size={16} /> {t('templates_title')}</h3>
+        <Button size="sm" icon={Eye} busy={busy} disabled={!items.length} onClick={loadThumbs}>{t('templates_preview')}</Button>
+      </div>
+      <p className="xs muted" style={{ marginTop: -8 }}>{t('templates_hint')} — {kept.length}/{items.length}</p>
+      <div className="row" style={{ gap: 8 }}>
+        <Button size="sm" icon={CheckSquare} onClick={() => onChange([])}>{t('select_all')}</Button>
+      </div>
+      <div className="tpl-grid">
+        {items.map((it) => {
+          const on = kept.includes(it.id);
+          return (
+            <button type="button" key={it.id} className={`tpl-item ${on ? 'on' : ''}`} onClick={() => toggle(it.id)}>
+              <div className="tpl-thumb">{thumbs[it.id] ? <img src={thumbs[it.id]} alt="" /> : <LayoutTemplate size={22} />}</div>
+              <span>{on ? <CheckSquare size={14} /> : <Square size={14} />} {it[lang] || it.en}</span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="xs muted">{t('templates_save_hint')}</p>
     </div>
   );
 }

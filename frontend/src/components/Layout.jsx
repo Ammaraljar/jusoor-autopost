@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Suspense } from 'react';
 import { Loading } from './ui';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { BarChart3, CalendarDays, Eye, Globe, Images, Inbox, Languages, LogOut, Menu, Moon, Palette, Rss, Settings,
+import { BarChart3, CalendarDays, Eye, Globe, Images, Inbox, Languages, LogOut, Mail, Menu, Moon, Palette, Rss, Settings, ShoppingBag,
   Shield, Sun, SunMoon, Target, Users } from 'lucide-react';
 import { api, getActingOrg, setActingOrg } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -42,6 +42,8 @@ export default function Layout() {
     { to: '/calendar', icon: CalendarDays, label: t('nav_calendar') },
     editor && { to: '/campaigns', icon: Target, label: t('nav_campaigns') },
     editor && { to: '/library', icon: Images, label: t('nav_library') },
+    editor && org?.industry !== 'news' && { to: '/products', icon: ShoppingBag, label: t('nav_products') },
+    editor && { to: '/newsletters', icon: Mail, label: t('nav_newsletters') },
     editor && { to: '/brand', icon: Palette, label: t('nav_brand') },
     { to: '/stats', icon: BarChart3, label: t('nav_stats') },
     can('owner') && { to: '/team', icon: Users, label: t('nav_team') },
