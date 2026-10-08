@@ -68,7 +68,7 @@ export default function Layout() {
         </div>
         {isSuperadmin && orgs.length > 1 && (
           <div style={{ padding: '0 14px 10px' }}>
-            <select className="select" style={{ fontSize: 13 }} value={getActingOrg() || org?.id || ''}
+            <select className="select org-switch" value={getActingOrg() || org?.id || ''}
               onChange={(e) => switchOrg(e.target.value)} aria-label={t('switch_company')}>
               {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}{o.status !== 'active' ? ` (${t('suspended')})` : ''}</option>)}
             </select>
