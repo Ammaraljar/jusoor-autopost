@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import RequireOwner, RequireUser, RequireWriter
 from ..db import Brand, Contact, ContactList, Delivery, Newsletter, current_org, get_db, session_scope, utcnow
-from ..services import mailer, newsletter, newsletter_types, pipeline
+from ..services import generator, mailer, newsletter, newsletter_types, pipeline
 
 router = APIRouter(prefix="/api", tags=["newsletters"], dependencies=[RequireUser, RequireWriter])
 public = APIRouter(prefix="/api/t", tags=["tracking"])
@@ -339,6 +339,11 @@ def _out(db: Session, nl: Newsletter, full: bool = False) -> dict:
     return out
 
 
+@router.get("/newsletters/fonts")
+def newsletter_fonts(language: str = "ar"):
+    return newsletter.font_options(language if language in ("ar", "en", "ms", "fr") else "ar")
+
+
 @router.get("/newsletters/designs")
 def designs(db: Session = Depends(get_db)):
     return newsletter.designs_for(_family(db))
@@ -385,6 +390,7 @@ class NewsletterIn(BaseModel):
     event: EventIn | None = None
     poll: PollIn | None = None
     language: str | None = Field(None, pattern="^(ar|en|ms|fr)$")
+    font: str = ""
     list_ids: list[int] = []
     topic: str = ""
     draft_ids: list[int] = []
@@ -407,8 +413,9 @@ def create_newsletter(body: NewsletterIn, background: BackgroundTasks, db: Sessi
     if body.poll and body.poll.question.strip() and [o for o in body.poll.options if o.strip()]:
         extra["poll"] = {"question": body.poll.question.strip(),
                          "options": [o.strip() for o in body.poll.options if o.strip()][:6]}
+    font = body.font if body.font in newsletter.EMAIL_FONTS else ""
     nl = Newsletter(subject=body.subject.strip() or body.topic.strip(), design=design, language=lang, kind=kind,
-                    list_ids=body.list_ids, status="generating", content={})
+                    font=font, list_ids=body.list_ids, status="generating", content={})
     db.add(nl)
     db.flush()
     nid = nl.id
@@ -439,6 +446,7 @@ class NewsletterPatch(BaseModel):
     content: dict | None = None
     list_ids: list[int] | None = None
     language: str | None = Field(None, pattern="^(ar|en|ms|fr)$")
+    font: str | None = None
 
 
 @router.patch("/newsletters/{nid}")
@@ -451,10 +459,37 @@ def update_newsletter(nid: int, body: NewsletterPatch, db: Session = Depends(get
         data.pop("design")
     if data.get("kind") and data["kind"] not in newsletter_types.TYPES:
         data.pop("kind")
+    if "font" in data and data["font"] not in newsletter.EMAIL_FONTS:
+        data["font"] = ""
     for k, v in data.items():
         if v is not None:
             setattr(nl, k, v)
     return _out(db, nl, full=True)
+
+
+class TranslateIn(BaseModel):
+    language: str = Field(..., pattern="^(ar|en|ms|fr)$")
+
+
+@router.post("/newsletters/{nid}/translate")
+def translate_newsletter(nid: int, body: TranslateIn, background: BackgroundTasks, db: Session = Depends(get_db)):
+    nl = _nl(db, nid)
+    if nl.status in ("sending", "sent", "generating"):
+        raise HTTPException(409, "لا يمكن تعديل هذه النشرة الآن")
+    if not generator.ai_available():
+        raise HTTPException(400, "الذكاء الاصطناعي غير مفعّل — أضف مفتاحًا من الإعدادات")
+    nl.status, nl.error = "generating", None
+    db.commit()
+
+    async def run() -> None:
+        try:
+            await newsletter.translate(nid, body.language)
+        except Exception as exc:  # noqa: BLE001
+            with session_scope() as s:
+                n = s.get(Newsletter, nid)
+                n.status, n.error = "draft", f"فشلت الترجمة: {exc}"[:1000]
+    background.add_task(run)
+    return {"ok": True}
 
 
 @router.delete("/newsletters/{nid}")
@@ -472,7 +507,7 @@ def delete_newsletter(nid: int, db: Session = Depends(get_db)):
 def duplicate(nid: int, db: Session = Depends(get_db)):
     src = _nl(db, nid)
     nl = Newsletter(subject=src.subject, preheader=src.preheader, design=src.design, language=src.language,
-                    kind=src.kind,
+                    kind=src.kind, font=src.font or "",
                     content=dict(src.content or {}), list_ids=list(src.list_ids or []), status="draft")
     db.add(nl)
     db.flush()
