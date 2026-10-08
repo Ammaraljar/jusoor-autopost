@@ -1038,5 +1038,10 @@
   "en": "AI is not enabled — add a key in Settings",
   "ms": "AI tidak didayakan — tambah kunci dalam Tetapan",
   "fr": "L’IA n’est pas activée — ajoutez une clé dans les Paramètres"
+ },
+ "SMTP: الخادم لا يستطيع الوصول إلى منفذ البريد — الاستضافة تحجب SMTP غالبًا. استخدم Brevo أو Resend بدلًا منه": {
+  "en": "SMTP: the server can’t reach the mail port — the hosting usually blocks SMTP. Use Brevo or Resend instead",
+  "ms": "SMTP: pelayan tidak dapat mencapai port mel — hos biasanya menyekat SMTP. Gunakan Brevo atau Resend",
+  "fr": "SMTP : le serveur ne peut pas joindre le port mail — l’hébergeur bloque souvent SMTP. Utilisez Brevo ou Resend"
  }
 }
