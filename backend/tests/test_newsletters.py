@@ -144,3 +144,47 @@ def test_brevo_payload_has_no_empty_headers(monkeypatch):
     assert "headers" not in calls[0]
     mailer.send(cfg, "a@x.test", "", "Hi", "<p>x</p>", "x", headers={"List-Unsubscribe": "<https://u>"})
     assert calls[1]["headers"]["List-Unsubscribe"] == "<https://u>"
+
+
+def test_links_without_scheme_and_live_preview(client):
+    assert newsletter.href("jusoortravel.com") == "https://jusoortravel.com"
+    assert newsletter.href("www.x.com/a?b=1") == "https://www.x.com/a?b=1"
+    assert newsletter.href("info@x.com") == "mailto:info@x.com"
+    assert newsletter.href("https://x.com") == "https://x.com"
+    nid = client.post("/api/newsletters", json={"topic": "Offers"}).json()["id"]
+    html = client.post(f"/api/newsletters/{nid}/preview", json={"content": {
+        "headline": "Live", "cta_text": "Book", "cta_url": "jusoortravel.com",
+        "sections": [{"title": "S", "text": "T", "link": "jusoortravel.com/offer", "button": "See"}]}}).json()["html"]
+    assert 'href="https://jusoortravel.com"' in html and "https://jusoortravel.com/offer" in html and "Live" in html
+    assert client.get(f"/api/newsletters/{nid}").json()["content"].get("headline") != "Live"   # not saved
+
+
+def test_post_newsletter_has_no_source_link_and_uses_own_photos(client, monkeypatch):
+    from app.db import Brand, Draft, MediaAsset
+    with session_scope() as db:
+        b = db.query(Brand).first()
+        b.website = "https://jusoortravel.com"
+        d = Draft(hook="Langkawi", caption="Great island.\n\nالمصدر: The Star\n🔗 https://thestar.com/x",
+                  source_url="https://thestar.com/x", source_name="The Star", status="approved")
+        db.add(d)
+        db.add(MediaAsset(url="https://cdn.test/lib/langkawi-beach.jpg", title="Langkawi beach", tags="langkawi island"))
+        db.add(MediaAsset(url="https://cdn.test/lib/office.jpg", title="Office", tags="team"))
+        db.flush()
+        did = d.id
+    seen = {}
+
+    async def fake(system, user, tool, max_tokens=0):
+        seen["user"] = user
+        n = next(int(line.split(":")[0][1:]) for line in user.splitlines() if line.startswith("P") and "Langkawi beach" in line)
+        return {"subject": "S", "preheader": "", "headline": "H", "intro": "I", "cta_text": "Go", "hero_image": n,
+                "sections": [{"title": "Langkawi", "text": "T", "ref": 1, "image": n}]}
+    monkeypatch.setattr(newsletter.generator, "ai_available", lambda: True)
+    monkeypatch.setattr(newsletter.generator, "_call_model", fake)
+    nid = client.post("/api/newsletters", json={"kind": "roundup", "draft_ids": [did]}).json()["id"]
+    c = client.get(f"/api/newsletters/{nid}").json()["content"]
+    assert "thestar" not in seen["user"] and "The Star" not in seen["user"]
+    assert c["sections"][0]["link"] == "" and c["hero_image"] == "https://cdn.test/lib/langkawi-beach.jpg"
+    assert c["sections"][0]["image"] == ""            # same photo is not reused
+    with session_scope() as db:                       # leave the shared library as it was
+        for a in db.query(MediaAsset).filter(MediaAsset.url.like("https://cdn.test/lib/%")):
+            db.delete(a)
