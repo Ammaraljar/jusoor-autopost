@@ -1,103 +1,214 @@
-/* ====== Photo-first cards: the photo is the content, text sits on a soft shade only ====== */
+/* ====== Card templates: 18 complete looks, the photo always leads ====== */
 .theme-photo {{ background: #111; }}
 .theme-photo .bg {{ filter: none; transform: none; }}
-.theme-photo h1, .theme-photo h2, .theme-photo p {{ color: #fff; }}
 .theme-photo mark {{ background: none; color: var(--gold-light); }}
+.tx-light mark {{ color: var(--card-heading); }}
 
-/* shades: dark only where the words are, the rest of the photo stays clear */
+/* ---------- shared pieces ---------- */
 .scrim {{ position: absolute; inset: 0; pointer-events: none; }}
-.scrim-bottom {{ background:
-  linear-gradient(180deg, rgba(0,0,0,.32) 0%, rgba(0,0,0,0) 15%),
-  linear-gradient(0deg, rgba(var(--navy-rgb),.92) 0%, rgba(var(--navy-rgb),.66) 28%, rgba(var(--navy-rgb),.26) 50%, rgba(var(--navy-rgb),0) 64%); }}
-.scrim-cover {{ background:
-  linear-gradient(180deg, rgba(0,0,0,.32) 0%, rgba(0,0,0,0) 15%),
-  linear-gradient(0deg, rgba(var(--navy-rgb),.94) 0%, rgba(var(--navy-rgb),.72) 30%, rgba(var(--navy-rgb),.34) 55%, rgba(var(--navy-rgb),0) 72%); }}
-.scrim-top {{ background:
-  linear-gradient(180deg, rgba(var(--navy-rgb),.90) 0%, rgba(var(--navy-rgb),.62) 26%, rgba(var(--navy-rgb),.16) 46%, rgba(var(--navy-rgb),0) 56%),
-  linear-gradient(0deg, rgba(0,0,0,.30) 0%, rgba(0,0,0,0) 12%); }}
-.scrim-both {{ background:
-  linear-gradient(180deg, rgba(var(--navy-rgb),.85) 0%, rgba(var(--navy-rgb),.45) 22%, rgba(var(--navy-rgb),0) 36%),
-  linear-gradient(0deg, rgba(var(--navy-rgb),.88) 0%, rgba(var(--navy-rgb),.5) 22%, rgba(var(--navy-rgb),0) 38%); }}
-.scrim-center {{ background:
-  radial-gradient(ellipse 85% 42% at 50% 56%, rgba(var(--navy-rgb),.72) 0%, rgba(var(--navy-rgb),.38) 55%, rgba(var(--navy-rgb),0) 100%),
-  linear-gradient(180deg, rgba(0,0,0,.30) 0%, rgba(0,0,0,0) 15%); }}
-.scrim-cta-center {{ background:
-  radial-gradient(ellipse 80% 60% at 50% 50%, rgba(var(--navy-rgb),.74) 0%, rgba(var(--navy-rgb),.45) 60%, rgba(var(--navy-rgb),.2) 100%); }}
-.scrim-cta-bottom {{ background:
-  linear-gradient(0deg, rgba(var(--navy-rgb),.94) 0%, rgba(var(--navy-rgb),.72) 34%, rgba(var(--navy-rgb),.2) 56%, rgba(var(--navy-rgb),0) 66%); }}
-
-/* top: the one small logo + slide counter */
 .pf-top {{ position: absolute; top: 54px; inset-inline: 64px; display: flex; align-items: center;
-  justify-content: space-between; z-index: 3; }}
-.pf-top .logo img {{ height: 76px; }}
+  justify-content: space-between; z-index: 6; }}
 .pf-top.logo-end {{ flex-direction: row-reverse; }}
-.pf-count {{ font-size: 34px; font-weight: 900; color: #fff; direction: ltr; text-shadow: 0 2px 10px rgba(0,0,0,.5); }}
-.pf-count small {{ font-size: 24px; opacity: .7; font-weight: 700; }}
+.pf-top .logo img {{ height: 80px; }}
+.pf-pill {{ background: var(--gold); color: var(--navy); font-weight: 900; font-size: 32px; padding: 12px 34px;
+  border-radius: 999px; box-shadow: 0 8px 22px rgba(0,0,0,.25); }}
+.pf-count {{ font-size: 34px; font-weight: 900; color: #fff; direction: ltr; text-shadow: 0 2px 10px rgba(0,0,0,.55); }}
+.pf-count small {{ font-size: 24px; opacity: .75; font-weight: 700; }}
 
-/* kicker and accent rule */
-.pf-kicker {{ display: inline-flex; align-items: center; gap: 14px; font-size: 30px; font-weight: 800;
-  color: var(--gold-light); margin-bottom: 22px; text-shadow: 0 2px 12px rgba(0,0,0,.65); }}
-.pf-kicker svg {{ width: 34px; height: 34px; fill: var(--gold-light); flex: none; filter: drop-shadow(0 2px 6px rgba(0,0,0,.5)); }}
-.pf-rule {{ width: 96px; height: 8px; border-radius: 8px; background: var(--gold); margin: 24px 0 0; }}
+.tx {{ position: absolute; z-index: 4; color: #fff; }}
+.tx-cover {{ font-size: 88px; }}
+.tx-content {{ font-size: 60px; }}
+.tx h1 {{ font-size: 1em; line-height: 1.22; font-weight: 900; color: #fff; text-shadow: 0 4px 24px rgba(0,0,0,.30); }}
+.tx h2 {{ font-size: 1em; line-height: 1.3; font-weight: 900; color: #fff; text-shadow: 0 3px 18px rgba(0,0,0,.30); }}
+.tx p {{ font-size: .68em; line-height: 1.65; font-weight: 600; margin-top: .4em; color: rgba(255,255,255,.95);
+  text-shadow: 0 2px 12px rgba(0,0,0,.30); }}
+.tx .pf-sub {{ font-size: .44em; line-height: 1.55; margin-top: .55em; }}
+.pf-kicker {{ display: inline-flex; align-items: center; gap: .4em; font-size: .36em; font-weight: 800;
+  color: var(--gold-light); margin-bottom: .55em; text-shadow: 0 2px 12px rgba(0,0,0,.6); }}
+.tx-content .pf-kicker {{ font-size: .5em; }}
+.pf-kicker svg {{ width: 1.1em; height: 1.1em; fill: currentColor; flex: none; }}
+.pf-rule {{ width: 110px; height: 8px; border-radius: 8px; background: var(--gold); margin-top: .3em; }}
 .pf-rule.squiggle {{ width: 190px; height: 22px; background: none; border-radius: 0; }}
 .pf-rule.squiggle path {{ fill: none; stroke: var(--gold); stroke-width: 6; stroke-linecap: round; }}
 .pf-rule.stripes {{ width: auto; height: auto; background: none; display: flex; gap: 10px; }}
 .pf-rule.stripes i {{ width: 46px; height: 12px; background: var(--gold); transform: skewX(-30deg); display: block; }}
 .pf-rule.stripes i:nth-child(2) {{ opacity: .7; }} .pf-rule.stripes i:nth-child(3) {{ opacity: .4; }}
+.pf-num {{ font-size: .62em; font-weight: 900; color: var(--gold-light); margin-bottom: .2em;
+  display: flex; align-items: center; gap: 16px; }}
+.pf-num::after {{ content: ""; width: 80px; height: 4px; background: var(--gold); border-radius: 4px; }}
+.tx-light h1, .tx-light h2 {{ color: var(--card-title); text-shadow: none; }}
+.tx-light .tx p {{ color: var(--card-text); text-shadow: none; }}
+.tx-light .pf-kicker, .tx-light .pf-num {{ color: var(--card-heading); text-shadow: none; }}
 
-/* cover */
-.pf-cover {{ position: absolute; inset-inline: 72px; bottom: 150px; font-size: 88px; z-index: 2; }}
-.pf-cover h1 {{ font-size: 1em; line-height: 1.22; font-weight: 900; text-shadow: 0 4px 26px rgba(0,0,0,.35); }}
-.pf-cover .pf-kicker {{ font-size: .36em; }}
-.pf-cover .pf-kicker svg {{ width: 1.1em; height: 1.1em; }}
-.pf-sub {{ margin-top: 22px; font-size: .42em; font-weight: 600; line-height: 1.55; color: rgba(255,255,255,.92) !important; }}
-.pf-cover-top {{ top: 190px; bottom: auto; }}
-.pf-cover-center {{ top: 50%; bottom: auto; transform: translateY(-36%); text-align: center; }}
-.pf-cover-center .pf-kicker {{ justify-content: center; }}
-.pf-cover-center .pf-rule {{ margin-inline: auto; }}
-.pf-cover-poster {{ font-size: 118px; bottom: 140px; }}
-.pf-cover-poster h1 {{ line-height: 1.08; }}
-.lang-en .pf-cover-poster h1, .lang-fr .pf-cover-poster h1, .lang-ms .pf-cover-poster h1 {{ text-transform: uppercase; letter-spacing: -1px; }}
-.pf-foot {{ position: absolute; inset-inline: 72px; bottom: 60px; display: flex; justify-content: space-between;
-  align-items: center; font-size: 26px; font-weight: 700; color: rgba(255,255,255,.88); z-index: 2; }}
-.pf-credit {{ font-size: 24px; font-weight: 600; opacity: .85; }}
-.pf-swipe {{ font-weight: 800; color: #fff; letter-spacing: .5px; }}
-.pf-swipe b {{ color: var(--gold-light); font-size: 34px; margin-inline-start: 6px; }}
-.cover-top .pf-foot, .cover-center .pf-foot {{ text-shadow: 0 2px 10px rgba(0,0,0,.6); }}
-/* frame: thin lines inset from the edges, the photo stays whole */
-.pf-frame i {{ position: absolute; border-color: var(--gold); border-style: solid; border-width: 0; z-index: 1; }}
-.pf-frame i:nth-child(1) {{ top: 32px; left: 32px; right: 32px; border-top-width: 3px; }}
-.pf-frame i:nth-child(2) {{ bottom: 32px; left: 32px; right: 32px; border-bottom-width: 3px; }}
-.pf-frame i:nth-child(3) {{ top: 32px; bottom: 32px; left: 32px; border-left-width: 3px; }}
-.pf-frame i:nth-child(4) {{ top: 32px; bottom: 32px; right: 32px; border-right-width: 3px; }}
-.cover-frame .pf-top {{ top: 70px; inset-inline: 80px; }}
-.cover-frame .pf-cover {{ inset-inline: 90px; bottom: 160px; }}
-.cover-frame .pf-foot {{ inset-inline: 90px; bottom: 74px; }}
-/* label: newsroom style block label + ticker line */
-.cover-label .pf-kicker {{ background: var(--gold); color: #fff; padding: 10px 26px; border-radius: 4px; }}
-.cover-label .pf-kicker svg {{ fill: #fff; }}
-.pf-ticker {{ position: absolute; left: 0; right: 0; bottom: 0; height: 14px; background: var(--gold); }}
+.pf-foot {{ position: absolute; inset-inline: 64px; bottom: 54px; display: flex; justify-content: space-between;
+  align-items: center; gap: 20px; font-size: 28px; font-weight: 800; color: #fff; z-index: 6;
+  text-shadow: 0 2px 10px rgba(0,0,0,.5); }}
+.pf-handle {{ color: var(--gold-light); direction: ltr; unicode-bidi: isolate; }}
+.pf-credit {{ font-size: 22px; font-weight: 600; opacity: .85; flex: 1; text-align: center; }}
+.pf-swipe {{ background: var(--gold); color: var(--navy); padding: 14px 32px; border-radius: 999px; font-weight: 900;
+  font-size: 30px; text-shadow: none; white-space: nowrap; box-shadow: 0 8px 22px rgba(0,0,0,.25); }}
+.pf-swipe b {{ font-size: 32px; margin-inline-start: 6px; }}
+.pf-dots {{ display: flex; gap: 10px; direction: ltr; }}
+.pf-dots i {{ width: 14px; height: 14px; border-radius: 50%; background: rgba(255,255,255,.55); display: block; }}
+.pf-dots i.on {{ width: 40px; border-radius: 10px; background: var(--gold); }}
+.foot-card .pf-foot {{ color: var(--card-title); text-shadow: none; }}
+.foot-card .pf-handle {{ color: var(--card-heading); }}
+.foot-card .pf-dots i {{ background: rgba(var(--navy-rgb),.25); }}
+.foot-card .pf-dots i.on {{ background: var(--gold); }}
 
-/* content slides: text over the photo, never inside a box */
-.pf-text {{ position: absolute; inset-inline: 72px; z-index: 2; font-size: 60px; }}
-.pf-text h2 {{ font-size: 1em; line-height: 1.28; font-weight: 900; color: #fff; text-shadow: 0 3px 20px rgba(0,0,0,.35); }}
-.pf-text p {{ font-size: .68em; line-height: 1.62; font-weight: 600; margin-top: 22px; color: rgba(255,255,255,.95);
-  text-shadow: 0 2px 14px rgba(0,0,0,.35); }}
-.pf-lower, .pf-edge, .pf-numeral, .pf-chip {{ bottom: 100px; }}
-.pf-upper {{ top: 180px; }}
-.pf-split-head {{ top: 176px; }}
-.pf-split-body {{ bottom: 100px; font-size: 60px; }}
-.pf-split-body p {{ margin-top: 0; }}
-.pf-edge {{ border-inline-start: 10px solid var(--gold); padding-inline-start: 40px; }}
-.pf-num {{ font-size: 2.6em; line-height: .9; font-weight: 900; color: transparent; -webkit-text-stroke: 4px var(--gold-light);
-  direction: ltr; margin-bottom: 18px; }}
-html[dir="rtl"] .pf-num {{ text-align: right; }}
-.pf-chip-head {{ display: inline-block; background: var(--gold); padding: 8px 26px 12px; border-radius: 10px; margin-bottom: 4px; }}
-.pf-chip-head h2 {{ color: var(--navy); text-shadow: none; font-size: .82em; }}
-.pf-progress {{ position: absolute; left: 0; right: 0; bottom: 0; height: 10px; background: rgba(255,255,255,.22); z-index: 3; }}
-.pf-progress i {{ display: block; height: 100%; background: var(--gold); }}
+/* default shades (dark only where the words are) */
+.scrim {{ background:
+  linear-gradient(180deg, rgba(var(--navy-rgb),.42) 0%, rgba(var(--navy-rgb),0) 17%),
+  linear-gradient(0deg, rgba(var(--navy-rgb),.94) 0%, rgba(var(--navy-rgb),.72) 30%, rgba(var(--navy-rgb),.3) 52%, rgba(var(--navy-rgb),0) 68%); }}
+.scrim-glass, .scrim-navy, .scrim-side, .scrim-leaf, .scrim-ticket, .scrim-diagonal, .scrim-band, .scrim-postcard,
+.scrim-wave {{ background:
+  linear-gradient(180deg, rgba(var(--navy-rgb),.42) 0%, rgba(var(--navy-rgb),0) 17%),
+  linear-gradient(0deg, rgba(var(--navy-rgb),.55) 0%, rgba(var(--navy-rgb),0) 30%); }}
+.scrim-topbar {{ background: linear-gradient(0deg, rgba(var(--navy-rgb),.6) 0%, rgba(var(--navy-rgb),0) 22%); }}
+.scrim-centered {{ background:
+  radial-gradient(ellipse 88% 46% at 50% 55%, rgba(var(--navy-rgb),.74) 0%, rgba(var(--navy-rgb),.4) 55%, rgba(var(--navy-rgb),0) 100%),
+  linear-gradient(180deg, rgba(var(--navy-rgb),.4) 0%, rgba(var(--navy-rgb),0) 16%),
+  linear-gradient(0deg, rgba(var(--navy-rgb),.5) 0%, rgba(var(--navy-rgb),0) 18%); }}
 
-/* last slide: the one big logo */
+/* ---------- 1 magazine: full photo, big bold title, gold swipe ---------- */
+.tpl-magazine .tx {{ inset-inline: 72px; bottom: 170px; }}
+.tpl-magazine .tx-cover {{ font-size: 94px; }}
+.tpl-magazine .pf-rule {{ display: none; }}
+.tpl-magazine .tx-content {{ bottom: 150px; }}
+
+/* ---------- 2 glass: light frosted card, gold frame + white halo ---------- */
+.tpl-glass .tx {{ inset-inline: 56px; bottom: 140px; background: var(--card-bg); backdrop-filter: blur(16px);
+  border-radius: 40px; padding: 56px 60px; border: 5px solid var(--gold); outline: 3px solid rgba(255,255,255,.8);
+  outline-offset: 8px; box-shadow: 0 22px 60px rgba(0,0,0,.28); }}
+.tpl-glass .tx-cover {{ font-size: 76px; }}
+.tpl-glass .tx-in {{ display: flex; flex-direction: column; }}
+.tpl-glass .pf-rule {{ order: -1; margin: 0 0 .35em; }}
+.tpl-glass .tx-content .pf-rule, .tpl-navy .tx-content .pf-rule {{ display: none; }}
+
+/* ---------- 3 navy: deep brand card with a gold top edge ---------- */
+.tpl-navy .tx {{ inset-inline: 56px; bottom: 140px; background: rgba(var(--navy-rgb),.94); border-radius: 40px;
+  padding: 56px 60px; border-top: 12px solid var(--gold); box-shadow: 0 22px 60px rgba(0,0,0,.3); }}
+.tpl-navy .tx-cover {{ font-size: 78px; }}
+.tpl-navy .tx-in {{ display: flex; flex-direction: column; }}
+.tpl-navy .pf-rule {{ order: -1; margin: 0 0 .35em; }}
+.tpl-navy .tx h1, .tpl-navy .tx h2, .tpl-navy .tx p {{ text-shadow: none; }}
+
+/* ---------- 4 diagonal: gold slash + light panel ---------- */
+.dz-diag i {{ position: absolute; inset: 0; z-index: 2; }}
+.dz-diag .g {{ background: var(--gold); clip-path: polygon(0 66%, 100% 57%, 100% 62%, 0 71%); }}
+.dz-diag .p {{ background: var(--card-solid); clip-path: polygon(0 71%, 100% 62%, 100% 100%, 0 100%); }}
+.tpl-diagonal .tx {{ inset-inline: 72px; bottom: 150px; }}
+.tpl-diagonal .tx-cover {{ font-size: 70px; }}
+.tpl-diagonal .tx-content {{ font-size: 52px; }}
+.tpl-diagonal .pf-rule {{ display: none; }}
+
+/* ---------- 5 editorial: icon kicker + rule, nothing over the photo ---------- */
+.tpl-editorial .tx {{ inset-inline: 72px; bottom: 160px; }}
+
+/* ---------- 6 ribbon: title on gold ribbons ---------- */
+.tpl-ribbon .tx {{ inset-inline: 64px; bottom: 170px; }}
+.tpl-ribbon .tx-cover {{ font-size: 80px; }}
+.tpl-ribbon .tx h1, .tpl-ribbon .tx h2 {{ display: inline; background: var(--gold); color: var(--navy);
+  padding: 2px 22px; line-height: 1.68; border-radius: 10px; -webkit-box-decoration-break: clone;
+  box-decoration-break: clone; text-shadow: none; }}
+.tpl-ribbon .tx mark {{ color: #fff; }}
+.tpl-ribbon .pf-rule {{ display: none; }}
+.tpl-ribbon .tx p {{ margin-top: .8em; }}
+
+/* ---------- 7 side: glass panel on the reading side, photo free on the other ---------- */
+.tpl-side .tx {{ inset-inline-start: 0; width: 70%; bottom: 140px; background: rgba(255,255,255,.9);
+  backdrop-filter: blur(12px); padding: 56px 56px 56px 64px; border-inline-end: 12px solid var(--gold);
+  border-start-end-radius: 46px; border-end-end-radius: 46px; box-shadow: 0 20px 56px rgba(0,0,0,.24); }}
+.tpl-side .tx-cover {{ font-size: 66px; }}
+.tpl-side .tx-content {{ font-size: 50px; }}
+
+/* ---------- 8 band: full-width cream band with a gold edge ---------- */
+.tpl-band .tx {{ left: 0; right: 0; bottom: 0; background: var(--card-solid); border-top: 12px solid var(--gold);
+  padding: 56px 72px 150px; box-shadow: 0 -12px 40px rgba(0,0,0,.18); }}
+.tpl-band .tx-cover {{ font-size: 70px; }}
+.tpl-band .tx-content {{ font-size: 52px; }}
+
+/* ---------- 9 frame: thin gold frame inset from the edges ---------- */
+.dz-frame {{ position: absolute; inset: 30px; border: 3px solid var(--gold); z-index: 3; border-radius: 6px; }}
+.tpl-frame .pf-top {{ top: 70px; inset-inline: 80px; }}
+.tpl-frame .tx {{ inset-inline: 90px; bottom: 170px; }}
+.tpl-frame .pf-foot {{ inset-inline: 90px; bottom: 70px; }}
+
+/* ---------- 10 postcard: white border around the photo, caption below ---------- */
+.dz-postcard {{ position: absolute; inset: 0; border: 28px solid #FBF8F0; z-index: 3; pointer-events: none; }}
+.tpl-postcard .tx {{ left: 0; right: 0; bottom: 0; background: #FBF8F0; padding: 40px 76px 140px; }}
+.tpl-postcard .tx-cover {{ font-size: 70px; }}
+.tpl-postcard .tx-content {{ font-size: 52px; }}
+.tpl-postcard .pf-top {{ top: 66px; inset-inline: 74px; }}
+.tpl-postcard .pf-rule {{ height: 4px; width: 160px; }}
+
+/* ---------- 11 ticket: compact boarding pass ---------- */
+.tpl-ticket .tx {{ inset-inline: 56px; bottom: 140px; background: #fff; border-radius: 30px; overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0,0,0,.3); }}
+.tpl-ticket .tx-cover {{ font-size: 70px; }}
+.tpl-ticket .tx-content {{ font-size: 52px; }}
+.tk-head {{ height: 1.6em; font-size: 60px; background: var(--navy); display: flex; align-items: center; gap: 18px;
+  padding: 0 46px; color: #fff; border-bottom: 4px dashed rgba(255,255,255,.4); }}
+.tk-head svg {{ width: 44px; height: 44px; fill: var(--gold-light); }}
+.tk-head span {{ font-size: 30px; font-weight: 800; flex: 1; letter-spacing: .5px; }}
+.tk-head b {{ font-size: 52px; color: var(--gold-light); direction: ltr; }}
+.tpl-ticket .tx-in {{ padding: 34px 50px 40px; }}
+.tpl-ticket .pf-rule {{ display: none; }}
+
+/* ---------- 12 medallion: gold medal with the number ---------- */
+.tpl-medallion .tx {{ inset-inline: 72px; bottom: 160px; }}
+.pf-medal {{ width: 2.2em; height: 2.2em; font-size: 64px; border-radius: 50%; background: var(--gold); color: var(--navy);
+  display: flex; align-items: center; justify-content: center; font-weight: 900; margin-bottom: 26px; direction: ltr;
+  border: 8px solid rgba(255,255,255,.85); box-shadow: 0 12px 30px rgba(0,0,0,.3); }}
+.pf-medal svg {{ width: 1em; height: 1em; fill: var(--navy); }}
+.tpl-medallion .pf-rule {{ display: none; }}
+
+/* ---------- 13 topbar: title in a brand band at the top, photo free below ---------- */
+.dz-topbar {{ position: absolute; inset: 0; background: rgba(var(--navy-rgb),.95); z-index: 2;
+  clip-path: polygon(0 0, 100% 0, 100% 40%, 0 46%); }}
+.dz-topbar::after {{ content: ""; position: absolute; inset: 0; background: var(--gold); clip-path: polygon(0 46%, 100% 40%, 100% 41%, 0 47%); }}
+.tpl-topbar .tx {{ inset-inline: 72px; top: 175px; }}
+.tpl-topbar .tx-cover {{ font-size: 70px; }}
+.tpl-topbar .tx-content {{ font-size: 50px; }}
+.tpl-topbar .tx h1, .tpl-topbar .tx h2, .tpl-topbar .tx p {{ text-shadow: none; }}
+
+/* ---------- 14 leaf: card with two round corners and a medal ---------- */
+.tpl-leaf .tx {{ inset-inline: 56px; bottom: 140px; background: var(--card-bg); border-radius: 100px 20px 100px 20px;
+  padding: 60px 64px 52px; box-shadow: 0 24px 60px rgba(0,0,0,.25); }}
+.tpl-leaf .tx-cover {{ font-size: 74px; }}
+.tpl-leaf .pf-rule {{ width: 90px; }}
+
+/* ---------- 15 stripe: thick gold stripe along the text ---------- */
+.tpl-stripe .tx {{ inset-inline: 72px; bottom: 160px; border-inline-start: 14px solid var(--gold); padding-inline-start: 40px; }}
+.tpl-stripe .pf-rule {{ display: none; }}
+
+/* ---------- 16 centered: centred title between thin lines ---------- */
+.tpl-centered .tx {{ inset-inline: 80px; top: 50%; transform: translateY(-40%); text-align: center; }}
+.tpl-centered .pf-kicker {{ justify-content: center; letter-spacing: 1px; }}
+.tpl-centered .pf-kicker::before, .tpl-centered .pf-kicker::after {{ content: ""; width: 70px; height: 2px; background: var(--gold-light); }}
+.tpl-centered .pf-rule {{ margin-inline: auto; height: 3px; width: 200px; }}
+.tpl-centered .pf-num {{ justify-content: center; }}
+.tpl-centered .pf-num::after {{ display: none; }}
+
+/* ---------- 17 wave: brand wave rising from the bottom ---------- */
+.dz-wave {{ position: absolute; left: 0; right: 0; bottom: 0; height: 40%; z-index: 2; }}
+.dz-wave i {{ position: absolute; left: 0; right: 0; top: 138px; bottom: 0; background: rgba(var(--navy-rgb),.96); }}
+.dz-wave svg {{ position: absolute; left: 0; right: 0; top: 0; width: 100%; height: 140px; fill: rgba(var(--navy-rgb),.96); }}
+.tpl-wave .tx {{ inset-inline: 72px; bottom: 140px; }}
+.tpl-wave .tx-cover {{ font-size: 70px; }}
+.tpl-wave .tx-content {{ font-size: 52px; }}
+.tpl-wave .tx h1, .tpl-wave .tx h2, .tpl-wave .tx p {{ text-shadow: none; }}
+
+/* ---------- 18 outline: open gold frame around the words ---------- */
+.tpl-outline .tx {{ inset-inline: 60px; bottom: 150px; border: 5px solid var(--gold); border-radius: 34px; padding: 50px 54px; }}
+.tpl-outline .tx-cover {{ font-size: 78px; }}
+.tpl-outline .pf-rule {{ display: none; }}
+
+/* =================== last slide: the one big logo =================== */
+.scrim-cta-center {{ background:
+  radial-gradient(ellipse 80% 60% at 50% 50%, rgba(var(--navy-rgb),.74) 0%, rgba(var(--navy-rgb),.45) 60%, rgba(var(--navy-rgb),.2) 100%); }}
+.scrim-cta-bottom {{ background:
+  linear-gradient(0deg, rgba(var(--navy-rgb),.94) 0%, rgba(var(--navy-rgb),.72) 34%, rgba(var(--navy-rgb),.2) 56%, rgba(var(--navy-rgb),0) 66%); }}
 .pf-cta {{ position: absolute; z-index: 2; display: flex; flex-direction: column; }}
 .pf-cta-center {{ inset: 0; align-items: center; justify-content: center; text-align: center; padding: 100px 90px; }}
 .pf-cta-bottom {{ inset-inline: 80px; bottom: 90px; align-items: flex-start; }}
@@ -106,8 +217,8 @@ html[dir="rtl"] .pf-num {{ text-align: right; }}
 .pf-cta-bottom .pf-cta-logo .logo img {{ height: 120px; }}
 .pf-cta-bottom .pf-cta-logo .logo .wordmark {{ font-size: 64px; }}
 .pf-cta-logo {{ margin-bottom: 44px; }}
-.pf-cta h1 {{ font-size: 70px; font-weight: 900; line-height: 1.25; text-shadow: 0 3px 18px rgba(0,0,0,.45); }}
-.pf-cta p {{ font-size: 36px; font-weight: 600; margin-top: 20px; opacity: .94; text-shadow: 0 2px 12px rgba(0,0,0,.45); }}
+.pf-cta h1 {{ font-size: 70px; font-weight: 900; line-height: 1.25; color: #fff; text-shadow: 0 3px 18px rgba(0,0,0,.45); }}
+.pf-cta p {{ font-size: 36px; font-weight: 600; margin-top: 20px; opacity: .94; color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.45); }}
 .pf-button {{ margin-top: 40px; background: var(--gold); color: var(--navy); font-weight: 900; font-size: 40px;
   padding: 20px 60px; border-radius: 999px; direction: ltr; unicode-bidi: isolate; }}
 .pf-site {{ margin-top: 26px; font-size: 32px; color: var(--gold-light); direction: ltr; font-weight: 700; }}
@@ -116,72 +227,22 @@ html[dir="rtl"] .pf-num {{ text-align: right; }}
   font-weight: 800; color: #fff; border: 2px solid rgba(255,255,255,.55); }}
 .pf-act svg {{ width: 30px; height: 30px; fill: var(--gold-light); }}
 
-/* =================== field families: same photo-first rules, different voice =================== */
-/* news: tight, factual, block labels */
-.fam-news .pf-kicker {{ background: var(--gold); color: #fff; padding: 8px 22px; border-radius: 3px; font-weight: 900; }}
-.fam-news .pf-kicker svg {{ fill: #fff; }}
-.fam-news .pf-rule {{ width: 100%; height: 4px; border-radius: 0; opacity: .9; }}
-.fam-news .pf-cover h1 {{ line-height: 1.16; }}
-.fam-news .pf-edge {{ border-inline-start-width: 14px; }}
-/* tech: precise, corner brackets instead of full frames, gradient rule */
+/* =================== field voice: kicker and accent styles =================== */
+.fam-news .pf-kicker {{ background: var(--gold); color: #fff; padding: .2em .6em; border-radius: 3px; font-weight: 900; text-shadow: none; }}
 .fam-tech .pf-kicker span::before {{ content: "// "; opacity: .7; }}
 .fam-tech .pf-rule {{ width: 220px; height: 6px; background: linear-gradient(90deg, var(--gold), rgba(255,255,255,0)); }}
 html[dir="rtl"] .fam-tech .pf-rule {{ background: linear-gradient(270deg, var(--gold), rgba(255,255,255,0)); }}
-.fam-tech .pf-frame i {{ width: 120px; height: 120px; border-width: 0 !important; }}
-.fam-tech .pf-frame i:nth-child(1) {{ top: 32px; left: 32px; right: auto; bottom: auto; border-top-width: 5px !important; border-left-width: 5px !important; }}
-.fam-tech .pf-frame i:nth-child(2) {{ top: 32px; right: 32px; left: auto; bottom: auto; border-top-width: 5px !important; border-right-width: 5px !important; }}
-.fam-tech .pf-frame i:nth-child(3) {{ bottom: 32px; left: 32px; top: auto; right: auto; border-bottom-width: 5px !important; border-left-width: 5px !important; }}
-.fam-tech .pf-frame i:nth-child(4) {{ bottom: 32px; right: 32px; top: auto; left: auto; border-bottom-width: 5px !important; border-right-width: 5px !important; }}
-.fam-tech .pf-chip-head {{ border-radius: 2px; }}
-/* food: warm, round, playful */
-.fam-food .pf-kicker {{ border: 3px solid var(--gold-light); padding: 6px 22px; border-radius: 999px; }}
-.fam-food .pf-chip-head {{ border-radius: 999px; padding: 8px 34px 12px; }}
-.fam-food .pf-num {{ -webkit-text-stroke: 0; color: var(--gold-light); }}
-/* education + training: structured, trustworthy */
-.fam-education .pf-num, .fam-training .pf-num {{ font-size: 1.4em; -webkit-text-stroke: 0; color: var(--navy);
-  background: var(--gold); width: 1.6em; height: 1.6em; border-radius: 50%; display: flex; align-items: center;
-  justify-content: center; }}
-.fam-training .pf-rule {{ height: 3px; width: 160px; box-shadow: 0 9px 0 var(--gold); margin-bottom: 9px; }}
-.fam-training .pf-frame i {{ border-width: 0 !important; }}
-.fam-training .pf-frame i:nth-child(1) {{ border-top-width: 2px !important; }}
-.fam-training .pf-frame i:nth-child(2) {{ border-bottom-width: 2px !important; }}
-.fam-training .pf-frame i:nth-child(3) {{ border-left-width: 2px !important; }}
-.fam-training .pf-frame i:nth-child(4) {{ border-right-width: 2px !important; }}
-/* nonprofit: human, quote marks, numbers that matter */
-.fam-nonprofit .pf-cover h1::before, .fam-nonprofit .pf-lower h2::before {{ content: "“"; display: block; font-size: 2.4em;
-  line-height: .9; height: .5em; color: var(--gold); font-family: Georgia, serif; margin-bottom: 10px; }}
-.fam-nonprofit mark {{ color: var(--gold-light); font-size: 1.1em; }}
-.fam-nonprofit .pf-rule {{ display: none; }}
-/* retail: tag labels, punchy */
-.fam-retail .pf-kicker {{ background: var(--gold); color: var(--navy); padding: 8px 26px 8px 22px; border-radius: 6px;
+.fam-food .pf-kicker {{ border: 3px solid currentColor; padding: .15em .6em; border-radius: 999px; }}
+.fam-retail .pf-kicker {{ background: var(--gold); color: var(--navy); padding: .2em .8em .2em .6em; text-shadow: none;
   clip-path: polygon(0 0, 92% 0, 100% 50%, 92% 100%, 0 100%); }}
-html[dir="rtl"] .fam-retail .pf-kicker {{ clip-path: polygon(8% 0, 100% 0, 100% 100%, 8% 100%, 0 50%); padding: 8px 22px 8px 30px; }}
-.fam-retail .pf-kicker svg {{ fill: var(--navy); }}
-/* luxury (real estate), fashion, beauty: thin lines, air, letter-spacing */
+html[dir="rtl"] .fam-retail .pf-kicker {{ clip-path: polygon(8% 0, 100% 0, 100% 100%, 8% 100%, 0 50%); padding: .2em .6em .2em .8em; }}
 .fam-luxury .pf-rule, .fam-fashion .pf-rule, .fam-beauty .pf-rule {{ height: 2px; width: 170px; border-radius: 0; }}
 .fam-luxury .pf-kicker, .fam-fashion .pf-kicker, .fam-beauty .pf-kicker {{ letter-spacing: 3px; font-weight: 700; }}
 .lang-en.fam-luxury .pf-kicker, .lang-en.fam-fashion .pf-kicker, .lang-fr.fam-luxury .pf-kicker,
 .lang-fr.fam-fashion .pf-kicker, .lang-ms.fam-luxury .pf-kicker, .lang-ms.fam-fashion .pf-kicker {{ text-transform: uppercase; letter-spacing: 6px; }}
-.fam-luxury .pf-cover h1, .fam-beauty .pf-cover h1 {{ font-weight: 700; }}
-.fam-luxury .pf-frame i, .fam-beauty .pf-frame i {{ border-width: 0; }}
-.fam-luxury .pf-frame i:nth-child(1), .fam-beauty .pf-frame i:nth-child(1) {{ border-top-width: 1.5px; }}
-.fam-luxury .pf-frame i:nth-child(2), .fam-beauty .pf-frame i:nth-child(2) {{ border-bottom-width: 1.5px; }}
-.fam-luxury .pf-frame i:nth-child(3), .fam-beauty .pf-frame i:nth-child(3) {{ border-left-width: 1.5px; }}
-.fam-luxury .pf-frame i:nth-child(4), .fam-beauty .pf-frame i:nth-child(4) {{ border-right-width: 1.5px; }}
-.fam-fashion .pf-num {{ -webkit-text-stroke: 2px #fff; }}
-.fam-beauty .pf-chip-head, .fam-health .pf-chip-head {{ border-radius: 999px; }}
-/* health: calm, soft pills */
-.fam-health .pf-kicker {{ background: rgba(255,255,255,.92); color: var(--navy); padding: 8px 24px; border-radius: 999px; }}
-.fam-health .pf-kicker svg {{ fill: var(--gold); }}
-.fam-health .pf-rule {{ border-radius: 999px; }}
-/* auto: speed, slants */
-.fam-auto .pf-cover h1, .fam-auto .pf-text h2 {{ font-style: italic; }}
-.fam-auto .pf-kicker {{ background: var(--gold); color: #fff; padding: 8px 28px; transform: skewX(-12deg); }}
-.fam-auto .pf-kicker svg {{ fill: #fff; }}
-.fam-auto .pf-chip-head {{ transform: skewX(-10deg); border-radius: 0; }}
-/* events: date-board energy */
+.fam-health .pf-kicker {{ background: rgba(255,255,255,.92); color: var(--navy); padding: .2em .7em; border-radius: 999px; text-shadow: none; }}
+.fam-auto .tx h1, .fam-auto .tx h2 {{ font-style: italic; }}
+.fam-auto .pf-kicker {{ background: var(--gold); color: #fff; padding: .2em .8em; transform: skewX(-12deg); text-shadow: none; }}
 .fam-events .pf-kicker {{ border-inline-start: 8px solid var(--gold); padding-inline-start: 18px; }}
-.fam-events .pf-num {{ -webkit-text-stroke: 0; color: var(--gold-light); }}
-/* travel: editorial, golden-hour accents */
-.fam-travel .pf-kicker {{ letter-spacing: 1px; }}
-.fam-travel .pf-rule {{ width: 120px; height: 5px; }}
+.fam-nonprofit .tpl-editorial .tx h1::before, .fam-nonprofit.tpl-editorial .tx h1::before {{ content: "“"; display: block;
+  font-size: 1.6em; line-height: .9; height: .5em; color: var(--gold); font-family: Georgia, serif; }}

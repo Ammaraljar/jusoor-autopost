@@ -273,39 +273,32 @@ def sample_background(kind: str) -> bytes:
 
 
 # ------------------------------------------------------------------ design rotation
-# Photo-first card families: the photo is always the full-bleed hero; text sits on a soft shade,
-# never inside a box that hides the photo. Each field (industry) has its own family of looks.
-LAYOUT_ORDER = ["lower", "edge", "numeral", "chip", "upper", "split"]
-COVER_ORDER = ["hero", "top", "frame"]
-FAMILY_COVERS: dict[str, list[str]] = {
-    "travel": ["hero", "frame", "center"], "news": ["label", "hero", "top"], "tech": ["frame", "hero", "top"],
-    "food": ["hero", "center", "top"], "education": ["hero", "top", "frame"], "training": ["frame", "hero", "center"],
-    "nonprofit": ["center", "hero", "top"], "retail": ["label", "hero", "center"], "luxury": ["center", "frame", "hero"],
-    "fashion": ["poster", "center", "frame"], "health": ["hero", "top", "center"], "beauty": ["center", "frame", "poster"],
-    "auto": ["poster", "hero", "label"], "events": ["label", "hero", "frame"], "general": ["hero", "top", "frame"],
-}
-FAMILIES = list(FAMILY_COVERS)
-DESIGN_COUNT = 18      # 6 colour sets x 6 layouts, 3 covers — every one is used before any repeats
+# Card templates: 18 complete looks (cover + content slides). Every redesign moves to the next
+# template of the company's own order, and all 18 are used before any of them comes back.
+TEMPLATES = ["magazine", "glass", "navy", "diagonal", "editorial", "ribbon", "side", "band", "frame",
+             "postcard", "ticket", "medallion", "topbar", "leaf", "stripe", "centered", "wave", "outline"]
+FAMILIES = ["travel", "news", "tech", "food", "education", "training", "nonprofit", "retail", "luxury",
+            "fashion", "health", "beauty", "auto", "events", "general"]
+DESIGN_COUNT = len(TEMPLATES)
 
 
 def design(index: int, navy: str = BRAND_NAVY, gold: str = BRAND_GOLD, seed: int = 0,
            family: str = "general") -> dict[str, Any]:
     """Design #index of the company's own rotation (its seed shuffles the order, so every company
-    gets its own sequence). Consecutive designs always change colour set and text layout."""
+    gets its own sequence). Consecutive designs always change template and colour set."""
     import random
-    family = family if family in FAMILY_COVERS else "general"
+    family = family if family in FAMILIES else "general"
     rnd = random.Random(seed or 0)
     variants = brand_variants(navy, gold)
     v_order = list(range(len(variants)))
-    l_order = list(LAYOUT_ORDER)
-    c_order = list(FAMILY_COVERS[family])
+    t_order = list(TEMPLATES)
     rnd.shuffle(v_order)
-    rnd.shuffle(l_order)
-    rnd.shuffle(c_order)
+    rnd.shuffle(t_order)
     i = index % DESIGN_COUNT
     out = dict(variants[v_order[i % 6]])
-    out["layout"] = l_order[(i + i // 6) % 6]
-    out["cover"] = c_order[(i // 2 + i // 6) % 3]
+    out["template"] = t_order[i]
+    out["layout"] = out["template"]
+    out["cover"] = out["template"]
     out["cta"] = ["center", "bottom"][(i // 3) % 2]
     out["family"] = family
     out["design"] = i

@@ -156,3 +156,26 @@ def test_company_keys_override_platform_and_publish_keys_stay_private():
     finally:
         with use_org(None), session_scope() as db:
             credentials.save(db, {"mistral_api_key": None, "buffer_api_key": None}, scope="platform")
+
+
+def test_new_fields_languages_and_families(client):
+    from app.services import cards, industries
+    ids = {i["id"] for i in client.get("/api/auth/industries").json()}
+    assert {"training", "nonprofit"} <= ids
+    with session_scope() as db:
+        org, _ = tenancy.create_org(db, "Latih Sdn Bhd", "training", "ms")
+        oid = org.id
+    brand = client.get("/api/brands", headers={"X-Org-Id": str(oid)}).json()[0]
+    assert brand["cta_text"] == industries.INDUSTRIES["training"]["cta_ms"]
+    gen = client.get("/api/settings", headers={"X-Org-Id": str(oid)}).json()
+    assert gen["values"]["generation"]["language"] == "ms"
+    assert gen["options"]["languages"] == ["ar", "en", "ms", "fr"]
+    assert gen["options"]["dialects"] == ["fusha", "msa", "egyptian", "gulf", "maghreb"]
+    assert cards.FAMILY_OF_INDUSTRY["nonprofit"] == "nonprofit"
+    assert palette.design(0, family="news")["family"] == "news"
+
+
+def test_redesign_walks_through_every_template():
+    seen = [palette.design(i, seed=21, family="travel")["template"] for i in range(palette.DESIGN_COUNT)]
+    assert palette.DESIGN_COUNT >= 15 and len(set(seen)) == palette.DESIGN_COUNT
+    assert all(a != b for a, b in zip(seen, seen[1:]))

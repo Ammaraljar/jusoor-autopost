@@ -369,7 +369,7 @@ def test_only_engines_with_keys_take_part(client, monkeypatch):
     assert credentials.ensemble_engines(cfg) == ["mistral", "openrouter"]
     assert cfg["ai_primary"] == "mistral"                     # groq has no key → not used
     view = client.get("/api/settings/credentials").json()["values"]
-    assert view["ready"] == ["mistral", "openrouter"] and view["version"].startswith("3.")
+    assert view["ready"] == ["mistral", "openrouter"] and view["version"].startswith("4.")
     assert view["engines"]["groq"]["models"][0]["id"] == "openai/gpt-oss-120b"
 
 

@@ -104,6 +104,27 @@ def _highlight(text: str, words: list[str] | None) -> str:
     return out
 
 
+SWIPE_LONG = {"ar": "اسحب للمزيد", "en": "Swipe for more", "ms": "Leret seterusnya", "fr": "Glissez pour voir"}
+
+# template → (text sits on a light card?, footer sits on that card?, badge as a pill at the top?)
+TEMPLATE_SPEC: dict[str, tuple[bool, bool, bool]] = {
+    "magazine": (False, False, True), "glass": (True, False, True), "navy": (False, False, True),
+    "diagonal": (True, True, True), "editorial": (False, False, False), "ribbon": (False, False, True),
+    "side": (True, False, True), "band": (True, True, True), "frame": (False, False, False),
+    "postcard": (True, True, True), "ticket": (True, False, False), "medallion": (False, False, False),
+    "topbar": (False, False, True), "leaf": (True, False, True), "stripe": (False, False, False),
+    "centered": (False, False, False), "wave": (False, False, True), "outline": (False, False, True),
+}
+DECOR = {
+    "diagonal": '<div class="dz-diag"><i class="g"></i><i class="p"></i></div>',
+    "frame": '<div class="dz-frame"></div>',
+    "postcard": '<div class="dz-postcard"></div>',
+    "topbar": '<div class="dz-topbar"></div>',
+    "wave": ('<div class="dz-wave"><svg viewBox="0 0 1080 140" preserveAspectRatio="none">'
+             '<path d="M0,80 C200,0 380,140 600,70 C800,10 930,100 1080,50 L1080,140 L0,140 Z"/></svg><i></i></div>'),
+}
+
+
 def _rule(family: str) -> str:
     if family == "food":
         return ('<svg class="pf-rule squiggle" viewBox="0 0 200 20" preserveAspectRatio="none">'
@@ -113,6 +134,11 @@ def _rule(family: str) -> str:
     return '<div class="pf-rule"></div>'
 
 
+def _template(pal: dict) -> str:
+    t = pal.get("template") or pal.get("layout")
+    return t if t in TEMPLATE_SPEC else "magazine"
+
+
 def build(spec, brand, lang: str, logo_html: str, logo_plate_html: str, bg: str,
           logo_start: bool = True) -> tuple[str, str]:
     """HTML body content and body classes for one slide."""
@@ -120,12 +146,14 @@ def build(spec, brand, lang: str, logo_html: str, logo_plate_html: str, bg: str,
     family = pal.get("family") or getattr(brand, "family", None) or "general"
     if family not in _P:
         family = "general"
-    layout = pal.get("layout") if pal.get("layout") in ("lower", "edge", "numeral", "chip", "upper", "split") else "lower"
-    cover = pal.get("cover") if pal.get("cover") in ("hero", "top", "center", "frame", "label", "poster") else "hero"
+    tpl = _template(pal)
+    light, foot_on_card, use_pill = TEMPLATE_SPEC[tpl]
     cta = pal.get("cta") if pal.get("cta") in ("center", "bottom") else "center"
     lang = lang if lang in SWIPE else "en"
-    classes = f"theme-photo fam-{family} lang-{lang}"
+    classes = f"theme-photo tpl-{tpl} fam-{family} lang-{lang}" + (" tx-light" if light else "") \
+        + (" foot-card" if foot_on_card else "")
     content_total = max(spec.total - 2, 1)
+    handle = f'<span class="pf-handle">{_esc(brand.handle)}</span>' if brand.handle else "<span></span>"
 
     if spec.kind == "cta":
         site = f'<div class="pf-site">{_esc(brand.website)}</div>' if brand.website else ""
@@ -136,56 +164,54 @@ def build(spec, brand, lang: str, logo_html: str, logo_plate_html: str, bg: str,
                 f'<div class="pf-cta pf-cta-{cta}"><div class="pf-cta-logo">{logo_html}</div>'
                 f'<h1 data-fit="{"380" if cta == "center" else "300"},40">{_esc(spec.heading)}</h1>'
                 f'<p>{_esc(spec.body)}</p>{button}{site}<div class="pf-acts">{acts}</div></div>')
-        return body, f"{classes} kind-cta cta-{cta}"
+        return body, f"theme-photo fam-{family} lang-{lang} kind-cta cta-{cta}"
 
+    badge = BADGES[lang].get(spec.badge or "", "") if spec.badge else ""
     top = f'<div class="pf-top{"" if logo_start else " logo-end"}">{logo_plate_html}'
     if spec.kind == "content":
         top += f'<span class="pf-count">{spec.position:02d}<small>/{content_total:02d}</small></span>'
+    elif use_pill and badge:
+        top += f'<span class="pf-pill">{_esc(badge)}</span>'
     top += "</div>"
+    decor = DECOR.get(tpl, "")
+    number = f"{spec.position:02d}"
 
     if spec.kind == "cover":
-        badge = BADGES[lang].get(spec.badge or "", "") if spec.badge else ""
-        kicker_text = badge or FAMILY_KICKER[lang][family]
-        kicker = f'<div class="pf-kicker">{_icon(family)}<span>{_esc(kicker_text)}</span></div>'
-        credit = f'<span class="pf-credit">{CREDIT[lang]}: {_esc(spec.credit)}</span>' if spec.credit else "<span></span>"
+        kicker = "" if use_pill else (f'<div class="pf-kicker">{_icon(family)}'
+                                      f'<span>{_esc(badge or FAMILY_KICKER[lang][family])}</span></div>')
+        head = f'<h1>{_highlight(spec.heading, spec.highlight)}</h1>'
+        sub = f'<p class="pf-sub">{_esc(spec.body)}</p>'
+        credit = f'<span class="pf-credit">{CREDIT[lang]}: {_esc(spec.credit)}</span>' if spec.credit else ""
         arrow = "←" if lang == "ar" else "→"
-        foot = f'<div class="pf-foot">{credit}<span class="pf-swipe">{SWIPE[lang]} <b>{arrow}</b></span></div>'
-        frame = '<div class="pf-frame"><i></i><i></i><i></i><i></i></div>' if cover == "frame" else ""
-        fit = {"hero": "560,44", "top": "520,44", "center": "620,44", "frame": "520,44", "label": "560,44",
-               "poster": "640,48"}[cover]
-        text = (f'<div class="pf-cover pf-cover-{cover}" data-fit="{fit}">{kicker}'
-                f'<h1>{_highlight(spec.heading, spec.highlight)}</h1>{_rule(family)}'
-                f'<p class="pf-sub">{_esc(spec.body)}</p></div>')
-        ticker = '<div class="pf-ticker"></div>' if cover == "label" else ""
-        scrim = {"top": "top", "center": "center"}.get(cover, "cover")
-        return (f'{bg}<div class="scrim scrim-{scrim}"></div>{frame}{top}{text}{foot}{ticker}',
-                f"{classes} kind-cover cover-{cover}")
+        swipe = f'<span class="pf-swipe">{SWIPE_LONG[lang]} <b>{arrow}</b></span>'
+        foot = f'<div class="pf-foot">{handle}{credit}{swipe}</div>'
+        medal = f'<div class="pf-medal">{_icon(family)}</div>' if tpl == "medallion" else ""
+        tk = (f'<div class="tk-head">{_icon(family)}<span>{_esc(badge or FAMILY_KICKER[lang][family])}</span>'
+              '<b>✈</b></div>') if tpl == "ticket" else ""
+        if tpl == "ticket":
+            kicker = ""
+        text = (f'<div class="tx tx-cover" data-fit="{_fit(tpl, True)}">{tk}{medal}<div class="tx-in">{kicker}'
+                f'{head}{_rule(family)}{sub}</div></div>')
+        return (f'{bg}<div class="scrim scrim-{tpl}"></div>{decor}{top}{text}{foot}',
+                f"{classes} kind-cover")
 
     # content slide
-    progress = min(100, int(100 * spec.position / content_total))
-    foot = f'<div class="pf-progress"><i style="width:{progress}%"></i></div>'
-    head = f'<h2>{_esc(spec.heading)}</h2>'
-    para = f'<p>{_esc(spec.body)}</p>'
-    if layout == "split":
-        text = (f'<div class="pf-text pf-split-head" data-fit="260,34">{head}{_rule(family)}</div>'
-                f'<div class="pf-text pf-split-body" data-fit="330,28">{para}</div>')
-        scrim = "both"
-    elif layout == "upper":
-        text = f'<div class="pf-text pf-upper" data-fit="520,28">{head}{_rule(family)}{para}</div>'
-        scrim = "top"
-    elif layout == "numeral":
-        text = (f'<div class="pf-text pf-numeral" data-fit="560,28"><div class="pf-num">{spec.position:02d}</div>'
-                f'{head}{para}</div>')
-        scrim = "bottom"
-    elif layout == "chip":
-        text = (f'<div class="pf-text pf-chip" data-fit="540,28"><div class="pf-chip-head">{head}</div>'
-                f'{para}</div>')
-        scrim = "bottom"
-    elif layout == "edge":
-        text = f'<div class="pf-text pf-edge" data-fit="540,28">{head}{para}</div>'
-        scrim = "bottom"
-    else:
-        text = f'<div class="pf-text pf-lower" data-fit="540,28">{head}{_rule(family)}{para}</div>'
-        scrim = "bottom"
-    return (f'{bg}<div class="scrim scrim-{scrim}"></div>{top}{text}{foot}',
-            f"{classes} kind-content layout-{layout}")
+    dots = "".join(f'<i class="{"on" if i + 1 == spec.position else ""}"></i>' for i in range(content_total))
+    foot = f'<div class="pf-foot">{handle}<div class="pf-dots">{dots}</div></div>'
+    num = f'<div class="pf-num">{number}</div>'
+    tk = (f'<div class="tk-head">{_icon(family)}<span>{_esc(FAMILY_KICKER[lang][family])}</span>'
+          f'<b>{number}</b></div>') if tpl == "ticket" else ""
+    medal = f'<div class="pf-medal">{number}</div>' if tpl == "medallion" else ""
+    text = (f'<div class="tx tx-content" data-fit="{_fit(tpl, False)}">{tk}{medal}<div class="tx-in">'
+            f'{"" if tpl in ("ticket", "medallion") else num}<h2>{_esc(spec.heading)}</h2>{_rule(family)}'
+            f'<p>{_esc(spec.body)}</p></div></div>')
+    return (f'{bg}<div class="scrim scrim-{tpl}"></div>{decor}{top}{text}{foot}',
+            f"{classes} kind-content")
+
+
+def _fit(tpl: str, cover: bool) -> str:
+    """Max text height (px) and min font size for the auto-fit script."""
+    tall = {"topbar": 360, "side": 620, "centered": 640, "band": 600, "diagonal": 420, "postcard": 560,
+            "wave": 420, "ticket": 460, "glass": 640, "navy": 640, "leaf": 640, "outline": 640}
+    h = tall.get(tpl, 560 if cover else 600)
+    return f"{h},{40 if cover else 28}"

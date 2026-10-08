@@ -12,7 +12,15 @@ def test_prompt_carries_dialect_and_programme_rules():
                                     {"language": "ar", "dialect": "gulf", "purpose": "programs"})
     assert "Gulf" in p and "وايد" in p and "TOUR PROGRAMME" in p and "price is available on request" in p
     p2 = gen_mod.build_system_prompt(gen_mod.BrandContext(name="J"), {"language": "ar", "dialect": "algeria"})
-    assert "Algerian" in p2 and "TOUR PROGRAMME" not in p2
+    assert "Moroccan" in p2 and "TOUR PROGRAMME" not in p2          # retired dialect → Maghrebi
+    p3 = gen_mod.build_system_prompt(gen_mod.BrandContext(name="J"), {"language": "ar", "dialect": "egyptian"})
+    assert "Egyptian" in p3 and "دلوقتي" in p3
+    p4 = gen_mod.build_system_prompt(gen_mod.BrandContext(name="J"), {"language": "ar", "dialect": "fusha"})
+    assert "eloquent" in p4
+    p5 = gen_mod.build_system_prompt(gen_mod.BrandContext(name="J"), {"language": "ms"})
+    assert "Malay" in p5 and "Bahasa Melayu" in p5
+    p6 = gen_mod.build_system_prompt(gen_mod.BrandContext(name="J"), {"language": "fr"})
+    assert "French" in p6
 
 
 def test_programme_source_uses_stock_photos_and_dialect(client, monkeypatch):
