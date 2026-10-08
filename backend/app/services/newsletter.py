@@ -88,6 +88,23 @@ def _abs(url: str | None) -> str:
     return f"{base}/{url.lstrip('/')}" if base else url
 
 
+_DOMAIN = re.compile(r"^(www\.)?[\w-]+(\.[\w-]+)*\.[a-z]{2,}([/?#].*)?$", re.I)
+
+
+def href(url: str | None) -> str:
+    """A link the reader can click: "jusoortravel.com" becomes "https://jusoortravel.com"."""
+    url = (url or "").strip()
+    if not url:
+        return ""
+    if url.lower().startswith(("http://", "https://", "mailto:", "tel:", "#")):
+        return url
+    if "@" in url and " " not in url and "/" not in url:
+        return f"mailto:{url}"
+    if _DOMAIN.match(url):
+        return f"https://{url}"
+    return _abs(url)
+
+
 def _logo_url(brand: Brand, dark_background: bool) -> str:
     logos = pipeline.brand_logos(brand)
     want = "light" if dark_background else "color"
@@ -152,7 +169,7 @@ def render(nl: Newsletter, brand: Brand, family: str, token: str | None = None) 
     content = nl.content or {}
 
     def link(url: str) -> str:
-        url = _abs(url)
+        url = href(url)
         if token and url and base:
             return f"{base}/api/t/c/{token}?u={quote(url, safe='')}"
         return url or "#"
@@ -338,8 +355,10 @@ NEWSLETTER_TOOL = {
             "sections": {"type": "array", "items": {"type": "object", "properties": {
                 "title": {"type": "string"}, "text": {"type": "string", "description": "2-4 sentences."},
                 "button": {"type": "string", "description": "Short button label if the item has a link."},
-                "ref": {"type": "integer", "description": "Number of the material item this section is about, or 0."}},
+                "ref": {"type": "integer", "description": "Number of the material item this section is about, or 0."},
+                "image": {"type": "integer", "description": "Number of the best photo (P1, P2… → 1, 2…) or 0."}},
                 "required": ["title", "text"]}},
+            "hero_image": {"type": "integer", "description": "Number of the best photo for the top of the email, or 0."},
             "cta_title": {"type": "string", "description": "A short line above the main button."},
             "cta_text": {"type": "string", "description": "Main button label (2-4 words)."},
             "ps": {"type": "string", "description": "Optional P.S. line, or empty."},
@@ -352,17 +371,74 @@ NEWSLETTER_TOOL = {
 }
 
 
+_CREDIT = re.compile(r"^\s*(?:🔗|📰|(?:المصدر|مصدر|source|sumber|via)\b).*$", re.I | re.M)
+
+
+def _strip_credits(text: str | None) -> str:
+    """Post captions end with the news source and its link; a newsletter must not carry them."""
+    return re.sub(r"\n{3,}", "\n\n", _CREDIT.sub("", text or "")).strip()
+
+
+def _host(url: str | None) -> str:
+    from urllib.parse import urlparse
+    u = (url or "").strip()
+    if u and "://" not in u:
+        u = "https://" + u
+    return (urlparse(u).hostname or "").lower().removeprefix("www.")
+
+
+def _is_own_image(url: str | None, site: str, library: set[str]) -> bool:
+    if not url:
+        return False
+    if url in library or "/media/" in url:
+        return True
+    return bool(site and _host(url).endswith(site))
+
+
+def image_pool(db, hints: str, material: list[dict], limit: int = 30) -> list[dict]:  # noqa: ANN001
+    """Photos the company owns or publishes: its library, its products and its own website.
+    Ranked by how well their title/tags match the newsletter, so the AI picks from relevant ones."""
+    from ..db import Article, MediaAsset, Source
+    from .media import _words
+    wanted = _words(hints)
+    seen, pool = set(), []
+
+    def add(url, desc, origin):
+        if url and url not in seen and not url.lower().endswith((".svg", ".gif")):
+            seen.add(url)
+            pool.append({"url": url, "desc": (desc or "").strip()[:140], "origin": origin,
+                         "score": len(wanted & _words(desc))})
+    for m in material:
+        add(m.get("image"), m.get("title"), "item")
+    for a in db.scalars(select(MediaAsset).order_by(MediaAsset.created_at.desc()).limit(300)):
+        add(a.url, f"{a.title} {a.tags}", "library")
+    for p in db.scalars(select(Product).order_by(Product.id.desc()).limit(200)):
+        add(p.image_url, p.name, "product")
+    own = [s.id for s in db.scalars(select(Source).where(Source.purpose == "own_site"))]
+    if own:
+        for a in db.scalars(select(Article).where(Article.source_id.in_(own)).order_by(Article.id.desc()).limit(200)):
+            add(a.image_url, a.title, "website")
+    pool.sort(key=lambda x: (x["origin"] == "item", x["score"]), reverse=True)
+    return pool[:limit]
+
+
 def _material(db, draft_ids: list[int], product_ids: list[int], article_ids: list[int] | None = None) -> list[dict]:  # noqa: ANN001
-    from ..db import Article, Source
+    from ..db import Article, Brand as _Brand, MediaAsset, Source
     items = []
+    brand = db.scalar(select(_Brand).order_by(_Brand.is_default.desc(), _Brand.id))
+    site = _host(brand.website) if brand and brand.website else ""
+    library = {a.url for a in db.scalars(select(MediaAsset))}
     for a in db.scalars(select(Article).where(Article.id.in_(article_ids or [0]))):
         src = db.get(Source, a.source_id) if a.source_id else None
         items.append({"title": a.title, "text": (a.body or "")[:900], "image": a.image_url, "link": a.url,
                       "source": src.name if src else ""})
     for d in db.scalars(select(Draft).where(Draft.id.in_(draft_ids or [0]))):
         cover = next((s.image_url for s in sorted(d.slides, key=lambda s: s.position) if s.image_url), None)
-        items.append({"title": d.hook, "text": d.caption[:900], "image": cover,
-                      "link": d.link_url or d.source_url or ""})
+        own = bool(site and d.source_url and _host(d.source_url) == site)
+        items.append({"title": d.hook, "text": _strip_credits(d.caption)[:900],
+                      "image": cover if own or _is_own_image(cover, site, library) else "",
+                      # never the news source's link: only the post's own product/service link or our site
+                      "link": d.link_url or (d.source_url if own else "")})
     for p in db.scalars(select(Product).where(Product.id.in_(product_ids or [0]))):
         items.append({"title": p.name, "text": (p.description or "")[:700] + (f" — {p.price} {p.currency}" if p.price else ""),
                       "image": p.image_url, "link": p.url})
@@ -383,6 +459,7 @@ async def generate(newsletter_id: int, topic: str = "", draft_ids: list[int] | N
         kind = newsletter_types.get(nl.kind)
         sections = sections or kind["sections"]
         material = _material(db, draft_ids or [], product_ids or [], article_ids or [])
+        pool = image_pool(db, " ".join([topic] + [m["title"] for m in material]), material)
         ctx = pipeline.brand_context(brand)
         website = brand.website or ""
     listing = "\n".join(f"[{i}] {m['title']}" + (f" (source: {m['source']})" if m.get("source") else "")
@@ -395,6 +472,10 @@ async def generate(newsletter_id: int, topic: str = "", draft_ids: list[int] | N
             + (f"Material to feature (one section per item, set ref to its number):\n{listing}\n" if material
                else f"Write {sections} sections.\n")
             + ("Also write poll_question and 2-5 poll_options.\n" if kind.get("poll") and not extra.get("poll") else "")
+            + (("Photos you may use (the company's own; choose by their description, never at random). Set "
+                "hero_image and each section's image to the number of the photo that best fits it, or 0 if none "
+                "fits; do not reuse a photo:\n" + "\n".join(f"P{i}: {x['desc'] or '(no description)'}"
+                                                             for i, x in enumerate(pool, 1)) + "\n") if pool else "")
             + "Email style: personal, scannable, useful; short paragraphs; one clear main call to action. "
               "Use only facts from the material or the topic. Use the newsletter tool.")
     system = generator.build_system_prompt(ctx, gen).split("Writing playbook")[0] + \
@@ -405,6 +486,20 @@ async def generate(newsletter_id: int, topic: str = "", draft_ids: list[int] | N
         data = {"subject": topic or (material[0]["title"] if material else ctx.name), "preheader": "",
                 "headline": topic or ctx.name, "intro": "", "cta_text": "",
                 "sections": [{"title": m["title"], "text": m["text"][:300], "ref": i} for i, m in enumerate(material, 1)]}
+    used: set[str] = set()
+
+    def photo(n) -> str:  # noqa: ANN001
+        try:
+            n = int(n or 0)
+        except (TypeError, ValueError):
+            return ""
+        url = pool[n - 1]["url"] if 0 < n <= len(pool) else ""
+        if url in used:
+            return ""
+        if url:
+            used.add(url)
+        return url
+    hero = photo(data.get("hero_image"))
     secs = []
     for s in (data.get("sections") or [])[:8]:
         if not isinstance(s, dict):
@@ -413,8 +508,12 @@ async def generate(newsletter_id: int, topic: str = "", draft_ids: list[int] | N
         m = material[ref - 1] if isinstance(ref, int) and 0 < ref <= len(material) else {}
         secs.append({"title": generator._text(s.get("title")), "text": generator._text(s.get("text")),
                      "button": generator._text(s.get("button")) if m.get("link") else "",
-                     "image": m.get("image") or "", "link": m.get("link") or "", "source": m.get("source") or ""})
-    hero = next((m["image"] for m in material if m.get("image")), "")
+                     "image": photo(s.get("image")) or (m.get("image") if m.get("image") not in used else "") or "",
+                     "link": m.get("link") or "", "source": m.get("source") or ""})
+        if secs[-1]["image"]:
+            used.add(secs[-1]["image"])
+    if not hero:      # no AI choice: the best-matching photo, never a random one
+        hero = next((x["url"] for x in pool if x["url"] not in used and (x["score"] or x["origin"] == "item")), "")
     with session_scope() as db:
         nl = db.get(Newsletter, newsletter_id)
         nl.subject = generator._text(data.get("subject"))[:300] or nl.subject
