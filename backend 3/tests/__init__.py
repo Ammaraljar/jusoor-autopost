@@ -1,1 +1,0 @@
-"""Jusoor AutoPost package."""
