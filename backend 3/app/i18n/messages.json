@@ -1,0 +1,1027 @@
+{
+ "لا توجد طريقة دخول مضبوطة — أضف ADMIN_EMAIL و ADMIN_PASSWORD في الخادم": {
+  "en": "No sign-in method configured — add ADMIN_EMAIL and ADMIN_PASSWORD on the server",
+  "ms": "Tiada kaedah log masuk dikonfigurasi — tambah ADMIN_EMAIL dan ADMIN_PASSWORD pada pelayan",
+  "fr": "Aucune méthode de connexion configurée — ajoutez ADMIN_EMAIL et ADMIN_PASSWORD sur le serveur"
+ },
+ "SUPABASE_URL غير مضبوط في الخادم": {
+  "en": "SUPABASE_URL is not set on the server",
+  "ms": "SUPABASE_URL tidak ditetapkan pada pelayan",
+  "fr": "SUPABASE_URL n’est pas défini sur le serveur"
+ },
+ "SUPABASE_ANON_KEY غير مضبوط في الخادم": {
+  "en": "SUPABASE_ANON_KEY is not set on the server",
+  "ms": "SUPABASE_ANON_KEY tidak ditetapkan pada pelayan",
+  "fr": "SUPABASE_ANON_KEY n’est pas défini sur le serveur"
+ },
+ "SUPABASE_ANON_KEY يحتوي المفتاح السري (service_role / sb_secret) بدل مفتاح anon / publishable": {
+  "en": "SUPABASE_ANON_KEY contains the secret key (service_role / sb_secret) instead of the anon / publishable key",
+  "ms": "SUPABASE_ANON_KEY mengandungi kunci rahsia (service_role / sb_secret) dan bukan kunci anon / publishable",
+  "fr": "SUPABASE_ANON_KEY contient la clé secrète (service_role / sb_secret) au lieu de la clé anon / publishable"
+ },
+ "رد غير متوقع من Supabase: {}": {
+  "en": "Unexpected response from Supabase: {}",
+  "ms": "Respons tidak dijangka daripada Supabase: {}",
+  "fr": "Réponse inattendue de Supabase : {}"
+ },
+ "SUPABASE_URL في الخادم غير صحيح — يجب أن ينتهي عند .supabase.co بدون /rest/v1 أو أي مسار آخر": {
+  "en": "SUPABASE_URL on the server is incorrect — it must end at .supabase.co without /rest/v1 or any other path",
+  "ms": "SUPABASE_URL pada pelayan tidak betul — ia mesti berakhir dengan .supabase.co tanpa /rest/v1 atau laluan lain",
+  "fr": "SUPABASE_URL sur le serveur est incorrect — il doit se terminer par .supabase.co sans /rest/v1 ni aucun autre chemin"
+ },
+ "المفتاح مرفوض من Supabase — SUPABASE_ANON_KEY خاطئ أو يخص مشروعًا آخر": {
+  "en": "Key rejected by Supabase — SUPABASE_ANON_KEY is wrong or belongs to another project",
+  "ms": "Kunci ditolak oleh Supabase — SUPABASE_ANON_KEY salah atau milik projek lain",
+  "fr": "Clé refusée par Supabase — SUPABASE_ANON_KEY est incorrect ou appartient à un autre projet"
+ },
+ "SUPABASE_URL لا يشير إلى مشروع Supabase صحيح": {
+  "en": "SUPABASE_URL does not point to a valid Supabase project",
+  "ms": "SUPABASE_URL tidak menghala ke projek Supabase yang sah",
+  "fr": "SUPABASE_URL ne pointe pas vers un projet Supabase valide"
+ },
+ "SUPABASE_ANON_KEY في الخادم خاطئ أو يخص مشروعًا آخر": {
+  "en": "SUPABASE_ANON_KEY on the server is wrong or belongs to another project",
+  "ms": "SUPABASE_ANON_KEY pada pelayan salah atau milik projek lain",
+  "fr": "SUPABASE_ANON_KEY sur le serveur est incorrect ou appartient à un autre projet"
+ },
+ "انتهت صلاحية الجلسة أو أنها تخص مشروع Supabase آخر — افحص /api/health في الخادم": {
+  "en": "Session expired or belongs to another Supabase project — check /api/health on the server",
+  "ms": "Sesi telah tamat atau milik projek Supabase lain — semak /api/health pada pelayan",
+  "fr": "Session expirée ou liée à un autre projet Supabase — vérifiez /api/health sur le serveur"
+ },
+ "مطلوب تسجيل الدخول": {
+  "en": "Sign-in required",
+  "ms": "Log masuk diperlukan",
+  "fr": "Connexion requise"
+ },
+ "الحساب {} غير مسجّل في أي شركة": {
+  "en": "Account {} is not registered with any company",
+  "ms": "Akaun {} tidak didaftarkan dengan mana-mana syarikat",
+  "fr": "Le compte {} n’est rattaché à aucune entreprise"
+ },
+ "هذه الصفحة لإدارة المنصة فقط": {
+  "en": "This page is for platform administration only",
+  "ms": "Halaman ini untuk pentadbiran platform sahaja",
+  "fr": "Cette page est réservée à l’administration de la plateforme"
+ },
+ "تعذّر الوصول إلى Supabase: {}": {
+  "en": "Could not reach Supabase: {}",
+  "ms": "Tidak dapat menghubungi Supabase: {}",
+  "fr": "Impossible de joindre Supabase : {}"
+ },
+ "تعذّر الوصول إلى Supabase من الخادم: {}": {
+  "en": "Could not reach Supabase from the server: {}",
+  "ms": "Tidak dapat menghubungi Supabase dari pelayan: {}",
+  "fr": "Impossible de joindre Supabase depuis le serveur : {}"
+ },
+ "انتهت صلاحية الجلسة، سجّل الدخول من جديد": {
+  "en": "Session expired, please sign in again",
+  "ms": "Sesi telah tamat, sila log masuk semula",
+  "fr": "Session expirée, veuillez vous reconnecter"
+ },
+ "هذا الإجراء يحتاج صلاحية {}": {
+  "en": "This action requires {} permission",
+  "ms": "Tindakan ini memerlukan kebenaran {}",
+  "fr": "Cette action nécessite l’autorisation {}"
+ },
+ "صلاحية المراجع: الاعتماد والرفض فقط": {
+  "en": "Reviewer permission: approve and reject only",
+  "ms": "Kebenaran Penyemak: luluskan dan tolak sahaja",
+  "fr": "Autorisation Réviseur : approuver et refuser uniquement"
+ },
+ "حساب الشركة موقوف — تواصل مع إدارة المنصة": {
+  "en": "Company account suspended — contact platform administration",
+  "ms": "Akaun syarikat digantung — hubungi pentadbiran platform",
+  "fr": "Compte de l’entreprise suspendu — contactez l’administration de la plateforme"
+ },
+ "الحساب غير موجود أو موقوف": {
+  "en": "Account not found or suspended",
+  "ms": "Akaun tidak ditemui atau digantung",
+  "fr": "Compte introuvable ou suspendu"
+ },
+ "خطأ داخلي في الخادم: {}": {
+  "en": "Internal server error: {}",
+  "ms": "Ralat dalaman pelayan: {}",
+  "fr": "Erreur interne du serveur : {}"
+ },
+ "مزوّد نشر غير معروف: {}": {
+  "en": "Unknown publishing provider: {}",
+  "ms": "Penyedia penerbitan tidak dikenali: {}",
+  "fr": "Fournisseur de publication inconnu : {}"
+ },
+ "Buffer رفض المنشور": {
+  "en": "Buffer rejected the post",
+  "ms": "Buffer menolak siaran",
+  "fr": "Buffer a refusé la publication"
+ },
+ "لا توجد قناة {} مربوطة في Buffer": {
+  "en": "No {} channel connected in Buffer",
+  "ms": "Tiada saluran {} disambungkan dalam Buffer",
+  "fr": "Aucun canal {} connecté dans Buffer"
+ },
+ "لم يُحدَّد Facebook Page ID للعلامة": {
+  "en": "No Facebook Page ID set for this brand",
+  "ms": "Facebook Page ID belum ditetapkan untuk jenama ini",
+  "fr": "Aucun Facebook Page ID défini pour cette marque"
+ },
+ "لم يُحدَّد Instagram User ID للعلامة": {
+  "en": "No Instagram User ID set for this brand",
+  "ms": "Instagram User ID belum ditetapkan untuk jenama ini",
+  "fr": "Aucun Instagram User ID défini pour cette marque"
+ },
+ "Meta يدعم فيسبوك وإنستغرام فقط": {
+  "en": "Meta supports Facebook and Instagram only",
+  "ms": "Meta menyokong Facebook dan Instagram sahaja",
+  "fr": "Meta prend en charge uniquement Facebook et Instagram"
+ },
+ "منصة غير مدعومة في upload-post": {
+  "en": "Platform not supported by upload-post",
+  "ms": "Platform tidak disokong oleh upload-post",
+  "fr": "Plateforme non prise en charge par upload-post"
+ },
+ "لم يُحدَّد اسم مستخدم upload-post للعلامة": {
+  "en": "No upload-post username set for this brand",
+  "ms": "Nama pengguna upload-post belum ditetapkan untuk jenama ini",
+  "fr": "Aucun nom d’utilisateur upload-post défini pour cette marque"
+ },
+ "facebook_page_id مطلوب لـ upload-post": {
+  "en": "facebook_page_id is required for upload-post",
+  "ms": "facebook_page_id diperlukan untuk upload-post",
+  "fr": "facebook_page_id est requis pour upload-post"
+ },
+ "الدخول الداخلي غير مفعّل في الخادم": {
+  "en": "Internal sign-in is not enabled on the server",
+  "ms": "Log masuk dalaman tidak diaktifkan pada pelayan",
+  "fr": "La connexion interne n’est pas activée sur le serveur"
+ },
+ "محاولات دخول كثيرة — حاول مرة أخرى بعد {} دقيقة": {
+  "en": "Too many sign-in attempts — try again in {} minutes",
+  "ms": "Terlalu banyak cubaan log masuk — cuba lagi selepas {} minit",
+  "fr": "Trop de tentatives de connexion — réessayez dans {} minutes"
+ },
+ "التسجيل الذاتي متوقف — تواصل مع إدارة المنصة": {
+  "en": "Self-registration is disabled — contact platform administration",
+  "ms": "Pendaftaran sendiri dihentikan — hubungi pentadbiran platform",
+  "fr": "L’inscription libre est désactivée — contactez l’administration de la plateforme"
+ },
+ "محاولات تسجيل كثيرة — حاول لاحقًا": {
+  "en": "Too many registration attempts — try again later",
+  "ms": "Terlalu banyak cubaan pendaftaran — cuba lagi kemudian",
+  "fr": "Trop de tentatives d’inscription — réessayez plus tard"
+ },
+ "بريد إلكتروني غير صالح": {
+  "en": "Invalid email address",
+  "ms": "Alamat e-mel tidak sah",
+  "fr": "Adresse e-mail invalide"
+ },
+ "البريد أو كلمة المرور غير صحيحة": {
+  "en": "Incorrect email or password",
+  "ms": "E-mel atau kata laluan tidak betul",
+  "fr": "E-mail ou mot de passe incorrect"
+ },
+ "هذا البريد مسجّل مسبقًا — سجّل الدخول": {
+  "en": "This email is already registered — sign in",
+  "ms": "E-mel ini sudah didaftarkan — sila log masuk",
+  "fr": "Cet e-mail est déjà enregistré — connectez-vous"
+ },
+ "كلمة المرور الحالية غير صحيحة": {
+  "en": "Current password is incorrect",
+  "ms": "Kata laluan semasa tidak betul",
+  "fr": "Le mot de passe actuel est incorrect"
+ },
+ "اسم العلامة مطلوب": {
+  "en": "Brand name is required",
+  "ms": "Nama jenama diperlukan",
+  "fr": "Le nom de la marque est requis"
+ },
+ "العلامة غير موجودة": {
+  "en": "Brand not found",
+  "ms": "Jenama tidak ditemui",
+  "fr": "Marque introuvable"
+ },
+ "لا يمكن حذف العلامة الافتراضية": {
+  "en": "The default brand cannot be deleted",
+  "ms": "Jenama lalai tidak boleh dipadam",
+  "fr": "La marque par défaut ne peut pas être supprimée"
+ },
+ "ارفع الشعار بصيغة PNG شفافة أو SVG أو WEBP": {
+  "en": "Upload the logo as a transparent PNG, SVG or WEBP",
+  "ms": "Muat naik logo dalam format PNG lutsinar, SVG atau WEBP",
+  "fr": "Importez le logo au format PNG transparent, SVG ou WEBP"
+ },
+ "الحد الأقصى 3 ميغابايت للشعار": {
+  "en": "Maximum logo size is 3 MB",
+  "ms": "Saiz maksimum logo ialah 3 MB",
+  "fr": "Taille maximale du logo : 3 Mo"
+ },
+ "حتى 8 نسخ من الشعار": {
+  "en": "Up to 8 logo versions",
+  "ms": "Sehingga 8 versi logo",
+  "fr": "Jusqu’à 8 versions du logo"
+ },
+ "الشعار غير موجود": {
+  "en": "Logo not found",
+  "ms": "Logo tidak ditemui",
+  "fr": "Logo introuvable"
+ },
+ "الشريحة غير موجودة": {
+  "en": "Slide not found",
+  "ms": "Slaid tidak ditemui",
+  "fr": "Diapositive introuvable"
+ },
+ "المسودة غير موجودة": {
+  "en": "Draft not found",
+  "ms": "Draf tidak ditemui",
+  "fr": "Brouillon introuvable"
+ },
+ "إجراء غير معروف": {
+  "en": "Unknown action",
+  "ms": "Tindakan tidak dikenali",
+  "fr": "Action inconnue"
+ },
+ "منصة غير معروفة": {
+  "en": "Unknown platform",
+  "ms": "Platform tidak dikenali",
+  "fr": "Plateforme inconnue"
+ },
+ "المنشور بلا شرائح بعد": {
+  "en": "The post has no slides yet",
+  "ms": "Siaran belum mempunyai slaid",
+  "fr": "La publication n’a pas encore de diapositives"
+ },
+ "اختر وقتًا في المستقبل": {
+  "en": "Choose a time in the future",
+  "ms": "Pilih masa pada masa hadapan",
+  "fr": "Choisissez une heure dans le futur"
+ },
+ "اللهجات متاحة للمنشورات العربية فقط": {
+  "en": "Dialects are available for Arabic posts only",
+  "ms": "Dialek tersedia untuk siaran bahasa Arab sahaja",
+  "fr": "Les dialectes sont disponibles uniquement pour les publications en arabe"
+ },
+ "الحد الأقصى 15 ميغابايت": {
+  "en": "Maximum size is 15 MB",
+  "ms": "Saiz maksimum ialah 15 MB",
+  "fr": "Taille maximale : 15 Mo"
+ },
+ "الحد الأقصى 20 صورة في المرة الواحدة": {
+  "en": "Maximum 20 images at a time",
+  "ms": "Maksimum 20 imej pada satu masa",
+  "fr": "20 images maximum à la fois"
+ },
+ "حقل غير مدعوم": {
+  "en": "Unsupported field",
+  "ms": "Medan tidak disokong",
+  "fr": "Champ non pris en charge"
+ },
+ "لا يمكن نشر هذه المسودة في حالتها الحالية": {
+  "en": "This draft cannot be published in its current state",
+  "ms": "Draf ini tidak boleh diterbitkan dalam keadaan semasanya",
+  "fr": "Ce brouillon ne peut pas être publié dans son état actuel"
+ },
+ "اختر منصة واحدة على الأقل": {
+  "en": "Choose at least one platform",
+  "ms": "Pilih sekurang-kurangnya satu platform",
+  "fr": "Choisissez au moins une plateforme"
+ },
+ "لا يمكن النشر قبل إصلاح أخطاء فحص الجودة": {
+  "en": "Cannot publish until quality check errors are fixed",
+  "ms": "Tidak boleh menerbitkan sebelum ralat semakan kualiti dibaiki",
+  "fr": "Publication impossible tant que les erreurs du contrôle qualité ne sont pas corrigées"
+ },
+ "النص يتجاوز حد {} ({} حرف)": {
+  "en": "Text exceeds the {} limit ({} characters)",
+  "ms": "Teks melebihi had {} ({} aksara)",
+  "fr": "Le texte dépasse la limite de {} ({} caractères)"
+ },
+ "اختر صورة واحدة على الأقل": {
+  "en": "Choose at least one image",
+  "ms": "Pilih sekurang-kurangnya satu imej",
+  "fr": "Choisissez au moins une image"
+ },
+ "لا يوجد موعد فارغ يوم {} — اختر يومًا آخر أو ارفع عدد المنشورات اليومي": {
+  "en": "No free slot on {} — choose another day or raise the daily post count",
+  "ms": "Tiada slot kosong pada {} — pilih hari lain atau naikkan bilangan siaran harian",
+  "fr": "Aucun créneau libre le {} — choisissez un autre jour ou augmentez le nombre de publications par jour"
+ },
+ "فشل توليد النص: {}": {
+  "en": "Text generation failed: {}",
+  "ms": "Penjanaan teks gagal: {}",
+  "fr": "Échec de la génération du texte : {}"
+ },
+ "تعذّر قراءة الصورة — استخدم JPG أو PNG أو WEBP (صور HEIC من الآيفون: صدّرها كـ JPG أولًا)": {
+  "en": "Could not read the image — use JPG, PNG or WEBP (iPhone HEIC photos: export as JPG first)",
+  "ms": "Tidak dapat membaca imej — gunakan JPG, PNG atau WEBP (foto HEIC iPhone: eksport sebagai JPG dahulu)",
+  "fr": "Impossible de lire l’image — utilisez JPG, PNG ou WEBP (photos HEIC d’iPhone : exportez-les d’abord en JPG)"
+ },
+ "{}: الحد الأقصى 15 ميغابايت للصورة": {
+  "en": "{}: maximum image size is 15 MB",
+  "ms": "{}: saiz maksimum imej ialah 15 MB",
+  "fr": "{} : taille maximale de l’image : 15 Mo"
+ },
+ "مزوّد غير معروف: {}": {
+  "en": "Unknown provider: {}",
+  "ms": "Penyedia tidak dikenali: {}",
+  "fr": "Fournisseur inconnu : {}"
+ },
+ "تاريخ غير صالح": {
+  "en": "Invalid date",
+  "ms": "Tarikh tidak sah",
+  "fr": "Date invalide"
+ },
+ "{}: تعذّر قراءة الصورة — استخدم JPG أو PNG أو WEBP": {
+  "en": "{}: could not read the image — use JPG, PNG or WEBP",
+  "ms": "{}: tidak dapat membaca imej — gunakan JPG, PNG atau WEBP",
+  "fr": "{} : impossible de lire l’image — utilisez JPG, PNG ou WEBP"
+ },
+ "الحد الأقصى {} صورة في المرة الواحدة": {
+  "en": "Maximum {} images at a time",
+  "ms": "Maksimum {} imej pada satu masa",
+  "fr": "{} images maximum à la fois"
+ },
+ "أضف روابط تبدأ بـ https://": {
+  "en": "Add links starting with https://",
+  "ms": "Tambah pautan yang bermula dengan https://",
+  "fr": "Ajoutez des liens commençant par https://"
+ },
+ "الصورة غير موجودة": {
+  "en": "Image not found",
+  "ms": "Imej tidak ditemui",
+  "fr": "Image introuvable"
+ },
+ "تعذّر تحميل الصورة — تأكد أن الرابط عام (أي شخص لديه الرابط)": {
+  "en": "Could not download the image — make sure the link is public (anyone with the link)",
+  "ms": "Tidak dapat memuat turun imej — pastikan pautan adalah awam (sesiapa yang mempunyai pautan)",
+  "fr": "Impossible de télécharger l’image — vérifiez que le lien est public (toute personne disposant du lien)"
+ },
+ "تاريخ النهاية قبل تاريخ البداية": {
+  "en": "End date is before start date",
+  "ms": "Tarikh tamat sebelum tarikh mula",
+  "fr": "La date de fin précède la date de début"
+ },
+ "الحملة غير موجودة": {
+  "en": "Campaign not found",
+  "ms": "Kempen tidak ditemui",
+  "fr": "Campagne introuvable"
+ },
+ "العنصر غير موجود": {
+  "en": "Item not found",
+  "ms": "Item tidak ditemui",
+  "fr": "Élément introuvable"
+ },
+ "تم توليد مسودة لهذا الموضوع مسبقًا": {
+  "en": "A draft has already been generated for this topic",
+  "ms": "Draf telah pun dijana untuk topik ini",
+  "fr": "Un brouillon a déjà été généré pour ce sujet"
+ },
+ "رابط RSS مطلوب لمصادر RSS": {
+  "en": "RSS link is required for RSS sources",
+  "ms": "Pautan RSS diperlukan untuk sumber RSS",
+  "fr": "Un lien RSS est requis pour les sources RSS"
+ },
+ "أضف رابط صفحة الأخبار على الأقل": {
+  "en": "Add at least the news page link",
+  "ms": "Tambah sekurang-kurangnya pautan halaman berita",
+  "fr": "Ajoutez au moins le lien de la page d’actualités"
+ },
+ "أضف رابط موقعك الإلكتروني (أو احفظه في الهوية البصرية أولًا)": {
+  "en": "Add your website link (or save it in Brand identity first)",
+  "ms": "Tambah pautan laman web anda (atau simpannya dalam Identiti jenama dahulu)",
+  "fr": "Ajoutez le lien de votre site web (ou enregistrez-le d’abord dans Identité de marque)"
+ },
+ "المصدر غير موجود": {
+  "en": "Source not found",
+  "ms": "Sumber tidak ditemui",
+  "fr": "Source introuvable"
+ },
+ "توجد عملية سحب قيد التنفيذ": {
+  "en": "A fetch is already in progress",
+  "ms": "Proses pengumpulan sedang berjalan",
+  "fr": "Une collecte est déjà en cours"
+ },
+ "المقال غير موجود": {
+  "en": "Article not found",
+  "ms": "Artikel tidak ditemui",
+  "fr": "Article introuvable"
+ },
+ "{} يجب أن يبدأ بـ https://": {
+  "en": "{} must start with https://",
+  "ms": "{} mesti bermula dengan https://",
+  "fr": "{} doit commencer par https://"
+ },
+ "لا توجد طريقة دخول — أضف ADMIN_EMAIL و ADMIN_PASSWORD": {
+  "en": "No sign-in method — add ADMIN_EMAIL and ADMIN_PASSWORD",
+  "ms": "Tiada kaedah log masuk — tambah ADMIN_EMAIL dan ADMIN_PASSWORD",
+  "fr": "Aucune méthode de connexion — ajoutez ADMIN_EMAIL et ADMIN_PASSWORD"
+ },
+ "ADMIN_PASSWORD قصيرة جدًا — استخدم 8 أحرف على الأقل": {
+  "en": "ADMIN_PASSWORD is too short — use at least 8 characters",
+  "ms": "ADMIN_PASSWORD terlalu pendek — gunakan sekurang-kurangnya 8 aksara",
+  "fr": "ADMIN_PASSWORD est trop court — utilisez au moins 8 caractères"
+ },
+ "ALLOWED_EMAILS فارغ — أي حساب في مشروع Supabase يستطيع الدخول": {
+  "en": "ALLOWED_EMAILS is empty — any account in the Supabase project can sign in",
+  "ms": "ALLOWED_EMAILS kosong — mana-mana akaun dalam projek Supabase boleh log masuk",
+  "fr": "ALLOWED_EMAILS est vide — n’importe quel compte du projet Supabase peut se connecter"
+ },
+ "SUPABASE_SERVICE_ROLE_KEY غير مضبوط — رفع صور المنشورات سيفشل": {
+  "en": "SUPABASE_SERVICE_ROLE_KEY is not set — post image uploads will fail",
+  "ms": "SUPABASE_SERVICE_ROLE_KEY tidak ditetapkan — muat naik imej siaran akan gagal",
+  "fr": "SUPABASE_SERVICE_ROLE_KEY n’est pas défini — l’import des images des publications échouera"
+ },
+ "روابط الصور غير عامة — النشر على Meta أو Buffer سيفشل": {
+  "en": "Image links are not public — publishing to Meta or Buffer will fail",
+  "ms": "Pautan imej tidak awam — penerbitan ke Meta atau Buffer akan gagal",
+  "fr": "Les liens des images ne sont pas publics — la publication sur Meta ou Buffer échouera"
+ },
+ "مزوّد غير معروف": {
+  "en": "Unknown provider",
+  "ms": "Penyedia tidak dikenali",
+  "fr": "Fournisseur inconnu"
+ },
+ "محرّك غير معروف": {
+  "en": "Unknown AI engine",
+  "ms": "Enjin AI tidak dikenali",
+  "fr": "Moteur d’IA inconnu"
+ },
+ "تاريخ البداية بعد تاريخ النهاية": {
+  "en": "Start date is after end date",
+  "ms": "Tarikh mula selepas tarikh tamat",
+  "fr": "La date de début est postérieure à la date de fin"
+ },
+ "هذا ليس ملف نسخة احتياطية من النظام": {
+  "en": "This is not a system backup file",
+  "ms": "Ini bukan fail sandaran sistem",
+  "fr": "Ce n’est pas un fichier de sauvegarde du système"
+ },
+ "إعداد Supabase غير صحيح": {
+  "en": "Supabase configuration is incorrect",
+  "ms": "Konfigurasi Supabase tidak betul",
+  "fr": "Configuration Supabase incorrecte"
+ },
+ "قسم إعدادات غير معروف": {
+  "en": "Unknown settings section",
+  "ms": "Bahagian tetapan tidak dikenali",
+  "fr": "Section de paramètres inconnue"
+ },
+ "لا توجد شركة": {
+  "en": "No company",
+  "ms": "Tiada syarikat",
+  "fr": "Aucune entreprise"
+ },
+ "مجال غير معروف": {
+  "en": "Unknown scope",
+  "ms": "Skop tidak dikenali",
+  "fr": "Portée inconnue"
+ },
+ "وصلت الشركة للحد الأقصى من المستخدمين ({})": {
+  "en": "The company has reached its maximum number of users ({})",
+  "ms": "Syarikat telah mencapai had maksimum pengguna ({})",
+  "fr": "L’entreprise a atteint le nombre maximal d’utilisateurs ({})"
+ },
+ "هذا البريد مستخدم في حساب آخر": {
+  "en": "This email is used by another account",
+  "ms": "E-mel ini digunakan oleh akaun lain",
+  "fr": "Cet e-mail est utilisé par un autre compte"
+ },
+ "المستخدم غير موجود": {
+  "en": "User not found",
+  "ms": "Pengguna tidak ditemui",
+  "fr": "Utilisateur introuvable"
+ },
+ "يجب أن يبقى مالك واحد على الأقل للشركة": {
+  "en": "The company must keep at least one owner",
+  "ms": "Syarikat mesti mempunyai sekurang-kurangnya seorang pemilik",
+  "fr": "L’entreprise doit conserver au moins un propriétaire"
+ },
+ "لا يمكنك حذف حسابك": {
+  "en": "You cannot delete your own account",
+  "ms": "Anda tidak boleh memadam akaun anda sendiri",
+  "fr": "Vous ne pouvez pas supprimer votre propre compte"
+ },
+ "بريد المالك مستخدم في حساب آخر": {
+  "en": "The owner’s email is used by another account",
+  "ms": "E-mel pemilik digunakan oleh akaun lain",
+  "fr": "L’e-mail du propriétaire est utilisé par un autre compte"
+ },
+ "الشركة غير موجودة": {
+  "en": "Company not found",
+  "ms": "Syarikat tidak ditemui",
+  "fr": "Entreprise introuvable"
+ },
+ "{}: لم يُرجع JSON صالحًا بعد 3 محاولات ({})": {
+  "en": "{}: did not return valid JSON after 3 attempts ({})",
+  "ms": "{}: tidak memulangkan JSON yang sah selepas 3 cubaan ({})",
+  "fr": "{} : aucun JSON valide renvoyé après 3 tentatives ({})"
+ },
+ "أضف مفتاح {} أولًا ثم احفظ": {
+  "en": "Add the {} key first, then save",
+  "ms": "Tambah kunci {} dahulu, kemudian simpan",
+  "fr": "Ajoutez d’abord la clé {}, puis enregistrez"
+ },
+ "{} رفض المفتاح — تأكد من المفتاح": {
+  "en": "{} rejected the key — check the key",
+  "ms": "{} menolak kunci — semak kunci anda",
+  "fr": "{} a refusé la clé — vérifiez la clé"
+ },
+ "{}: تعذّر جلب قائمة النماذج (خطأ {})": {
+  "en": "{}: could not fetch the model list (error {})",
+  "ms": "{}: tidak dapat mendapatkan senarai model (ralat {})",
+  "fr": "{} : impossible de récupérer la liste des modèles (erreur {})"
+ },
+ "{}: رابط الخادم غير مضبوط": {
+  "en": "{}: server URL is not set",
+  "ms": "{}: URL pelayan tidak ditetapkan",
+  "fr": "{} : l’URL du serveur n’est pas définie"
+ },
+ "مفتاح {} غير مضبوط": {
+  "en": "{} key is not set",
+  "ms": "Kunci {} tidak ditetapkan",
+  "fr": "La clé {} n’est pas définie"
+ },
+ "لا يوجد محرّك ذكاء اصطناعي جاهز — أضف مفتاح Gemini أو Mistral أو Groq أو Cloudflare أو OpenRouter من الإعدادات ← المفاتيح والاتصالات": {
+  "en": "No AI engine ready — add a Gemini, Mistral, Groq, Cloudflare or OpenRouter key in Settings → Keys & connections",
+  "ms": "Tiada enjin AI yang sedia — tambah kunci Gemini, Mistral, Groq, Cloudflare atau OpenRouter dalam Tetapan → Kunci & sambungan",
+  "fr": "Aucun moteur d’IA prêt — ajoutez une clé Gemini, Mistral, Groq, Cloudflare ou OpenRouter dans Paramètres → Clés et connexions"
+ },
+ "اختيار آلي حسب قواعد الجودة (تعذّر عمل الحَكَم)": {
+  "en": "Automatic pick based on quality rules (judge unavailable)",
+  "ms": "Pilihan automatik berdasarkan peraturan kualiti (hakim tidak dapat berfungsi)",
+  "fr": "Choix automatique selon les règles de qualité (juge indisponible)"
+ },
+ "تولّى هذا المحرّك الكتابة بعد تعذّر المحرّك الأساسي": {
+  "en": "This AI engine took over writing after the primary engine failed",
+  "ms": "Enjin AI ini mengambil alih penulisan selepas enjin utama gagal",
+  "fr": "Ce moteur d’IA a pris le relais après l’échec du moteur principal"
+ },
+ "المحرّك الوحيد الذي نجح": {
+  "en": "The only AI engine that succeeded",
+  "ms": "Satu-satunya enjin AI yang berjaya",
+  "fr": "Le seul moteur d’IA ayant réussi"
+ },
+ "نسخة تجريبية — أضف مفتاح Gemini أو Mistral أو Groq أو Cloudflare أو OpenRouter لتوليد محتوى حقيقي": {
+  "en": "Demo version — add a Gemini, Mistral, Groq, Cloudflare or OpenRouter key to generate real content",
+  "ms": "Versi demo — tambah kunci Gemini, Mistral, Groq, Cloudflare atau OpenRouter untuk menjana kandungan sebenar",
+  "fr": "Version de démonstration — ajoutez une clé Gemini, Mistral, Groq, Cloudflare ou OpenRouter pour générer du vrai contenu"
+ },
+ "{}: تعذّر جلب قائمة النماذج ({})": {
+  "en": "{}: could not fetch the model list ({})",
+  "ms": "{}: tidak dapat mendapatkan senarai model ({})",
+  "fr": "{} : impossible de récupérer la liste des modèles ({})"
+ },
+ "تجاوز المهلة ({} ثانية) فتُخطّي": {
+  "en": "Timed out ({} seconds), skipped",
+  "ms": "Melebihi had masa ({} saat), dilangkau",
+  "fr": "Délai dépassé ({} secondes), ignoré"
+ },
+ "{} مشغول حاليًا بسبب ضغط الطلبات عنده (خطأ {}) — المفتاح صالح، والمشكلة مؤقتة من جهة المزوّد؛ أعد المحاولة بعد دقائق": {
+  "en": "{} is currently busy due to high demand (error {}) — the key is valid and the issue is temporary on the provider’s side; try again in a few minutes",
+  "ms": "{} sedang sibuk kerana permintaan tinggi (ralat {}) — kunci sah dan masalah ini sementara di pihak penyedia; cuba lagi selepas beberapa minit",
+  "fr": "{} est actuellement surchargé en raison d’une forte demande (erreur {}) — la clé est valide et le problème est temporaire côté fournisseur ; réessayez dans quelques minutes"
+ },
+ "{}: النموذج «{}» غير متاح لحسابك — اضغط «جلب النماذج» في الإعدادات واختر واحدًا من القائمة": {
+  "en": "{}: model “{}” is not available for your account — click “Fetch models” in Settings and pick one from the list",
+  "ms": "{}: model “{}” tidak tersedia untuk akaun anda — klik “Dapatkan model” dalam Tetapan dan pilih satu daripada senarai",
+  "fr": "{} : le modèle « {} » n’est pas disponible pour votre compte — cliquez sur « Récupérer les modèles » dans Paramètres et choisissez-en un dans la liste"
+ },
+ "{} رفض المفتاح — تأكد من المفتاح أو أنشئ مفتاحًا جديدًا": {
+  "en": "{} rejected the key — check the key or create a new one",
+  "ms": "{} menolak kunci — semak kunci atau cipta kunci baharu",
+  "fr": "{} a refusé la clé — vérifiez-la ou créez-en une nouvelle"
+ },
+ "{}: الرصيد غير كافٍ — أضف رصيدًا في حسابك{}": {
+  "en": "{}: insufficient balance — add credit to your account{}",
+  "ms": "{}: baki tidak mencukupi — tambah kredit dalam akaun anda{}",
+  "fr": "{} : solde insuffisant — ajoutez du crédit à votre compte{}"
+ },
+ "{}: الرابط أو النموذج «{}» غير موجود": {
+  "en": "{}: URL or model “{}” not found",
+  "ms": "{}: URL atau model “{}” tidak ditemui",
+  "fr": "{} : URL ou modèle « {} » introuvable"
+ },
+ "{} أعاد خطأ {}: {}": {
+  "en": "{} returned error {}: {}",
+  "ms": "{} memulangkan ralat {}: {}",
+  "fr": "{} a renvoyé l’erreur {} : {}"
+ },
+ "{}: لم يُرجع أي رد": {
+  "en": "{}: returned no response",
+  "ms": "{}: tiada respons diterima",
+  "fr": "{} : aucune réponse reçue"
+ },
+ "{}: تعذّر الوصول إلى {}": {
+  "en": "{}: could not reach {}",
+  "ms": "{}: tidak dapat menghubungi {}",
+  "fr": "{} : impossible de joindre {}"
+ },
+ "{}: انتهت مهلة الاتصال ({} ثانية)": {
+  "en": "{}: connection timed out ({} seconds)",
+  "ms": "{}: sambungan melebihi had masa ({} saat)",
+  "fr": "{} : délai de connexion dépassé ({} secondes)"
+ },
+ "{}: تعذّر الوصول إلى {} ({})": {
+  "en": "{}: could not reach {} ({})",
+  "ms": "{}: tidak dapat menghubungi {} ({})",
+  "fr": "{} : impossible de joindre {} ({})"
+ },
+ "{}: تجاوزت حد الطلبات أو الحصة المجانية — انتظر قليلًا ثم أعد المحاولة": {
+  "en": "{}: rate limit or free quota exceeded — wait a moment and try again",
+  "ms": "{}: had permintaan atau kuota percuma telah dilampaui — tunggu sebentar dan cuba lagi",
+  "fr": "{} : limite de requêtes ou quota gratuit dépassé — patientez un peu puis réessayez"
+ },
+ "{}: رد غير مفهوم: {}": {
+  "en": "{}: unrecognized response: {}",
+  "ms": "{}: respons tidak difahami: {}",
+  "fr": "{} : réponse incompréhensible : {}"
+ },
+ "الحد الأقصى 15 ميغابايت للصورة": {
+  "en": "Maximum image size is 15 MB",
+  "ms": "Saiz maksimum imej ialah 15 MB",
+  "fr": "Taille maximale de l’image : 15 Mo"
+ },
+ "تعذّر قراءة الصورة": {
+  "en": "Could not read the image",
+  "ms": "Tidak dapat membaca imej",
+  "fr": "Impossible de lire l’image"
+ },
+ "تعذّر قراءة الصورة — استخدم JPG أو PNG أو WEBP": {
+  "en": "Could not read the image — use JPG, PNG or WEBP",
+  "ms": "Tidak dapat membaca imej — gunakan JPG, PNG atau WEBP",
+  "fr": "Impossible de lire l’image — utilisez JPG, PNG ou WEBP"
+ },
+ "الرابط لا يحتوي صورة — استخدم رابط صورة مباشر أو رابط مشاركة عام": {
+  "en": "The link does not contain an image — use a direct image link or a public share link",
+  "ms": "Pautan tidak mengandungi imej — gunakan pautan imej terus atau pautan perkongsian awam",
+  "fr": "Le lien ne contient pas d’image — utilisez un lien direct vers l’image ou un lien de partage public"
+ },
+ "صلة منخفضة بجمهور الشركة ({}/10): {}": {
+  "en": "Low relevance to the company’s audience ({}/10): {}",
+  "ms": "Kaitan rendah dengan khalayak syarikat ({}/10): {}",
+  "fr": "Faible pertinence pour l’audience de l’entreprise ({}/10) : {}"
+ },
+ "لم تتوفر صور جديدة كافية — أضف صورًا إلى مكتبة الصور أو مفتاح Pixabay/Pexels في الإعدادات لمزيد من التنوع": {
+  "en": "Not enough new images available — add images to the image library or a Pixabay/Pexels key in Settings for more variety",
+  "ms": "Imej baharu tidak mencukupi — tambah imej ke pustaka imej atau kunci Pixabay/Pexels dalam Tetapan untuk lebih kepelbagaian",
+  "fr": "Pas assez de nouvelles images — ajoutez des images à la photothèque ou une clé Pixabay/Pexels dans Paramètres pour plus de variété"
+ },
+ "فشل تصميم الصور: {}": {
+  "en": "Image design failed: {}",
+  "ms": "Reka bentuk imej gagal: {}",
+  "fr": "Échec de la conception des images : {}"
+ },
+ "المقال بلا صورة": {
+  "en": "Article has no image",
+  "ms": "Artikel tiada imej",
+  "fr": "L’article n’a pas d’image"
+ },
+ "نص المقال قصير جدًا": {
+  "en": "Article text is too short",
+  "ms": "Teks artikel terlalu pendek",
+  "fr": "Le texte de l’article est trop court"
+ },
+ "خارج الفترة المطلوبة": {
+  "en": "Outside the requested period",
+  "ms": "Di luar tempoh yang diminta",
+  "fr": "En dehors de la période demandée"
+ },
+ "المقال أقدم من الحد المسموح": {
+  "en": "Article is older than the allowed limit",
+  "ms": "Artikel lebih lama daripada had yang dibenarkan",
+  "fr": "L’article est plus ancien que la limite autorisée"
+ },
+ "مقال مكرر": {
+  "en": "Duplicate article",
+  "ms": "Artikel pendua",
+  "fr": "Article en double"
+ },
+ "الصور غير متاحة على رابط عام. فعّل STORAGE_BACKEND=supabase أو اضبط PUBLIC_BASE_URL.": {
+  "en": "Images are not available at a public URL. Enable STORAGE_BACKEND=supabase or set PUBLIC_BASE_URL.",
+  "ms": "Imej tidak tersedia pada URL awam. Aktifkan STORAGE_BACKEND=supabase atau tetapkan PUBLIC_BASE_URL.",
+  "fr": "Les images ne sont pas accessibles via une URL publique. Activez STORAGE_BACKEND=supabase ou définissez PUBLIC_BASE_URL."
+ },
+ "{} غير مُعدّ (مفتاح API مفقود)": {
+  "en": "{} is not configured (API key missing)",
+  "ms": "{} tidak dikonfigurasi (kunci API tiada)",
+  "fr": "{} n’est pas configuré (clé API manquante)"
+ },
+ "لا توجد وجهات نشر": {
+  "en": "No publishing destinations",
+  "ms": "Tiada destinasi penerbitan",
+  "fr": "Aucune destination de publication"
+ },
+ "دعوة للإجراء (CTA)": {
+  "en": "Call to action (CTA)",
+  "ms": "Seruan tindakan (CTA)",
+  "fr": "Appel à l’action (CTA)"
+ },
+ "تكرار الصور": {
+  "en": "Image repetition",
+  "ms": "Pengulangan imej",
+  "fr": "Répétition des images"
+ },
+ "قوة العنوان": {
+  "en": "Headline strength",
+  "ms": "Kekuatan tajuk",
+  "fr": "Force du titre"
+ },
+ "لا يوجد عنوان.": {
+  "en": "No headline.",
+  "ms": "Tiada tajuk.",
+  "fr": "Aucun titre."
+ },
+ "نص المنشور": {
+  "en": "Post text",
+  "ms": "Teks siaran",
+  "fr": "Texte de la publication"
+ },
+ "نص المنشور قصير جدًا أو فارغ.": {
+  "en": "Post text is too short or empty.",
+  "ms": "Teks siaran terlalu pendek atau kosong.",
+  "fr": "Le texte de la publication est trop court ou vide."
+ },
+ "الهاشتاقات": {
+  "en": "Hashtags",
+  "ms": "Tanda pagar",
+  "fr": "Hashtags"
+ },
+ "{} هاشتاق فقط.": {
+  "en": "Only {} hashtags.",
+  "ms": "Hanya {} tanda pagar.",
+  "fr": "Seulement {} hashtags."
+ },
+ "نصوص ناقصة": {
+  "en": "Incomplete text",
+  "ms": "Teks tidak lengkap",
+  "fr": "Textes incomplets"
+ },
+ "يوجد نص مؤقت أو ناقص: «{}».": {
+  "en": "Placeholder or incomplete text found: “{}”.",
+  "ms": "Terdapat teks sementara atau tidak lengkap: “{}”.",
+  "fr": "Texte provisoire ou incomplet détecté : « {} »."
+ },
+ "لا توجد نصوص مؤقتة.": {
+  "en": "No placeholder text.",
+  "ms": "Tiada teks sementara.",
+  "fr": "Aucun texte provisoire."
+ },
+ "توجد شريحة دعوة للإجراء.": {
+  "en": "A call-to-action slide is present.",
+  "ms": "Terdapat slaid seruan tindakan.",
+  "fr": "Une diapositive d’appel à l’action est présente."
+ },
+ "لا توجد شريحة دعوة للإجراء.": {
+  "en": "No call-to-action slide.",
+  "ms": "Tiada slaid seruan tindakan.",
+  "fr": "Aucune diapositive d’appel à l’action."
+ },
+ "بنية الكاروسيل": {
+  "en": "Carousel structure",
+  "ms": "Struktur karusel",
+  "fr": "Structure du carrousel"
+ },
+ "لا توجد شرائح.": {
+  "en": "No slides.",
+  "ms": "Tiada slaid.",
+  "fr": "Aucune diapositive."
+ },
+ "جودة الصور": {
+  "en": "Image quality",
+  "ms": "Kualiti imej",
+  "fr": "Qualité des images"
+ },
+ "شرائح بدون صورة: {}.": {
+  "en": "Slides without an image: {}.",
+  "ms": "Slaid tanpa imej: {}.",
+  "fr": "Diapositives sans image : {}."
+ },
+ "{} شريحة تعيد استخدام نفس الخلفية.": {
+  "en": "{} slides reuse the same background.",
+  "ms": "{} slaid menggunakan semula latar belakang yang sama.",
+  "fr": "{} diapositives réutilisent le même arrière-plan."
+ },
+ "لا تكرار في الصور.": {
+  "en": "No repeated images.",
+  "ms": "Tiada imej berulang.",
+  "fr": "Aucune image répétée."
+ },
+ "ذكر المصدر": {
+  "en": "Source credit",
+  "ms": "Penyebutan sumber",
+  "fr": "Mention de la source"
+ },
+ "العنوان طويل ({} كلمة)، الأفضل 10 كلمات أو أقل.": {
+  "en": "Headline is long ({} words); 10 words or fewer is best.",
+  "ms": "Tajuk terlalu panjang ({} perkataan); sebaiknya 10 perkataan atau kurang.",
+  "fr": "Titre long ({} mots) ; 10 mots ou moins, c’est mieux."
+ },
+ "عنوان مناسب ({} كلمات).": {
+  "en": "Good headline ({} words).",
+  "ms": "Tajuk sesuai ({} perkataan).",
+  "fr": "Titre adapté ({} mots)."
+ },
+ "النص يتجاوز حد إنستغرام (2200 حرف مع الهاشتاقات).": {
+  "en": "Text exceeds the Instagram limit (2200 characters including hashtags).",
+  "ms": "Teks melebihi had Instagram (2200 aksara termasuk tanda pagar).",
+  "fr": "Le texte dépasse la limite d’Instagram (2200 caractères, hashtags compris)."
+ },
+ "نص المنشور جاهز ({} كلمة).": {
+  "en": "Post text is ready ({} words).",
+  "ms": "Teks siaran sedia ({} perkataan).",
+  "fr": "Texte de la publication prêt ({} mots)."
+ },
+ "إنستغرام يسمح بـ 30 هاشتاق كحد أقصى.": {
+  "en": "Instagram allows a maximum of 30 hashtags.",
+  "ms": "Instagram membenarkan maksimum 30 tanda pagar.",
+  "fr": "Instagram autorise 30 hashtags au maximum."
+ },
+ "{} هاشتاق.": {
+  "en": "{} hashtags.",
+  "ms": "{} tanda pagar.",
+  "fr": "{} hashtags."
+ },
+ "إنستغرام يسمح بـ 10 شرائح كحد أقصى.": {
+  "en": "Instagram allows a maximum of 10 slides.",
+  "ms": "Instagram membenarkan maksimum 10 slaid.",
+  "fr": "Instagram autorise 10 diapositives au maximum."
+ },
+ "{} شرائح ({} محتوى).": {
+  "en": "{} slides ({} content).",
+  "ms": "{} slaid ({} kandungan).",
+  "fr": "{} diapositives ({} de contenu)."
+ },
+ "مقاسات غير قياسية في الشرائح {}.": {
+  "en": "Non-standard sizes in slides {}.",
+  "ms": "Saiz bukan standard dalam slaid {}.",
+  "fr": "Dimensions non standard dans les diapositives {}."
+ },
+ "كل الصور بدقة 1080×1350.": {
+  "en": "All images are 1080×1350.",
+  "ms": "Semua imej beresolusi 1080×1350.",
+  "fr": "Toutes les images sont en 1080×1350."
+ },
+ "سيُذكر المصدر: {}.": {
+  "en": "Source will be credited: {}.",
+  "ms": "Sumber akan disebut: {}.",
+  "fr": "La source sera mentionnée : {}."
+ },
+ "اسم المصدر غير معروف.": {
+  "en": "Source name unknown.",
+  "ms": "Nama sumber tidak diketahui.",
+  "fr": "Nom de la source inconnu."
+ },
+ "اكتمل عدد منشورات يوم {} ({} منشورات) — اختر يومًا آخر أو ارفع العدد من الإعدادات": {
+  "en": "Post limit reached for {} ({} posts) — choose another day or raise the limit in Settings",
+  "ms": "Had siaran untuk {} telah dicapai ({} siaran) — pilih hari lain atau naikkan had dalam Tetapan",
+  "fr": "Limite de publications atteinte pour le {} ({} publications) — choisissez un autre jour ou augmentez la limite dans Paramètres"
+ },
+ "يوجد منشور آخر الساعة {} — يجب أن يفصل {} ساعة على الأقل بين منشورين": {
+  "en": "Another post is scheduled at {} — posts must be at least {} hours apart",
+  "ms": "Terdapat siaran lain pada jam {} — jarak antara dua siaran mesti sekurang-kurangnya {} jam",
+  "fr": "Une autre publication est prévue à {} — il faut au moins {} heures entre deux publications"
+ },
+ "لا يمكن جدولة منشور لم يجتز فحص الجودة": {
+  "en": "A post that has not passed the quality check cannot be scheduled",
+  "ms": "Siaran yang belum lulus semakan kualiti tidak boleh dijadualkan",
+  "fr": "Impossible de programmer une publication qui n’a pas réussi le contrôle qualité"
+ },
+ "لا يمكن جدولة هذا المنشور في حالته الحالية": {
+  "en": "This post cannot be scheduled in its current state",
+  "ms": "Siaran ini tidak boleh dijadualkan dalam keadaan semasanya",
+  "fr": "Cette publication ne peut pas être programmée dans son état actuel"
+ },
+ "لا توجد منصات نشر افتراضية — حدّدها من الإعدادات ← النشر": {
+  "en": "No default publishing platforms — set them in Settings → Publishing",
+  "ms": "Tiada platform penerbitan lalai — tetapkannya dalam Tetapan → Penerbitan",
+  "fr": "Aucune plateforme de publication par défaut — définissez-les dans Paramètres → Publication"
+ },
+ "لا توجد مواعيد فارغة في الأيام القادمة — ارفع عدد المنشورات اليومي من الإعدادات": {
+  "en": "No free slots in the coming days — raise the daily post count in Settings",
+  "ms": "Tiada slot kosong pada hari-hari akan datang — naikkan bilangan siaran harian dalam Tetapan",
+  "fr": "Aucun créneau libre dans les prochains jours — augmentez le nombre de publications par jour dans Paramètres"
+ },
+ "الموقع أعاد خطأ {}: {}": {
+  "en": "The website returned error {}: {}",
+  "ms": "Laman web memulangkan ralat {}: {}",
+  "fr": "Le site a renvoyé l’erreur {} : {}"
+ },
+ "انتهت مهلة الاتصال بالموقع — أعد المحاولة لاحقًا": {
+  "en": "Connection to the website timed out — try again later",
+  "ms": "Sambungan ke laman web melebihi had masa — cuba lagi kemudian",
+  "fr": "Délai de connexion au site dépassé — réessayez plus tard"
+ },
+ "الموقع رفض الطلب (خطأ {}): هذا الموقع يمنع السحب الآلي من صفحاته. استخدم رابط RSS الخاص به إن وُجد (نوع المصدر RSS)، أو اختر مصدرًا آخر. الرابط: {}": {
+  "en": "The website refused the request (error {}): this site blocks automated fetching of its pages. Use its RSS link if available (source type RSS), or choose another source. Link: {}",
+  "ms": "Laman web menolak permintaan (ralat {}): laman ini menyekat pengumpulan automatik halamannya. Gunakan pautan RSS laman itu jika ada (jenis sumber RSS), atau pilih sumber lain. Pautan: {}",
+  "fr": "Le site a refusé la requête (erreur {}) : ce site bloque la collecte automatique de ses pages. Utilisez son lien RSS s’il existe (type de source RSS), ou choisissez une autre source. Lien : {}"
+ },
+ "الصفحة غير موجودة (404): {}": {
+  "en": "Page not found (404): {}",
+  "ms": "Halaman tidak ditemui (404): {}",
+  "fr": "Page introuvable (404) : {}"
+ },
+ "فشل فحص الجودة: {}": {
+  "en": "Quality check failed: {}",
+  "ms": "Semakan kualiti gagal: {}",
+  "fr": "Échec du contrôle qualité : {}"
+ },
+ "نُشر جزئيًا: {}": {
+  "en": "Partially published: {}",
+  "ms": "Diterbitkan sebahagian: {}",
+  "fr": "Publié partiellement : {}"
+ },
+ "النموذج لم يُعد الحقول المطلوبة: {}": {
+  "en": "The model did not return the required fields: {}",
+  "ms": "Model tidak memulangkan medan yang diperlukan: {}",
+  "fr": "Le modèle n’a pas renvoyé les champs requis : {}"
+ },
+ "فشلت كل المحرّكات: {}": {
+  "en": "All AI engines failed: {}",
+  "ms": "Semua enjin AI gagal: {}",
+  "fr": "Tous les moteurs d’IA ont échoué : {}"
+ },
+ "{} — نسخة تجريبية جديدة": {
+  "en": "{} — new demo version",
+  "ms": "{} — versi demo baharu",
+  "fr": "{} — nouvelle version de démonstration"
+ },
+ "مالك الشركة": {
+  "en": "Company owner",
+  "ms": "Pemilik syarikat",
+  "fr": "Propriétaire de l’entreprise"
+ },
+ "محرر": {
+  "en": "Editor",
+  "ms": "Penyunting",
+  "fr": "Éditeur"
+ },
+ "مراجع": {
+  "en": "Reviewer",
+  "ms": "Penyemak",
+  "fr": "Réviseur"
+ },
+ "القائمة غير موجودة": {
+  "en": "List not found",
+  "ms": "Senarai tidak ditemui",
+  "fr": "Liste introuvable"
+ },
+ "جهة الاتصال غير موجودة": {
+  "en": "Contact not found",
+  "ms": "Kenalan tidak ditemui",
+  "fr": "Contact introuvable"
+ },
+ "النشرة غير موجودة": {
+  "en": "Newsletter not found",
+  "ms": "Surat berita tidak ditemui",
+  "fr": "Newsletter introuvable"
+ },
+ "لا يمكن تعديل نشرة أُرسلت": {
+  "en": "A sent newsletter cannot be edited",
+  "ms": "Surat berita yang telah dihantar tidak boleh disunting",
+  "fr": "Une newsletter envoyée ne peut pas être modifiée"
+ },
+ "النشرة قيد الإرسال الآن": {
+  "en": "The newsletter is being sent right now",
+  "ms": "Surat berita sedang dihantar sekarang",
+  "fr": "La newsletter est en cours d’envoi"
+ },
+ "النشرة أُرسلت أو قيد الإرسال": {
+  "en": "The newsletter was sent or is being sent",
+  "ms": "Surat berita telah atau sedang dihantar",
+  "fr": "La newsletter a été ou est en cours d’envoi"
+ },
+ "أكمل عنوان النشرة ومحتواها أولًا": {
+  "en": "Complete the newsletter subject and content first",
+  "ms": "Lengkapkan subjek dan kandungan surat berita dahulu",
+  "fr": "Complétez d’abord l’objet et le contenu de la newsletter"
+ },
+ "حساب الإرسال غير مضبوط — أكمل إعدادات البريد أولًا": {
+  "en": "The sending account is not set up — complete the email settings first",
+  "ms": "Akaun penghantaran belum disediakan — lengkapkan tetapan e-mel dahulu",
+  "fr": "Le compte d’envoi n’est pas configuré — complétez d’abord les réglages e-mail"
+ },
+ "لا يوجد مشتركون في القوائم المختارة": {
+  "en": "There are no subscribers in the selected lists",
+  "ms": "Tiada pelanggan dalam senarai yang dipilih",
+  "fr": "Aucun abonné dans les listes choisies"
+ },
+ "النشرة غير مجدولة": {
+  "en": "The newsletter is not scheduled",
+  "ms": "Surat berita tidak dijadualkan",
+  "fr": "La newsletter n’est pas programmée"
+ },
+ "رابط غير صالح": {
+  "en": "Invalid link",
+  "ms": "Pautan tidak sah",
+  "fr": "Lien invalide"
+ },
+ "تعذّر قراءة الملف — استخدم Excel أو CSV أو TXT": {
+  "en": "Could not read the file — use Excel, CSV or TXT",
+  "ms": "Fail tidak dapat dibaca — gunakan Excel, CSV atau TXT",
+  "fr": "Lecture du fichier impossible — utilisez Excel, CSV ou TXT"
+ },
+ "المنتج غير موجود": {
+  "en": "Product not found",
+  "ms": "Produk tidak ditemui",
+  "fr": "Produit introuvable"
+ }
+}
