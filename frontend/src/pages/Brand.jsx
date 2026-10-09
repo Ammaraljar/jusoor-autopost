@@ -83,6 +83,7 @@ function BrandForm({ brand, onChanged }) {
       colors: f.colors, logo_placement: f.logo_placement, card_style: f.card_style, card_theme: f.card_theme || 'magazine', publish_config: f.publish_config,
       color_mode: f.color_mode || 'auto', logo_backdrop: f.logo_backdrop || 'auto',
       font_family: f.font_family || 'Cairo', font_latin: f.font_latin || 'Cairo', templates: f.templates || [],
+      hdr: f.hdr !== false,
     });
     // the server completes the colour roles that follow the main colours (title, text, card…)
     if (saved?.colors) setF((x) => ({ ...x, colors: { ...saved.colors } }));
@@ -137,6 +138,12 @@ function BrandForm({ brand, onChanged }) {
               <select className="select" value={f.color_mode || 'auto'} onChange={(e) => set('color_mode', e.target.value)}>
                 <option value="auto">{t('color_auto')}</option>
                 <option value="brand">{t('color_brand')}</option>
+              </select>
+            </Field>
+            <Field label={t('hdr_label')} hint={t('hdr_hint')}>
+              <select className="select" value={f.hdr === false ? 'off' : 'on'} onChange={(e) => set('hdr', e.target.value === 'on')}>
+                <option value="on">{t('hdr_on')}</option>
+                <option value="off">{t('hdr_off')}</option>
               </select>
             </Field>
             <Field label={t('logo_backdrop')}>
