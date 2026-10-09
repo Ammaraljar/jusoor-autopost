@@ -37,6 +37,7 @@ class BrandIn(BaseModel):
     publish_config: dict[str, Any] | None = None
     templates: list[str] | None = None
     font_latin: str | None = None
+    hdr: bool | None = None
 
 
 def _out(b: Brand) -> dict:
@@ -45,6 +46,7 @@ def _out(b: Brand) -> dict:
     data["logo_backdrop"] = b.logo_backdrop or "auto"
     data["card_theme"] = b.card_theme or "magazine"
     data["font_latin"] = b.font_latin or "Cairo"
+    data["hdr"] = b.hdr is not False
     data["font_options"] = font_lib.options()
     data["has_default_colors"] = bool(b.default_colors or b.logo_path)
     data["colors"] = colours.complete_colors(b.colors)
