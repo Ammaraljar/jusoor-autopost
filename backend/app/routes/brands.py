@@ -47,8 +47,7 @@ def _out(b: Brand) -> dict:
     data["font_latin"] = b.font_latin or "Cairo"
     data["font_options"] = font_lib.options()
     data["has_default_colors"] = bool(b.default_colors or b.logo_path)
-    data["colors"] = {"navy": colours.BRAND_NAVY, "gold": colours.BRAND_GOLD, "goldLight": "#D9B96A",
-                      "surface": "#FBF8F0", "cardTitle": "#16244F", "cardText": "#1F2B55", **(b.colors or {})}
+    data["colors"] = colours.complete_colors(b.colors)
     data["logos"] = [{**x, "url": storage.public_url(x["key"]), "primary": x["key"] == b.logo_path}
                      for x in pipeline.brand_logos(b)]
     return {**data, "logo_url": storage.public_url(b.logo_path) if b.logo_path else None}
@@ -91,6 +90,9 @@ def update_brand(bid: int, body: BrandIn, db: Session = Depends(get_db)):
         data["font_latin"] = font_lib.valid_latin(data["font_latin"])
     if data.get("templates") is not None:
         data["templates"] = [t for t in data["templates"] if t in colours.TEMPLATES]
+    if data.get("colors") is not None:
+        # roles that still follow the old main colours move with the new ones (title, text, card…)
+        data["colors"] = colours.complete_colors(data["colors"], colours.complete_colors(b.colors))
     for k, v in data.items():
         if v is not None:
             setattr(b, k, v)
@@ -110,7 +112,7 @@ def reset_colors(bid: int, db: Session = Depends(get_db)):
     if not base:
         org = db.get(Organization, current_org.get()) if current_org.get() else None
         base = dict(industries.get(org.industry if org else None).get("colors") or {})
-    b.colors = dict(base)
+    b.colors = colours.complete_colors(base)
     b.color_mode = "auto"
     return _out(b)
 
@@ -150,7 +152,7 @@ def _set_primary(b: Brand, key: str, data: bytes | None) -> None:
     if data and not data.lstrip().startswith(b"<"):
         found = colours.colors_from_logo(data)
         if found and colours.logo_tone(data) == "color":
-            b.colors = {**(b.colors or {}), **found}
+            b.colors = colours.complete_colors(found)
             b.default_colors = dict(b.colors)          # the identity "reset" returns to
             b.color_mode = "auto"
 
@@ -278,8 +280,10 @@ async def preview(bid: int, body: PreviewIn, db: Session = Depends(get_db)):
     navy = (b.colors or {}).get("navy") or colours.BRAND_NAVY
     gold = (b.colors or {}).get("gold") or colours.BRAND_GOLD
     style.palette = colours.design(body.variant or 0, navy, gold, b.design_seed or 0, family, b.templates,
-                                   body.template) \
-        if (b.color_mode or "auto") == "auto" else {"family": family}
+                                   body.template,
+                                   exact=None if (b.color_mode or "auto") == "auto" else (b.colors or {}))
+    if body.template:
+        style.theme = "magazine"          # a template preview always shows that template
     logo, plate = colours.choose_logo(style.logos, style.logo, background, b.logo_placement or "top-left",
                                       body.kind, (style.palette or {}).get("template"))
     jpeg = await renderer.render(SlideSpec(kind=body.kind, heading=heading, body=text, position=1, total=6,
