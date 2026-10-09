@@ -78,12 +78,14 @@ function BrandForm({ brand, onChanged }) {
   useEffect(() => { refreshPreview(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = () => run('save', async () => {
-    await api.patch(`/api/brands/${brand.id}`, {
+    const saved = await api.patch(`/api/brands/${brand.id}`, {
       name: f.name, handle: f.handle, website: f.website, voice: f.voice, cta_text: f.cta_text,
       colors: f.colors, logo_placement: f.logo_placement, card_style: f.card_style, card_theme: f.card_theme || 'magazine', publish_config: f.publish_config,
       color_mode: f.color_mode || 'auto', logo_backdrop: f.logo_backdrop || 'auto',
       font_family: f.font_family || 'Cairo', font_latin: f.font_latin || 'Cairo', templates: f.templates || [],
     });
+    // the server completes the colour roles that follow the main colours (title, text, card…)
+    if (saved?.colors) setF((x) => ({ ...x, colors: { ...saved.colors } }));
     onChanged();
     refreshPreview();
   }, t('saved'));
@@ -122,7 +124,7 @@ function BrandForm({ brand, onChanged }) {
                 }, t('saved'))}>{t('reset_colors')}</Button>
             )}
           </div>
-          {(f.color_mode || 'auto') === 'auto' && <p className="xs muted" style={{ marginTop: -8 }}>{t('colors_auto_hint')}</p>}
+          <p className="xs muted" style={{ marginTop: -8 }}>{t((f.color_mode || 'auto') === 'auto' ? 'colors_auto_hint' : 'colors_brand_hint')}</p>
           <div className="swatches">
             {COLOR_KEYS.map((k) => (
               <Field key={k} label={t(`c_${k}`)} hint={t(`ch_${k}`)}>
@@ -220,7 +222,8 @@ function BrandForm({ brand, onChanged }) {
           </div>
         </div>
 
-        <TemplatePicker brand={brand} value={f.templates || []} onChange={(v) => set('templates', v)} />
+        <TemplatePicker brand={brand} value={f.templates || []} onChange={(v) => set('templates', v)}
+          classic={f.card_theme === 'classic'} onUseTemplates={() => set('card_theme', 'magazine')} />
 
         <div className="card card-pad stack">
           <h3>{t('publishing_channels')}</h3>
@@ -293,7 +296,7 @@ function BrandForm({ brand, onChanged }) {
 
 
 /** The card templates of the company's field: keep all, or only the ones the company likes. */
-function TemplatePicker({ brand, value, onChange }) {
+function TemplatePicker({ brand, value, onChange, classic, onUseTemplates }) {
   const { t, lang } = useI18n();
   const { user } = useAuth();
   const list = useLoad(() => api.get(`/api/brands/${brand.id}/templates`), [brand.id]);
@@ -329,6 +332,12 @@ function TemplatePicker({ brand, value, onChange }) {
         <Button size="sm" icon={Eye} busy={busy} disabled={!items.length} onClick={loadThumbs}>{t('templates_preview')}</Button>
       </div>
       <p className="xs muted" style={{ marginTop: -8 }}>{t('templates_hint')} — {kept.length}/{items.length}</p>
+      {classic && (
+        <div className="banner warn small" style={{ margin: 0 }}>
+          {t('templates_classic_warn')}{' '}
+          <Button size="sm" variant="primary" onClick={onUseTemplates}>{t('templates_use')}</Button>
+        </div>
+      )}
       <div className="row" style={{ gap: 8 }}>
         <Button size="sm" icon={CheckSquare} onClick={() => onChange([])}>{t('select_all')}</Button>
       </div>
