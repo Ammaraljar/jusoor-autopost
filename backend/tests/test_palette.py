@@ -153,3 +153,19 @@ def test_photo_first_cards_have_one_logo_and_no_boxes_over_the_photo():
                     assert body.count('class="logo') == 1, (family, i, kind)
                     for old in ("L2-", "C-stamp", "postmark", "m-panel", "card frosted"):
                         assert old not in body, (family, kind, old)
+
+
+def test_brand_colour_roles_follow_main_colours_and_exact_mode():
+    from app.services import palette as P
+    c = P.complete_colors({"navy": "#0B3D2E", "gold": "#B8963E"})
+    assert c["cardTitle"] == "#0b3d2e" and c["surface"] != "#fbf8f0" and c["goldLight"]
+    assert P.contrast(c["cardText"], c["surface"]) >= 7
+    # change the main colour: roles that followed it move; a role set by hand stays
+    prev = {**c, "cardText": "#222222"}
+    new = P.complete_colors({**prev, "navy": "#5A1E1E"}, prev)
+    assert new["cardTitle"] == "#5a1e1e" and new["cardText"] == "#222222"
+    # brand mode: the identity's colours exactly, and the template still rotates
+    a = P.design(0, family="government", exact=new)
+    b = P.design(1, family="government", exact=new)
+    assert a["navy"] == "#5a1e1e" and a["gold"] == "#b8963e" and a["cardBgHex"] == new["surface"]
+    assert a["template"] != b["template"]
