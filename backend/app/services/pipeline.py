@@ -560,6 +560,7 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
         prev_status = draft.status
         color_mode = brand.color_mode or "auto"
         stored_palette = draft.palette
+        brand_colors = dict(brand.colors or {})
         brand_navy = (brand.colors or {}).get("navy") or colours.BRAND_NAVY
         brand_gold = (brand.colors or {}).get("gold") or colours.BRAND_GOLD
         design_seed = brand.design_seed or 0
@@ -610,7 +611,7 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
     palette_to_store = stored_palette
     if is_album:
         style.palette, palette_to_store = None, None          # the brand's own colours around the photos
-    elif color_mode == "auto":
+    else:
         stored_index = (stored_palette or {}).get("design")
         if next_design and stored_index is not None:
             index = int(stored_index) + 1
@@ -618,11 +619,11 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
             index = int(stored_index)
         else:
             index = _next_design_index(draft_id)
-        palette_to_store = colours.design(index, brand_navy, brand_gold, design_seed, family, enabled_templates)
+        # "auto": shades of the brand colours that change from post to post; "brand": the identity's
+        # colours exactly. The card template rotates in both modes.
+        palette_to_store = colours.design(index, brand_navy, brand_gold, design_seed, family, enabled_templates,
+                                          exact=None if color_mode == "auto" else brand_colors)
         style.palette = palette_to_store
-    else:
-        style.palette = None
-        palette_to_store = None
 
     total = len(slides)
     results: dict[int, dict] = {}

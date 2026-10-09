@@ -178,6 +178,71 @@ def brand_variants(navy: str = BRAND_NAVY, gold: str = BRAND_GOLD) -> list[dict[
     return out
 
 
+# ------------------------------------------------------------------ the brand's own colour roles
+ROLES = ("navy", "gold", "goldLight", "surface", "cardTitle", "cardText")
+LEGACY_ROLES = {"goldLight": "#d9b96a", "surface": "#fbf8f0", "cardTitle": "#16244f", "cardText": "#1f2b55"}
+
+
+def _norm(value: str | None) -> str:
+    v = (value or "").strip().lower()
+    return v if len(v) == 7 and v.startswith("#") else ""
+
+
+def role_defaults(navy: str, gold: str) -> dict[str, str]:
+    """The secondary colour roles that follow from the main (navy) and secondary (gold) colours."""
+    nh, nl, ns = _hls_of(navy)
+    gh, gl, gs = _hls_of(gold)
+    surface = _hex(_hsl(gh, 0.45, 0.965))                                   # warm ivory from the accent
+    return {
+        "goldLight": _shift_until(gh, gs * 0.85, max(gl, 0.66), navy, 7.0, +0.02),
+        "surface": surface,
+        "cardTitle": navy,
+        "cardText": _shift_until(nh, max(ns, 0.35), min(nl, 0.26), surface, 7.0, -0.02),
+    }
+
+
+def complete_colors(colors: dict | None, previous: dict | None = None) -> dict[str, str]:
+    """Fill the colour roles from the main and secondary colours.
+
+    A role follows the main colours when it is empty, still the old default, or still what was
+    derived from the previous main colours; a role the user set by hand is kept."""
+    colors = {k: v for k, v in (colors or {}).items() if v}
+    navy = _norm(colors.get("navy")) or BRAND_NAVY.lower()
+    gold = _norm(colors.get("gold")) or BRAND_GOLD.lower()
+    new = role_defaults(navy, gold)
+    prev = previous or {}
+    old_derived = role_defaults(_norm(prev.get("navy")) or BRAND_NAVY, _norm(prev.get("gold")) or BRAND_GOLD) \
+        if prev else {}
+    out = {**colors, "navy": navy, "gold": gold}
+    for role, value in new.items():
+        cur = _norm(colors.get(role))
+        edited = prev and cur and cur != _norm(prev.get(role))        # changed by hand in this save
+        stale = (not cur or cur == _norm(old_derived.get(role)) or cur == LEGACY_ROLES.get(role))
+        if not edited and stale:
+            out[role] = value
+    return out
+
+
+def exact_set(colors: dict | None) -> dict[str, Any]:
+    """The brand's colours exactly as set in its identity (no shades), with readable text guaranteed."""
+    c = complete_colors(colors)
+    navy, gold, surface = c["navy"], c["gold"], c["surface"]
+    title, text = c["cardTitle"], c["cardText"]
+    sh, sl, ss = _hls_of(surface)
+    if contrast(title, surface) < 3.0:             # only an unreadable choice is corrected
+        h, l, s_ = _hls_of(title)
+        title = _shift_until(h, s_, l, surface, MIN_TEXT_CONTRAST, -0.02 if sl > 0.5 else 0.02)
+    if contrast(text, surface) < 4.5:
+        h, l, s_ = _hls_of(text)
+        text = _shift_until(h, s_, l, surface, 7.0, -0.02 if sl > 0.5 else 0.02)
+    gh, gl, gs = _hls_of(gold)
+    heading = gold if contrast(gold, surface) >= 3.0 else _shift_until(gh, max(gs, 0.55), gl, surface, 3.0, -0.02)
+    r, g, b = hex_to_rgb(surface)
+    return {"variant": "brand", "variant_name": "ألوان الهوية", "navy": navy, "gold": gold,
+            "goldLight": c["goldLight"], "cardBg": f"rgba({r},{g},{b},0.94)", "cardBgHex": surface,
+            "cardTitle": title, "cardHeading": heading, "cardText": text, "cardStyle": "frosted"}
+
+
 def photo_warmth(image_bytes: bytes | None) -> float | None:
     """0 = cool photo (sea, sky), 1 = warm photo (sunset, desert, food); None when unclear."""
     if not image_bytes:
@@ -378,7 +443,7 @@ def _active(family: str, enabled: list[str] | None) -> list[str]:
 
 def design(index: int, navy: str = BRAND_NAVY, gold: str = BRAND_GOLD, seed: int = 0,
            family: str = "general", enabled: list[str] | None = None,
-           template: str | None = None) -> dict[str, Any]:
+           template: str | None = None, exact: dict | None = None) -> dict[str, Any]:
     """Design #index of the company's own rotation (its seed shuffles the order, so every company
     gets its own sequence). Consecutive designs always change template and colour set.
     enabled: the templates the company kept (empty = all of its field's templates)."""
@@ -392,7 +457,8 @@ def design(index: int, navy: str = BRAND_NAVY, gold: str = BRAND_GOLD, seed: int
     rnd.shuffle(t_order)
     n = len(t_order)
     i = index % n
-    out = dict(variants[v_order[i % 6]])
+    # exact = "brand colours" mode: every post uses the identity's colours as they are
+    out = exact_set(exact) if exact is not None else dict(variants[v_order[i % 6]])
     out["template"] = template if template in TEMPLATES else t_order[i]
     out["layout"] = out["template"]
     out["cover"] = out["template"]
