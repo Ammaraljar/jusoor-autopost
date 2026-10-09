@@ -403,3 +403,8 @@ html[dir="rtl"] .fam-retail .pf-kicker {{ clip-path: polygon(8% 0, 100% 0, 100% 
 .fam-events .pf-kicker {{ border-inline-start: 8px solid var(--gold); padding-inline-start: 18px; }}
 .fam-nonprofit .tpl-editorial .tx h1::before, .fam-nonprofit.tpl-editorial .tx h1::before {{ content: "“"; display: block;
   font-size: 1.6em; line-height: .9; height: .5em; color: var(--gold); font-family: Georgia, serif; }}
+.fam-government .pf-kicker {{ background: var(--navy); color: #fff; padding: .25em .8em; border-radius: 2px; text-shadow: none;
+  border-bottom: 5px solid var(--gold); font-weight: 800; }}
+.fam-government .pf-rule {{ height: 4px; width: 120px; border-radius: 0; }}
+.fam-rental .pf-kicker {{ background: var(--gold); color: var(--navy); padding: .2em .9em; border-radius: 999px; text-shadow: none; font-weight: 900; }}
+.fam-rental .tx h1 {{ letter-spacing: -.5px; }}
