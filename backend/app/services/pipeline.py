@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import Article, Brand, CalendarItem, Draft, Organization, Slide, Source, session_scope, utcnow
-from . import app_settings, generator, images, industries, media, scraper, storage, variants
+from . import app_settings, generator, hdr, images, industries, media, scraper, storage, variants
 from . import palette as colours
 from .renderer import BrandStyle, SlideSpec, renderer
 
@@ -79,7 +79,7 @@ def brand_style(brand: Brand, language: str, family: str = "general") -> BrandSt
                       card_style=brand.card_style, language=language,
                       logo_backdrop=brand.logo_backdrop or "auto",
                       theme=getattr(brand, "card_theme", None) or "magazine", family=family,
-                      logos=[v for v in versions if v[1]])
+                      logos=[v for v in versions if v[1]], hdr=getattr(brand, "hdr", None) is not False)
 
 
 # ---------------------------------------------------------------- collecting
@@ -671,7 +671,9 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
                                     if is_album else None))
             jpeg = await renderer.render(spec, style)
             key = f"generated/draft-{draft_id}-s{pos}-{uuid.uuid4().hex[:8]}.jpg"
-            url = await asyncio.to_thread(storage.save_bytes, key, jpeg)
+            # Ultra HDR: the slide glows on HDR phone screens; other screens show the normal image
+            stored = await asyncio.to_thread(hdr.to_ultra_hdr, jpeg) if style.hdr else jpeg
+            url = await asyncio.to_thread(storage.save_bytes, key, stored)
             thumb = await asyncio.to_thread(_save_thumb, key, jpeg) if pos == 0 else None
             if old_key:
                 await asyncio.to_thread(storage.delete, old_key)

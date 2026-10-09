@@ -25,7 +25,7 @@ from ..config import get_settings
 from ..db import AppSetting, session_scope
 
 SETTINGS_KEY = "credentials"
-VERSION = "4.10-brand-colours"
+VERSION = "4.11-hdr-bright"
 
 # Each engine carries what its own environment needs: suggested models, the key's format,
 # where to get the key, and request tweaks applied in generator._tune_payload().

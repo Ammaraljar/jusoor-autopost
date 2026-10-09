@@ -36,6 +36,33 @@ DEFAULT_COLORS = {"navy": "#16244F", "gold": "#C6A23C", "goldLight": "#D9B96A",
                   "cardHeading": "#8A6D16"}
 
 
+def _lit(hex_colour: str) -> str:
+    """The same colour a little lighter and livelier, for the shades laid over photos.
+    It stays dark enough for white text on it to read well (contrast ≥ 4.8)."""
+    import colorsys
+    value = (hex_colour or "#16244F").lstrip("#")
+    try:
+        r, g, b = (int(value[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    except ValueError:
+        return hex_colour
+    h, l, s = colorsys.rgb_to_hls(r, g, b)
+    s = min(1.0, s * 1.12 + 0.04)
+
+    def hx(lightness: float) -> str:
+        rr, gg, bb = colorsys.hls_to_rgb(h, lightness, s)
+        return "#%02x%02x%02x" % (round(rr * 255), round(gg * 255), round(bb * 255))
+
+    def white_contrast(c: str) -> float:
+        def lum(v: float) -> float:
+            return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+        rr, gg, bb = (int(c[i:i + 2], 16) / 255 for i in (1, 3, 5))
+        return 1.05 / (0.2126 * lum(rr) + 0.7152 * lum(gg) + 0.0722 * lum(bb) + 0.05)
+    target = min(l + 0.09, 0.5)
+    while target > l and white_contrast(hx(target)) < 4.8:
+        target -= 0.01
+    return hx(max(target, l))
+
+
 def _rgb_triplet(hex_colour: str) -> str:
     value = (hex_colour or "#16244F").lstrip("#")
     try:
@@ -78,6 +105,7 @@ class BrandStyle:
     theme: str = "magazine"           # magazine = photo-first field designs | classic (rounded cards)
     family: str = "general"           # card design family of the company's field
     logos: list | None = None         # [(tone, bytes)] all versions of the logo
+    hdr: bool = True                  # save slides as Ultra HDR (they glow on HDR phone screens)
 
 
 @lru_cache
@@ -305,7 +333,7 @@ def build_html(spec: SlideSpec, brand: BrandStyle) -> str:
         card_bg=colors.get("cardBg"), card_solid=colors.get("cardBgHex") or "#F8F4EA", card_title=colors.get("cardTitle"),
         card_text=colors.get("cardText", colors.get("cardSubtle", "#3A4058")),
         card_heading=colors.get("cardHeading") or colors["gold"],
-        navy_rgb=_rgb_triplet(colors["navy"]), plate_rgb=_rgb_triplet(brand_colors["navy"]),
+        navy_rgb=_rgb_triplet(_lit(colors["navy"])), plate_rgb=_rgb_triplet(brand_colors["navy"]),
         bg_pos=bg_pos, bg_filter=bg_filter, top_dir=top_dir, content=content,
     )
 
