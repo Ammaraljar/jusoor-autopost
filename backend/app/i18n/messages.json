@@ -1043,5 +1043,20 @@
   "en": "SMTP: the server can’t reach the mail port — the hosting usually blocks SMTP. Use Brevo or Resend instead",
   "ms": "SMTP: pelayan tidak dapat mencapai port mel — hos biasanya menyekat SMTP. Gunakan Brevo atau Resend",
   "fr": "SMTP : le serveur ne peut pas joindre le port mail — l’hébergeur bloque souvent SMTP. Utilisez Brevo ou Resend"
+ },
+ "شريحة الصورة لا تحتوي نصًا": {
+  "en": "A photo slide has no text",
+  "ms": "Slaid foto tiada teks",
+  "fr": "Une diapositive photo n’a pas de texte"
+ },
+ "أضف صورة واحدة على الأقل": {
+  "en": "Add at least one photo",
+  "ms": "Tambah sekurang-kurangnya satu foto",
+  "fr": "Ajoutez au moins une photo"
+ },
+ "الحد الأقصى {} صور في المنشور الواحد": {
+  "en": "At most {} photos per post",
+  "ms": "Maksimum {} foto bagi setiap hantaran",
+  "fr": "{} photos au maximum par publication"
  }
 }
