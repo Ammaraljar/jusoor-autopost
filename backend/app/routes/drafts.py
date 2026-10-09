@@ -107,6 +107,39 @@ async def create_manual(body: ManualDraft, background: BackgroundTasks, db: Sess
     return {"ok": True, "calendar_item_id": item.id}
 
 
+@router.post("/album")
+async def create_album(background: BackgroundTasks, files: list[UploadFile] = File(default=[]),
+                       media_ids: str = Form(""), title: str = Form(""), text: str = Form(""),
+                       brand_id: int | None = Form(None), dialect: str = Form(""), platform: str = Form("instagram"),
+                       db: Session = Depends(get_db)):
+    """A post from the company's own photo album (an event, a visit, a place)."""
+    from ..db import MediaAsset
+    from ..services import album, media
+    if len(files) > album.MAX_PHOTOS:
+        raise HTTPException(400, f"الحد الأقصى {album.MAX_PHOTOS} صور في المنشور الواحد")
+    urls: list[str] = []
+    ids = [int(x) for x in media_ids.replace(" ", "").split(",") if x.isdigit()]
+    if ids:
+        found = {a.id: a.url for a in db.scalars(select(MediaAsset).where(MediaAsset.id.in_(ids)))}
+        urls += [found[i] for i in ids if i in found]
+    for f in files:
+        try:   # uploaded photos also go to the library, so newsletters and later posts can use them
+            urls.append(media.add_image(db, await f.read(), title=title or text[:80], tags=title).url)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    if not urls:
+        raise HTTPException(400, "أضف صورة واحدة على الأقل")
+    if len(urls) > album.MAX_PHOTOS:
+        raise HTTPException(400, f"الحد الأقصى {album.MAX_PHOTOS} صور في المنشور الواحد")
+    db.commit()
+    try:
+        draft_id = pipeline.create_album_draft(urls, title.strip(), text.strip(), brand_id, dialect or None, platform)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    background.add_task(pipeline.finish_album, draft_id)
+    return {"ok": True, "draft_id": draft_id}
+
+
 class BulkBody(BaseModel):
     ids: list[int] = Field(min_length=1, max_length=500)
     action: str                     # approve | reject | restore | unschedule | delete | auto_schedule
@@ -329,6 +362,8 @@ async def update_slide(draft_id: int, slide_id: int, body: SlidePatch, db: Sessi
 async def regenerate_slide(draft_id: int, slide_id: int, db: Session = Depends(get_db)):
     d = _get(db, draft_id)
     s = _slide(d, slide_id)
+    if s.kind == "photo":
+        raise HTTPException(400, "شريحة الصورة لا تحتوي نصًا")
     brand = pipeline._brand_for(db, d.brand_id)
     gen = {**app_settings.get_section(db, "generation"), "language": d.language, "tone": d.tone,
            **({"dialect": d.dialect} if d.dialect else {})}
@@ -440,6 +475,9 @@ async def regenerate_all(draft_id: int, background: BackgroundTasks, db: Session
     origin, title, text, source_name = d.origin, d.original_title, d.original_body, d.source_name
     d.status = "generating"
     db.commit()
+    if d.content_type == "album":       # an album keeps its photos: only its texts are rewritten
+        background.add_task(pipeline.finish_album, draft_id)
+        return {"ok": True}
 
     async def job():
         try:
