@@ -385,6 +385,67 @@ async def draft_from_calendar(item_id: int) -> int | None:
     return draft_id
 
 
+def create_album_draft(photo_urls: list[str], title: str = "", text: str = "", brand_id: int | None = None,
+                       dialect: str | None = None, platform: str = "instagram") -> int:
+    """A post made of the company's own photos: designed opening, photo-only slides, designed closing."""
+    from . import album
+    photos = list(dict.fromkeys(u for u in photo_urls if u))[:album.MAX_PHOTOS]
+    if not photos:
+        raise ValueError("أضف صورة واحدة على الأقل")
+    with session_scope() as db:
+        brand = _brand_for(db, brand_id)
+        gen = app_settings.get_section(db, "generation")
+        draft = Draft(brand_id=brand.id, origin="manual", original_title=title, original_body=text,
+                      language=gen["language"], tone=gen["tone"], content_type="album", platform=platform,
+                      dialect=dialect or gen.get("dialect"), status="generating")
+        # opening = 1st photo, then up to 8 photo slides, closing over a collage of the album
+        inner = photos[1:album.MAX_PHOTOS - 1]
+        items = [("cover", photos[0])] + [("photo", u) for u in inner] + [("cta", photos[-1])]
+        for pos, (kind, url) in enumerate(items):
+            draft.slides.append(Slide(position=pos, kind=kind, heading="", body="", background_url=url))
+        db.add(draft)
+        db.flush()
+        return draft.id
+
+
+async def finish_album(draft_id: int) -> None:
+    """Write the album's texts (title, caption, closing line), then design the slides."""
+    with session_scope() as db:
+        d = db.get(Draft, draft_id)
+        brand = _brand_for(db, d.brand_id)
+        gen = {**app_settings.get_section(db, "generation"), "content_type": "storytelling",
+               "platform": d.platform, "purpose": "own_site"}
+        if d.dialect:
+            gen["dialect"] = d.dialect
+        ctx, title, text = brand_context(brand), d.original_title, d.original_body
+        count = sum(1 for s in d.slides if s.kind in ("cover", "photo"))
+    try:
+        post = await generator.generate_album(ctx, gen, title, text, count)
+    except Exception as exc:  # noqa: BLE001
+        _fail(draft_id, f"فشل توليد النص: {exc}")
+        return
+    with session_scope() as db:
+        d = db.get(Draft, draft_id)
+        d.hook, d.subtitle, d.caption = post.hook, post.subtitle, post.caption
+        d.hook_highlight = post.highlight if post.highlight and post.highlight in post.hook else None
+        d.hashtags = " ".join(post.hashtags)
+        d.first_comment, d.cta, d.badge, d.relevance = post.first_comment, post.cta, "", 10
+        d.image_keywords, d.ai_meta = post.image_keywords, post.meta or None
+        for sl in d.slides:
+            if sl.kind == "cover":
+                sl.heading, sl.body = post.hook, post.subtitle
+            elif sl.kind == "cta":
+                sl.heading, sl.body = post.cta, ""
+    await asyncio.gather(make_variants(draft_id), render_draft(draft_id))
+
+
+async def draft_from_album(photo_urls: list[str], title: str = "", text: str = "", brand_id: int | None = None,
+                           dialect: str | None = None, platform: str = "instagram") -> int:
+    draft_id = create_album_draft(photo_urls, title, text, brand_id, dialect, platform)
+    await finish_album(draft_id)
+    return draft_id
+
+
 def _apply_post(draft: Draft, post: generator.GeneratedPost) -> None:
     draft.hook, draft.subtitle, draft.caption = post.hook, post.subtitle, post.caption
     draft.hook_highlight = post.highlight if post.highlight and post.highlight in post.hook else None
@@ -505,6 +566,11 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
         enabled_templates = list(brand.templates or [])
         logo_placement = brand.logo_placement or "top-left"
         rtl = draft.language == "ar"
+        is_album = draft.content_type == "album"
+        album_urls = list(dict.fromkeys(s.background_url for s in sorted(draft.slides, key=lambda s: s.position)
+                                        if s.background_url)) if is_album else []
+        if is_album:
+            needs_bg = False             # an album keeps its own photos, never stock ones
 
     backgrounds = []
     if needs_bg:
@@ -534,8 +600,17 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
     # Design (colour set + card layout + cover style) from the company's own rotation: a new post
     # takes the next design after the previous post; "redesign" moves this post to its next one.
     # All designs are used before any of them comes back.
+    album_gallery: list[bytes] = []
+    if is_album:
+        from . import album as album_design
+        picks = album_urls[:4] + ([album_urls[-1]] if len(album_urls) > 4 else [])
+        datas = await asyncio.gather(*(asyncio.to_thread(images.download_image, u) for u in picks))
+        album_gallery = [album_design.thumb(d) for d in datas if d]
+
     palette_to_store = stored_palette
-    if color_mode == "auto":
+    if is_album:
+        style.palette, palette_to_store = None, None          # the brand's own colours around the photos
+    elif color_mode == "auto":
         stored_index = (stored_palette or {}).get("design")
         if next_design and stored_index is not None:
             index = int(stored_index) + 1
@@ -587,7 +662,12 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
                              badge=badge if kind == "cover" else None,
                              credit=credit if kind != "cta" else "", variant=pos,
                              highlight=highlight if kind == "cover" else None,
-                             logo=chosen_logo, logo_plate=plate)
+                             logo=chosen_logo, logo_plate=plate,
+                             album=({"count": len(album_urls),
+                                     # opening: a peek at what follows; closing: the last photo + the first ones
+                                     "gallery": album_gallery[1:4] if kind == "cover"
+                                     else list(dict.fromkeys(album_gallery[-1:] + album_gallery[:3]))}
+                                    if is_album else None))
             jpeg = await renderer.render(spec, style)
             key = f"generated/draft-{draft_id}-s{pos}-{uuid.uuid4().hex[:8]}.jpg"
             url = await asyncio.to_thread(storage.save_bytes, key, jpeg)

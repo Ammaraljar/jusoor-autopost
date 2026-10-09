@@ -763,6 +763,24 @@ async def generate_from_topic(brand: BrandContext, gen: dict[str, Any], topic: s
     return await _generate_post(build_system_prompt(brand, gen), user, gen)
 
 
+async def generate_album(brand: BrandContext, gen: dict[str, Any], title: str, text: str, count: int) -> GeneratedPost:
+    """Texts for a photo-album post (the photos themselves are the slides)."""
+    user = (f"The company shares its OWN news with an album of {count} photos (an event, a visit, a place).\n"
+            f"Album title from the editor: {title or '-'}\nWhat happened, from the company: {text or '-'}\n\n"
+            "Write as the company, first person plural (we/our). hook = the album title shown on the opening "
+            "slide (max 8 words, specific: what + where). subtitle = one short line (place, date or the occasion). "
+            "cta = a short warm closing line for the last slide (thanks, or an invitation to follow/join). "
+            "caption = the story of the album using only the facts given — no invented names, numbers or dates. "
+            "The slides of this post are photos only, so return at most one short slide (it is not shown). "
+            "Relevance 10. Use the create_post tool.")
+    if not ai_available():
+        post = demo_post(title or (text or "")[:60], text, gen)
+        post.hook, post.subtitle = (title or (text or "").split("\n")[0])[:80], ""
+        post.caption = text or title
+        return post
+    return await _generate_post(build_system_prompt(brand, gen), user, gen)
+
+
 async def regenerate_field(brand: BrandContext, gen: dict[str, Any], draft_context: str, field_name: str) -> str:
     """Regenerate a single text field (hook | caption | cta | first_comment)."""
     tool = {"name": "rewrite", "description": f"Return a fresh alternative for the {field_name}.",

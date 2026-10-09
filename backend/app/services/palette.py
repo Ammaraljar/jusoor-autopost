@@ -345,16 +345,18 @@ FIELD_TEMPLATES: dict[str, list[str]] = {
     "retail": ["pricetag", "breaking", "stat"], "luxury": ["blueprint", "certificate", "pricetag", "stat"],
     "fashion": ["pricetag", "quote"], "health": ["stat", "quote", "certificate"], "beauty": ["menu", "quote", "pricetag"],
     "auto": ["breaking", "blueprint", "pricetag", "stat"], "events": ["ticket", "certificate", "breaking"],
+    "government": ["certificate", "stat", "breaking", "blueprint"], "rental": ["pricetag", "ticket", "stat", "blueprint"],
     "general": ["stat", "quote", "breaking"],
 }
 # looks that do not suit a field's voice
 FIELD_EXCLUDE: dict[str, set[str]] = {
     "news": {"leaf", "sticker", "polaroid"}, "luxury": {"sticker"}, "health": {"sticker"},
     "nonprofit": {"sticker"}, "education": set(), "tech": {"leaf"},
+    "government": {"sticker", "polaroid", "leaf", "gradient"},
 }
 TEMPLATES = list(dict.fromkeys(SHARED_TEMPLATES + [t for v in FIELD_TEMPLATES.values() for t in v]))
 FAMILIES = ["travel", "news", "tech", "food", "education", "training", "nonprofit", "retail", "luxury",
-            "fashion", "health", "beauty", "auto", "events", "general"]
+            "fashion", "health", "beauty", "auto", "events", "government", "rental", "general"]
 DESIGN_COUNT = len(TEMPLATES)
 
 

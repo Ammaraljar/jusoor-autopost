@@ -45,13 +45,15 @@ FIELD_LAYOUTS = {
     "health": ["classic", "minimal", "digest", "spotlight"],
     "beauty": ["spotlight", "minimal", "magazine", "bold"],
     "auto": ["bold", "spotlight", "digest", "classic"],
+    "government": ["classic", "digest", "minimal", "magazine"],
+    "rental": ["bold", "spotlight", "magazine", "digest"],
     "events": ["bold", "spotlight", "classic", "digest"],
     "general": ["classic", "magazine", "minimal", "bold", "digest", "spotlight"],
 }
 SKINS = {
     "serif": {"luxury", "fashion", "beauty", "nonprofit"},
-    "round": {"food", "beauty", "health", "retail", "travel", "events", "nonprofit"},
-    "square": {"news", "tech", "auto", "luxury"},
+    "round": {"food", "beauty", "health", "retail", "travel", "events", "nonprofit", "rental"},
+    "square": {"news", "tech", "auto", "luxury", "government"},
     "numbered": {"education", "training", "health"},
     "dotted": {"food"},
 }

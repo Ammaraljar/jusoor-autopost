@@ -19,6 +19,7 @@ FAMILY_OF_INDUSTRY = {
     "travel": "travel", "news": "news", "tech": "tech", "restaurants": "food", "education": "education",
     "training": "training", "nonprofit": "nonprofit", "ecommerce": "retail", "realestate": "luxury",
     "fashion": "fashion", "health": "health", "beauty": "beauty", "automotive": "auto", "events": "events",
+    "government": "government", "car_rental": "rental",
     "general": "general",
 }
 
@@ -41,19 +42,21 @@ FAMILY_KICKER = {
     "ar": {"travel": "وجهة", "news": "خبر", "tech": "تقنية", "food": "من مطبخنا", "education": "تعليم",
            "training": "تطوير مهني", "nonprofit": "أثر", "retail": "جديد", "luxury": "عقار مميز",
            "fashion": "مجموعة جديدة", "health": "صحتك", "beauty": "إطلالتك", "auto": "قيادة",
-           "events": "فعالية", "general": "جديد"},
+           "events": "فعالية", "government": "إعلان رسمي", "rental": "اختر سيارتك", "general": "جديد"},
     "en": {"travel": "Destination", "news": "News", "tech": "Tech", "food": "From our kitchen", "education": "Learning",
            "training": "Professional growth", "nonprofit": "Impact", "retail": "New in", "luxury": "Featured property",
            "fashion": "New collection", "health": "Your health", "beauty": "Your look", "auto": "Drive",
-           "events": "Event", "general": "New"},
+           "events": "Event", "government": "Official", "rental": "Your ride", "general": "New"},
     "ms": {"travel": "Destinasi", "news": "Berita", "tech": "Teknologi", "food": "Dari dapur kami",
            "education": "Pembelajaran", "training": "Pembangunan profesional", "nonprofit": "Impak",
            "retail": "Baharu", "luxury": "Hartanah pilihan", "fashion": "Koleksi baharu", "health": "Kesihatan anda",
-           "beauty": "Gaya anda", "auto": "Pemanduan", "events": "Acara", "general": "Baharu"},
+           "beauty": "Gaya anda", "auto": "Pemanduan", "events": "Acara", "government": "Rasmi",
+           "rental": "Kereta anda", "general": "Baharu"},
     "fr": {"travel": "Destination", "news": "Actu", "tech": "Tech", "food": "De notre cuisine",
            "education": "Apprendre", "training": "Développement pro", "nonprofit": "Impact", "retail": "Nouveauté",
            "luxury": "Bien d’exception", "fashion": "Nouvelle collection", "health": "Votre santé",
-           "beauty": "Votre beauté", "auto": "Conduite", "events": "Événement", "general": "Nouveau"},
+           "beauty": "Votre beauté", "auto": "Conduite", "events": "Événement", "government": "Officiel",
+           "rental": "Votre voiture", "general": "Nouveau"},
 }
 
 _P = {
@@ -71,6 +74,8 @@ _P = {
     "beauty": '<path d="M12 2 9.5 9.5 2 12l7.5 2.5L12 22l2.5-7.5L22 12l-7.5-2.5z"/>',
     "auto": '<path d="M12 4a10 10 0 0 0-10 10h3a7 7 0 0 1 14 0h3A10 10 0 0 0 12 4zm4.2 3.6L11 13a2 2 0 1 0 2.8 2.8l3.6-7z"/>',
     "events": '<path d="M7 2h2v2h6V2h2v2h3v18H4V4h3zm-1 7v11h12V9z"/>',
+    "government": '<path d="M12 2 2 7v2h20V7zM4 11v7h3v-7zm6.5 0v7h3v-7zM17 11v7h3v-7zM2 20v2h20v-2z"/>',
+    "rental": '<path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11v8h-2v-2H7v2H5zm2.2-1h9.6l-1-3H8.2zM7.5 15a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm9 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/>',
     "general": '<path d="M12 2l2.9 6.9L22 9.3l-5.5 4.8L18.2 22 12 18.3 5.8 22l1.7-7.9L2 9.3l7.1-.4z"/>',
 }
 SAVE_ICONS = {
