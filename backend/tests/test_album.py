@@ -64,3 +64,13 @@ def test_album_post_from_uploads_and_library(client):
     assert client.post("/api/drafts/album", data={"title": "x"}).status_code == 400
     too_many = [("files", (f"p{i}.jpg", _jpeg(10, 10, (0, 0, 0)), "image/jpeg")) for i in range(11)]
     assert client.post("/api/drafts/album", data={"title": "x"}, files=too_many).status_code == 400
+
+
+def test_ultra_hdr_slide_is_a_valid_jpeg_with_gain_map():
+    from app.services import hdr
+    base = _jpeg(1080, 1350, (200, 180, 120))
+    out = hdr.to_ultra_hdr(base)
+    assert hdr.is_ultra_hdr(out) and out[:2] == b"\xff\xd8" and b"MPF\x00" in out[:4096]
+    assert out.count(b"\xff\xd8") >= 2                      # primary + gain-map images
+    assert Image.open(io.BytesIO(out)).size == (1080, 1350)  # ordinary viewers still read it
+    assert hdr.to_ultra_hdr(b"not a jpeg") == b"not a jpeg"
