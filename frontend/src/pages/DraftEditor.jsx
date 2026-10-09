@@ -296,8 +296,10 @@ function SlideEditor({ draftId, slide, busy, act }) {
       <div className="row">
         <span className="pill gold">{slide.position + 1} · {slide.kind}</span>
         <div className="spacer" />
-        <Button size="sm" variant="ghost" icon={Sparkles} busy={busy === 'slide-regen'}
-          onClick={() => act('slide-regen', () => api.post(`${base}/regenerate`))}>{t('regenerate')}</Button>
+        {slide.kind !== 'photo' && (
+          <Button size="sm" variant="ghost" icon={Sparkles} busy={busy === 'slide-regen'}
+            onClick={() => act('slide-regen', () => api.post(`${base}/regenerate`))}>{t('regenerate')}</Button>
+        )}
         {slide.kind !== 'cta' && (
           <>
             <Button size="sm" variant="ghost" icon={ImagePlus} busy={busy === 'slide-bg'} onClick={() => fileRef.current?.click()}>
@@ -312,10 +314,13 @@ function SlideEditor({ draftId, slide, busy, act }) {
           </>
         )}
       </div>
-      <Field label={t('slide_heading')}>
-        <input dir="auto" className="input" value={heading} onChange={(e) => setHeading(e.target.value)} />
-      </Field>
-      {slide.kind !== 'cta' && (
+      {slide.kind === 'photo' && <p className="xs muted" style={{ margin: 0 }}>{t('album_photo_slide')}</p>}
+      {slide.kind !== 'photo' && (
+        <Field label={t('slide_heading')}>
+          <input dir="auto" className="input" value={heading} onChange={(e) => setHeading(e.target.value)} />
+        </Field>
+      )}
+      {slide.kind !== 'cta' && slide.kind !== 'photo' && (
         <Field label={t('slide_body')}>
           <textarea dir="auto" className="textarea" rows={3} value={body} onChange={(e) => setBody(e.target.value)} />
         </Field>

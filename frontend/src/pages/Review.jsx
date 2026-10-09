@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { CalendarClock, Check, ChevronDown, ChevronLeft, Images, Lightbulb, RefreshCw, RotateCcw, Search, Sparkles, Trash2, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { CalendarClock, Camera, Check, ChevronDown, ChevronLeft, ImagePlus, Images, Lightbulb, RefreshCw, RotateCcw, Search, Sparkles, Trash2, X } from 'lucide-react';
 import { BulkBar, Button, Empty, ErrorBox, Field, Modal, PageHead, SelectAll, Spinner, StatusPill, useAction, useLoad, useSelection } from '../components/ui';
 import { api, mediaUrl } from '../lib/api';
 import ScrapeModal from '../components/ScrapeModal';
@@ -20,6 +20,7 @@ export default function Review() {
   const [query, setQuery] = useState('');
   const [collapsed, setCollapsed] = useState({});
   const [showManual, setShowManual] = useState(false);
+  const [showAlbum, setShowAlbum] = useState(false);
   const [showScrape, setShowScrape] = useState(false);
   const [busy, run] = useAction();
 
@@ -75,6 +76,7 @@ export default function Review() {
     <>
       <PageHead title={t('review_title')} sub={t('review_sub')}>
         <Button icon={Lightbulb} onClick={() => setShowManual(true)}>{t('new_post')}</Button>
+        <Button icon={Camera} onClick={() => setShowAlbum(true)}>{t('album_new')}</Button>
         <Button variant="primary" icon={RefreshCw} busy={busy === 'scrape' || jobs.data?.running} onClick={() => setShowScrape(true)}>
           {t('run_scrape')}
         </Button>
@@ -142,6 +144,7 @@ export default function Review() {
 
       {showScrape && <ScrapeModal onClose={() => setShowScrape(false)} onStarted={() => jobs.reload(true)} />}
       {showManual && <ManualModal onClose={() => setShowManual(false)} onDone={() => drafts.reload(true)} />}
+      {showAlbum && <AlbumModal onClose={() => setShowAlbum(false)} />}
     </>
   );
 }
@@ -178,6 +181,117 @@ function DraftCard({ d, picked, onPick }) {
         </div>
       </div>
     </Link>
+  );
+}
+
+const ALBUM_MAX = 10;
+
+function AlbumModal({ onClose }) {
+  const { t } = useI18n();
+  const ex = useExample();
+  const navigate = useNavigate();
+  const fileRef = useRef(null);
+  const [title, setTitle] = useState('');
+  const [text, setText] = useState('');
+  const [dialect, setDialect] = useState('');
+  const [files, setFiles] = useState([]);          // [{file, url}]
+  const [picked, setPicked] = useState([]);        // library ids
+  const [showLib, setShowLib] = useState(false);
+  const [busy, run] = useAction();
+  const library = useLoad(() => (showLib ? api.get('/api/media') : Promise.resolve(null)), [showLib]);
+  const total = files.length + picked.length;
+
+  useEffect(() => () => files.forEach((f) => URL.revokeObjectURL(f.url)), []); // eslint-disable-line
+  const addFiles = (list) => {
+    const room = ALBUM_MAX - total;
+    const next = [...list].filter((f) => f.type.startsWith('image/')).slice(0, Math.max(0, room))
+      .map((file) => ({ file, url: URL.createObjectURL(file) }));
+    setFiles((x) => [...x, ...next]);
+  };
+  const move = (i, d) => setFiles((x) => {
+    const j = i + d;
+    if (j < 0 || j >= x.length) return x;
+    const y = [...x]; [y[i], y[j]] = [y[j], y[i]]; return y;
+  });
+  const submit = () => run('go', async () => {
+    const fd = new FormData();
+    files.forEach((f) => fd.append('files', f.file));
+    fd.append('media_ids', picked.join(','));
+    fd.append('title', title);
+    fd.append('text', text);
+    if (dialect) fd.append('dialect', dialect);
+    const r = await api.post('/api/drafts/album', fd);
+    onClose();
+    navigate(`/drafts/${r.draft_id}`);
+  }, t('started'));
+
+  return (
+    <Modal wide title={t('album_new')} onClose={onClose}
+      footer={<>
+        <Button onClick={onClose}>{t('cancel')}</Button>
+        <Button variant="primary" icon={Sparkles} busy={busy === 'go'} disabled={!total || (!title.trim() && !text.trim())} onClick={submit}>
+          {t('generate')}
+        </Button>
+      </>}>
+      <div className="stack">
+        <p className="muted small" style={{ margin: 0 }}>{t('album_hint')}</p>
+        <Field label={t('album_title')}>
+          <input className="input" value={title} placeholder={ex('topic')} onChange={(e) => setTitle(e.target.value)} autoFocus />
+        </Field>
+        <Field label={t('album_text')} hint={t('album_text_hint')}>
+          <textarea className="textarea" rows={3} value={text} placeholder={ex('notes')} onChange={(e) => setText(e.target.value)} />
+        </Field>
+        <Field label={`${t('album_photos')} (${total}/${ALBUM_MAX})`} hint={t('album_photos_hint')}>
+          <div className="album-grid"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}>
+            {files.map((f, i) => (
+              <div key={f.url} className="album-tile">
+                <img src={f.url} alt="" />
+                {i === 0 && !picked.length && <span className="album-tag">{t('album_cover')}</span>}
+                <div className="album-tools">
+                  <button type="button" onClick={() => move(i, -1)} aria-label="←">‹</button>
+                  <button type="button" onClick={() => setFiles((x) => x.filter((_, k) => k !== i))} aria-label={t('delete')}><X size={14} /></button>
+                  <button type="button" onClick={() => move(i, 1)} aria-label="→">›</button>
+                </div>
+              </div>
+            ))}
+            {total < ALBUM_MAX && (
+              <button type="button" className="album-add" onClick={() => fileRef.current?.click()}>
+                <ImagePlus size={26} /><span>{t('album_add')}</span>
+              </button>
+            )}
+          </div>
+          <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" multiple hidden
+            onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
+          <div className="row" style={{ marginTop: 8 }}>
+            <Button size="sm" icon={Images} onClick={() => setShowLib((v) => !v)}>{t('album_from_library')}{picked.length ? ` (${picked.length})` : ''}</Button>
+          </div>
+          {showLib && (
+            <div className="album-grid lib" style={{ marginTop: 8 }}>
+              {(library.data || []).map((a) => {
+                const on = picked.includes(a.id);
+                return (
+                  <button type="button" key={a.id} className={`album-tile pick-lib ${on ? 'on' : ''}`}
+                    disabled={!on && total >= ALBUM_MAX}
+                    onClick={() => setPicked((x) => (on ? x.filter((k) => k !== a.id) : [...x, a.id]))}>
+                    <img src={mediaUrl(a.url)} alt="" loading="lazy" />
+                    {on && <span className="album-tag">{picked.indexOf(a.id) + 1}</span>}
+                  </button>
+                );
+              })}
+              {library.data && !library.data.length && <span className="xs muted">{t('album_library_empty')}</span>}
+            </div>
+          )}
+        </Field>
+        <Field label={t('dialect')}>
+          <select className="select" value={dialect} onChange={(e) => setDialect(e.target.value)}>
+            <option value="">{t('dialect_default')}</option>
+            {DIALECTS.map((x) => <option key={x} value={x}>{t(`dialect_${x}`)}</option>)}
+          </select>
+        </Field>
+      </div>
+    </Modal>
   );
 }
 
