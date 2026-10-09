@@ -108,6 +108,7 @@ class Brand(TenantMixin, Base):
     logo_placement: Mapped[str] = mapped_column(String(20), default="top-left")
     card_style: Mapped[str] = mapped_column(String(20), default="frosted")
     card_theme: Mapped[str | None] = mapped_column(String(20), nullable=True, default="magazine")  # magazine | classic
+    hdr: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=True)  # Ultra HDR slides (glow on HDR phones)
     design_seed: Mapped[int | None] = mapped_column(Integer, nullable=True)   # makes each company's design unique
     color_mode: Mapped[str | None] = mapped_column(String(20), nullable=True, default="auto")      # auto | brand
     logo_backdrop: Mapped[str | None] = mapped_column(String(20), nullable=True, default="auto")   # auto | always | never
@@ -445,6 +446,7 @@ _ADDED_COLUMNS = [
     ("sources", "dialect", "VARCHAR(20)"),
     ("calendar_items", "dialect", "VARCHAR(20)"),
     ("brands", "card_theme", "VARCHAR(20)"),
+    ("brands", "hdr", "BOOLEAN"),
     ("brands", "design_seed", "INTEGER"),
     ("brands", "logos", "JSON"),
     ("brands", "templates", "JSON"),
