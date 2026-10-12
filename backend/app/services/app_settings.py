@@ -12,7 +12,8 @@ LANGUAGES = ["ar", "en", "ms", "fr"]
 TONES = ["friendly", "professional", "luxury", "emotional", "bold", "educational", "corporate", "storytelling"]
 CONTENT_TYPES = ["news", "travel", "tips", "educational", "promotional", "storytelling",
                  "announcement", "corporate", "comparison", "event", "product"]
-PLATFORMS = ["instagram", "facebook", "linkedin", "tiktok", "x", "threads"]
+PLATFORMS = ["instagram", "facebook", "linkedin", "tiktok", "x", "threads", "pinterest", "bluesky", "reddit",
+             "google_business", "telegram", "discord"]
 PROVIDERS = ["buffer", "meta", "uploadpost"]
 DIALECTS = ["fusha", "msa", "egyptian", "gulf", "maghreb"]
 

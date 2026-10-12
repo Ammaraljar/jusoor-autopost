@@ -42,16 +42,30 @@ PLATFORM_SPECS: dict[str, dict[str, Any]] = {
     "tiktok": {"label": "TikTok", "format": "carousel", "limit": 2000, "tags": (3, 6),
                "images": {"best": (3, 10), "max": 35, "default": 10},
                "guide": "Photo-carousel caption: a catchy hook, 1-2 short lines, 3-6 trending hashtags of the brand's field."},
+    # written from the texts above (no extra AI call)
+    "pinterest": {"label": "Pinterest", "format": "single", "limit": 500, "tags": (2, 5), "ai": False,
+                  "images": {"best": (1, 1), "max": 5, "default": 1}},
+    "bluesky": {"label": "Bluesky", "format": "carousel", "limit": 300, "tags": (0, 2), "ai": False,
+                "images": {"best": (1, 4), "max": 4, "default": 4}},
+    "reddit": {"label": "Reddit", "format": "carousel", "limit": 3000, "tags": (0, 0), "ai": False,
+               "images": {"best": (2, 5), "max": 20, "default": 5}},
+    "google_business": {"label": "Google Business", "format": "single", "limit": 1500, "tags": (0, 0), "ai": False,
+                        "images": {"best": (1, 1), "max": 1, "default": 1}},
+    "telegram": {"label": "Telegram", "format": "carousel", "limit": 1024, "tags": (0, 3), "ai": False,
+                 "images": {"best": (1, 10), "max": 10, "default": 5}},
+    "discord": {"label": "Discord", "format": "carousel", "limit": 2000, "tags": (0, 0), "ai": False,
+                "images": {"best": (1, 4), "max": 10, "default": 4}},
 }
 PLATFORMS = list(PLATFORM_SPECS)
+AI_PLATFORMS = [p for p, spec in PLATFORM_SPECS.items() if spec.get("ai", True)]
 
 VARIANTS_TOOL = {
     "name": "platform_posts",
     "description": "Write the post text for each social platform.",
     "input_schema": {
         "type": "object",
-        "properties": {p: {"type": "string", "description": spec["guide"]} for p, spec in PLATFORM_SPECS.items()},
-        "required": PLATFORMS,
+        "properties": {p: {"type": "string", "description": PLATFORM_SPECS[p]["guide"]} for p in AI_PLATFORMS},
+        "required": AI_PLATFORMS,
     },
 }
 
@@ -87,6 +101,26 @@ def fallback_texts(draft) -> dict[str, str]:
         "x": f"{draft.hook} {_tags(draft.hashtags, 2)}".strip(),
         "threads": "\n\n".join(p for p in [draft.hook, first_para] if p),
         "tiktok": "\n\n".join(p for p in [draft.hook, _tags(draft.hashtags, 6)] if p),
+        **derived_texts(draft, {}),
+    }
+
+
+def _no_tags(text: str) -> str:
+    return re.sub(r"(^|\s)#[^\s#]+", "", text or "").strip()
+
+
+def derived_texts(draft, texts: dict[str, str]) -> dict[str, str]:
+    """Texts for the extra platforms, taken from the AI texts (or the main caption)."""
+    caption = (draft.caption or "").strip()
+    first_para = caption.split("\n\n")[0] if caption else (draft.hook or "")
+    fb = texts.get("facebook") or caption
+    return {
+        "pinterest": "\n\n".join(p for p in [draft.hook, first_para, _tags(draft.hashtags, 5)] if p),
+        "bluesky": (texts.get("threads") or "\n\n".join(p for p in [draft.hook, first_para] if p)),
+        "reddit": _no_tags(fb),
+        "google_business": _no_tags("\n\n".join(p for p in [draft.hook, caption, draft.cta] if p)),
+        "telegram": "\n\n".join(p for p in [draft.hook, _no_tags(fb), _tags(draft.hashtags, 3)] if p),
+        "discord": "\n\n".join(p for p in [f"**{draft.hook}**" if draft.hook else "", _no_tags(fb)] if p),
     }
 
 
@@ -160,10 +194,10 @@ async def generate_texts(brand: generator.BrandContext, gen: dict[str, Any], dra
     try:
         data = await generator._call_model(generator.build_system_prompt(brand, gen), user, VARIANTS_TOOL,
                                            max_tokens=3500)
-        texts = {p: generator._text(data.get(p)) for p in PLATFORMS}
+        texts = {p: generator._text(data.get(p)) for p in AI_PLATFORMS}
         if sum(1 for t in texts.values() if t) < 3:
             raise ValueError("too few platform texts")
-        return texts
+        return {**texts, **derived_texts(draft, texts)}
     except Exception as exc:  # noqa: BLE001 - never block a post over this
         log.warning("platform texts failed, using derived texts: %s", exc)
         return fallback_texts(draft)
