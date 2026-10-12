@@ -260,7 +260,11 @@ function BrandForm({ brand, onChanged }) {
           <div className="grid grid-2">
             <Field label={t('up_user')}><input className="input code" value={f.publish_config.uploadpost?.user || ''} onChange={(e) => setPub('uploadpost', 'user', e.target.value.trim())} /></Field>
             <Field label={t('up_fb')}><input className="input code" value={f.publish_config.uploadpost?.facebook_page_id || ''} onChange={(e) => setPub('uploadpost', 'facebook_page_id', e.target.value.trim())} /></Field>
+            {[['linkedin_page_id', 'up_linkedin'], ['pinterest_board_id', 'up_pinterest'], ['subreddit', 'up_reddit'], ['gbp_location_id', 'up_gbp']].map(([k, label]) => (
+              <Field key={k} label={t(label)}><input className="input code" value={f.publish_config.uploadpost?.[k] || ''} onChange={(e) => setPub('uploadpost', k, e.target.value.trim())} /></Field>
+            ))}
           </div>
+          <p className="xs muted" style={{ margin: 0 }}>{t('up_platforms_hint')}</p>
         </div>
 
         <div className="row">

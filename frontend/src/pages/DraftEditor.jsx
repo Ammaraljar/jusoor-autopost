@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowRight, Bot, Check, CheckCircle2, ChevronLeft, Chevr
   ImagePlus, Images, RotateCcw, Save, Send, Sparkles, Trash2, Wand2, X, XCircle } from 'lucide-react';
 import { Button, ErrorBox, Field, Loading, Modal, Spinner, StatusPill, useAction, useLoad } from '../components/ui';
 import { api, mediaUrl } from '../lib/api';
+import { platformLabel } from '../lib/platforms';
 import { fmtDate, fmtDateTime, toLocalInput } from '../lib/format';
 import { useAuth } from '../lib/auth';
 import { DIALECTS, useI18n } from '../lib/i18n';
@@ -355,7 +356,8 @@ function RejectModal({ draft, onClose, onDone }) {
   );
 }
 
-const PLATFORM_ORDER = ['instagram', 'facebook', 'linkedin', 'x', 'threads', 'tiktok'];
+const PLATFORM_ORDER = ['instagram', 'facebook', 'linkedin', 'x', 'threads', 'tiktok', 'pinterest', 'bluesky', 'reddit',
+  'google_business', 'telegram', 'discord'];
 
 /** One post per platform: its own text and its own images (carousel or a single image). */
 function PlatformPosts({ draft, locked, onChange }) {
@@ -504,7 +506,7 @@ function PublishModal({ draft, onClose, onDone }) {
                   {info.platforms.map((p) => (
                     <label key={p} className="check small">
                       <input type="checkbox" disabled={!info.configured} checked={info.configured && (targets[name] || []).includes(p)}
-                        onChange={() => toggle(name, p)} /> {p}
+                        onChange={() => toggle(name, p)} /> {platformLabel(p)}
                     </label>
                   ))}
                 </div>
@@ -519,7 +521,7 @@ function PublishModal({ draft, onClose, onDone }) {
                 const v = draft.variants?.[p];
                 return (
                   <div key={p} className="xs row" style={{ gap: 6 }}>
-                    <b style={{ minWidth: 80 }}>{v?.label || p}</b>
+                    <b style={{ minWidth: 80 }}>{v?.label || platformLabel(p)}</b>
                     <span className="muted">{(v?.slides || []).length} 🖼</span>
                     <span className="muted clamp-2" dir="auto" style={{ flex: 1 }}>{(v?.text || '').slice(0, 90)}</span>
                   </div>

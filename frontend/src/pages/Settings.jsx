@@ -4,6 +4,7 @@ import CompanyCard from '../components/CompanyCard';
 import KeysCard from '../components/KeysCard';
 import { Button, ErrorBox, Field, Loading, PageHead, useAction, useLoad } from '../components/ui';
 import { api } from '../lib/api';
+import { platformLabel } from '../lib/platforms';
 import { fmtDateTime } from '../lib/format';
 import { DIALECTS, LANGUAGES, useI18n } from '../lib/i18n';
 
@@ -64,7 +65,7 @@ export default function SettingsPage() {
               </Field>
               <Field label={t('platform')}>
                 <select className="select" value={g.platform} onChange={(e) => set('generation', 'platform', e.target.value)}>
-                  {opts.platforms.map((o) => <option key={o}>{o}</option>)}
+                  {opts.platforms.map((o) => <option key={o} value={o}>{platformLabel(o)}</option>)}
                 </select>
               </Field>
               <Field label={t('min_relevance')}>
@@ -136,7 +137,7 @@ export default function SettingsPage() {
                   <label key={o} className="check small">
                     <input type="checkbox" checked={p.default_platforms.includes(o)} onChange={() => set('publishing', 'default_platforms',
                       p.default_platforms.includes(o) ? p.default_platforms.filter((x) => x !== o) : [...p.default_platforms, o])} />
-                    {o}
+                    {platformLabel(o)}
                   </label>
                 ))}
               </div>
