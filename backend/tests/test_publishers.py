@@ -136,3 +136,31 @@ def test_uploadpost_multipart(client, monkeypatch):
 def test_uploadpost_needs_user(client, monkeypatch):
     res = asyncio.run(up_mod.UploadPostPublisher().publish(_req()))
     assert not any(r.ok for r in res)
+
+
+def test_uploadpost_all_dashboard_platforms(client, monkeypatch):
+    monkeypatch.setattr(get_settings(), "uploadpost_api_key", "up")
+    monkeypatch.setattr(up_mod.storage, "read_bytes", lambda k: b"jpegdata")
+    calls = []
+
+    def handler(request):
+        body = request.content
+        calls.append((str(request.url), body))
+        if b'name="platform[]"\r\n\r\ntelegram' in body and str(request.url).endswith("/upload_photos"):
+            return httpx.Response(400, json={"success": False, "message": "photos not supported"})
+        return httpx.Response(200, json={"success": True, "request_id": "r"})
+
+    _patch_async_client(monkeypatch, up_mod, handler)
+    cfg = {"uploadpost": {"user": "jusoor", "facebook_page_id": "1", "pinterest_board_id": "B9",
+                          "subreddit": "r/travel", "gbp_location_id": "locations/5", "linkedin_page_id": "77"}}
+    platforms = list(up_mod.PLATFORMS)
+    res = asyncio.run(up_mod.UploadPostPublisher().publish(_req(platforms=platforms, brand_config=cfg)))
+    assert all(r.ok for r in res), [(r.platform, r.error) for r in res]
+    joined = b"".join(b for _, b in calls)
+    assert b"B9" in joined and b'name="subreddit"\r\n\r\ntravel' in joined and b"locations/5" in joined
+    assert b'name="target_linkedin_page_id"' in joined
+    assert any(u.endswith("/api/upload_text") for u, _ in calls)          # telegram fell back to text
+    # missing settings are reported per platform, and YouTube (video only) is refused
+    res = asyncio.run(up_mod.UploadPostPublisher().publish(
+        _req(platforms=["pinterest", "reddit", "youtube"], brand_config={"uploadpost": {"user": "jusoor"}})))
+    assert not any(r.ok for r in res) and "Pinterest" in res[0].error and "يوتيوب" in res[2].error
