@@ -134,3 +134,30 @@ def test_rule_dates():
     assert occasions.rule_date(2026, ("nth", 5, 6, -1)) == date(2026, 5, 31)          # last Sunday of May
     assert occasions.rule_date(2026, ("easter", -21)) == date(2026, 3, 15)            # Mothering Sunday (UK)
     assert occasions.rule_date(2026, ("dayofyear", 256)) == date(2026, 9, 13)         # Programmers' Day
+
+
+def test_occasion_designs_are_many_bright_and_photo_safe():
+    from app.services import occasion_card as oc
+    assert len(oc.LAYOUTS) >= 20
+    for tone, (bg1, bg2, *_rest) in oc.MOODS.items():
+        assert oc._lum(bg1) > 0.85 and oc._lum(bg2) > 0.85, tone            # light backgrounds only
+    eid = {"key": "isl:eid_fitr", "kind": "religious", "tone": "festive", "motif": "crescent"}
+    sa = {"key": "nat:SA:national_day", "kind": "national", "tone": "pride", "motif": "flag", "number": 96}
+    teachers = {"key": "world:teachers_day", "kind": "international", "tone": "appreciation", "motif": "book"}
+    assert not oc.uses_photo(eid) and not oc.uses_photo(sa) and oc.uses_photo(teachers)
+    assert "photo_card" not in oc.layouts_for(eid) and "photo_card" not in oc.layouts_for(sa)
+    assert "confetti" not in oc.layouts_for({**eid, "tone": "spiritual"})
+    assert "big_number" in oc.layouts_for(sa) and "big_number" not in oc.layouts_for(teachers)
+    assert "lanterns" not in oc.layouts_for(teachers)
+    assert len(oc.layouts_for(eid)) >= 10
+    # every design index maps to a suitable layout, and consecutive greetings differ
+    seen = {oc.spec_for(eid, "ar", i)["layout"] for i in range(5)}
+    assert len(seen) == 5 and not (seen - set(oc.layouts_for(eid)))
+    assert "people" not in oc.safe_keywords(teachers)
+
+
+def test_logo_for_light_prefers_dark_then_colour_then_plate():
+    from app.services.palette import logo_for_light
+    assert logo_for_light([("light", b"L"), ("dark", b"D"), ("color", b"C")], b"L") == (b"D", False)
+    assert logo_for_light([("light", b"L"), ("color", b"C")], b"L") == (b"C", False)
+    assert logo_for_light([], None) == (None, False)

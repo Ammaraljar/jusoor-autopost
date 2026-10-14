@@ -89,6 +89,9 @@ def test_offer_post_any_field(client):
         assert d.origin == "offer" and d.badge == "offer" and d.link_url == "https://jusoortravel.com/honeymoon"
         assert "4999 RM" in cover.body and "5999" in cover.body and "30 نوفمبر" in cover.body
         assert all(s.background_url for s in d.slides)            # the offer's own photo on every slide
+        fl = d.ai_meta["flyer"]                                     # the cover is a flyer with the exact price
+        assert fl["prices"][0]["amount"] == "4999" and fl["prices"][0]["old"] == "5999"
+        assert "30 نوفمبر" in fl["badge"] and fl["headline"]
         db.delete(d)
         for x in db.query(MediaAsset).all():
             db.delete(x)

@@ -169,3 +169,33 @@ def test_brand_colour_roles_follow_main_colours_and_exact_mode():
     b = P.design(1, family="government", exact=new)
     assert a["navy"] == "#5a1e1e" and a["gold"] == "#b8963e" and a["cardBgHex"] == new["surface"]
     assert a["template"] != b["template"]
+
+
+def test_every_field_has_forty_designs_of_its_own():
+    from app.services import cards
+    from app.services import palette as p
+    for fam in p.FAMILIES:
+        designs = p.family_templates(fam)
+        assert len(designs) >= 40 and len(set(designs)) == len(designs), fam
+        for t in designs:
+            base, fx = p.split_template(t)
+            assert base in cards.TEMPLATE_SPEC and (fx == "" or fx in p.FAMILY_FINISHES[fam]), (fam, t)
+            assert t in p.TEMPLATES
+    assert set(p.family_templates("news")) != set(p.family_templates("food"))         # field-specific
+    combo = next(t for t in p.family_templates("food") if "~" in t)
+    opts = cards.template_options("food", [combo])
+    assert len(opts) >= 40 and any(o["finish"] for o in opts)
+    assert [o["id"] for o in opts if o["enabled"]] == [combo] and "·" in next(o["ar"] for o in opts if o["id"] == combo)
+    # only the kept designs rotate
+    assert {p.design(i, family="food", enabled=[combo, "menu"])["template"] for i in range(6)} == {combo, "menu"}
+
+
+def test_a_finish_is_drawn_on_the_slide():
+    from app.services import palette as p
+    from app.services.renderer import BrandStyle, SlideSpec, build_html
+    brand = BrandStyle(name="J T", colors={"navy": "#16244F", "gold": "#C6A23C"}, language="ar", family="travel")
+    brand.palette = p.design(0, "#16244F", "#C6A23C", 0, "travel", None, "navy~pattern")
+    html = build_html(SlideSpec(kind="cover", heading="عنوان", body="سطر", position=0, total=3,
+                                background=p.sample_background("content")), brand)
+    assert "tpl-navy" in html and "with-pattern" in html and 'class="fx-pattern"' in html
+    assert p.choose_logo([("light", b"L"), ("dark", b"D")], b"L", None, "top-left", "cover", "topbar~mono") == (b"L", False)

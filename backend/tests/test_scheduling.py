@@ -74,3 +74,26 @@ def test_autoplan_schedules_high_scoring_posts(client):
     finally:
         client.put("/api/settings/publishing", json={"auto_approve_min_relevance": 0})
         client.delete(f"/api/drafts/{did}")
+
+
+def test_occasion_greetings_live_outside_the_plan(client):
+    """A greeting goes out on its day in the morning on every platform; it never takes a regular slot."""
+    from app.services import occasions
+    client.put("/api/settings/publishing", json={"posts_per_day": 3, "day_start": "09:00", "day_end": "21:00",
+                                                 "min_gap_hours": 2, "default_platforms": ["instagram"]})
+    day = date.today() + timedelta(days=5)
+    gid = _ready_draft()
+    with session_scope() as db:
+        g = db.get(Draft, gid)
+        g.origin, g.content_type, g.hashtags = "occasion", "occasion", "#عيد #تهنئة #جسور #سفر"
+        g.ai_meta = {"occasion": {"date": day.isoformat(), "key": "world:x", "kind": "international", "tone": "festive"}}
+        at = occasions.schedule_post(db, gid)
+        assert at is not None and g.status == "scheduled"
+        local = at.astimezone(scheduling.config(db)["tz"])
+        assert local.date() == day and local.hour < 12                   # the morning of its day
+        assert any("instagram" in t["platforms"] for t in g.publish_targets)
+        # it is invisible to the regular plan: no busy time, no quota use
+        start = datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc) - timedelta(days=1)
+        assert at not in scheduling._busy_times(db, start, start + timedelta(days=3))
+        assert scheduling.usage(db, "instagram", at, "day") == 0
+    client.post("/api/drafts/bulk", json={"ids": [gid], "action": "delete"})
