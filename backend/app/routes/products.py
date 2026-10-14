@@ -69,6 +69,32 @@ def sync_status(job_id: str):
     return job
 
 
+class ProductIn(BaseModel):
+    name: str = Field(min_length=2, max_length=300)
+    url: str = Field(default="", max_length=1000)
+    description: str = Field(default="", max_length=3000)
+    price: str = Field(default="", max_length=60)
+    currency: str = Field(default="", max_length=10)
+    image_url: str | None = Field(default=None, max_length=1000)
+    kind: str = Field(default="product", pattern="^(product|service|course|offer|event)$")
+
+
+@router.post("")
+def add_product(body: ProductIn, db: Session = Depends(get_db)):
+    """Add an item by hand (e.g. from a marketplace that blocks automated reading)."""
+    import uuid
+    from ..services.newsletter import href
+    url = href(body.url) if body.url.strip() else f"manual:{uuid.uuid4().hex[:10]}"
+    row = db.scalar(select(Product).where(Product.url == url))
+    if row is None:
+        row = Product(url=url, origin="manual")
+        db.add(row)
+    for k in ("name", "description", "price", "currency", "image_url", "kind"):
+        setattr(row, k, getattr(body, k))
+    db.flush()
+    return row.to_dict()
+
+
 def _get(db: Session, pid: int) -> Product:
     p = db.get(Product, pid)
     if p is None:
