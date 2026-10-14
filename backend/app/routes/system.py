@@ -211,7 +211,7 @@ def export_backup(db: Session = Depends(get_db)):
     from ..db import Brand, Campaign
     return {
         "app": "jusoor-autopost", "version": credentials.VERSION, "exported_at": utcnow().isoformat(),
-        "settings": {k: app_settings.get_section(db, k) for k in ("generation", "scheduler", "publishing")},
+        "settings": {k: app_settings.get_section(db, k) for k in ("generation", "scheduler", "publishing", "occasions")},
         "sources": [{f: getattr(s, f) for f in _SOURCE_FIELDS} for s in db.scalars(select(Source))],
         "brands": [{f: getattr(b, f) for f in _BRAND_FIELDS} for b in db.scalars(select(Brand))],
         "campaigns": [{k: v for k, v in c.to_dict().items() if k not in ("id", "created_at")}

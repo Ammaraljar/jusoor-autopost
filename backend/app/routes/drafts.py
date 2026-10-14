@@ -515,6 +515,10 @@ async def regenerate_all(draft_id: int, background: BackgroundTasks, db: Session
     if d.origin == "offer":
         background.add_task(pipeline.finish_offer, draft_id)
         return {"ok": True}
+    if d.origin == "occasion":
+        from ..services import occasions
+        background.add_task(occasions.finish_post, draft_id)
+        return {"ok": True}
 
     async def job():
         try:
