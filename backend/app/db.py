@@ -114,6 +114,9 @@ class Brand(TenantMixin, Base):
     color_mode: Mapped[str | None] = mapped_column(String(20), nullable=True, default="auto")      # auto | brand
     logo_backdrop: Mapped[str | None] = mapped_column(String(20), nullable=True, default="auto")   # auto | always | never
     cta_text: Mapped[str] = mapped_column(Text, default="")
+    # contact data printed on flyers: {"phones": [{number, label, whatsapp}], "branches": [{name, address}],
+    # "email", "qr_url", "show"}
+    contact: Mapped[dict[str, Any] | None] = mapped_column(nullable=True)
     publish_config: Mapped[dict[str, Any]] = mapped_column(default=dict)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -493,6 +496,7 @@ _ADDED_COLUMNS = [
     ("drafts", "hook_highlight", "VARCHAR(200)"),
     ("brands", "color_mode", "VARCHAR(20)"),
     ("brands", "logo_backdrop", "VARCHAR(20)"),
+    ("brands", "contact", "JSON"),
 ]
 
 
