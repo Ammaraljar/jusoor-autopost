@@ -372,16 +372,26 @@ def logo_for_light(logos: list | None, primary: bytes | None) -> tuple[bytes | N
     """The logo for a light (cream/pastel) surface: the dark version, else the colour one; a logo that
     only exists in white gets the brand's plate behind it so it never disappears."""
     by_tone: dict[str, bytes] = {}
-    for tone, data in logos or []:
-        if data and tone not in by_tone:
-            by_tone[tone] = data
+    for tag, data in list(logos or []) + ([("color", primary)] if primary else []):
+        if not data:
+            continue
+        tone = _measured_tone(data) or tag            # a white logo saved as "colour" is still white
+        by_tone.setdefault(tone, data)
     for tone in ("dark", "color"):
         if tone in by_tone:
             return by_tone[tone], False
     logo = by_tone.get("light") or primary
     if logo is None:
         return None, False
-    return logo, logo_tone(logo) == "light"
+    return logo, True                                 # only a white logo: the brand plate behind it
+
+
+def _measured_tone(data: bytes) -> str | None:
+    try:
+        Image.open(io.BytesIO(data)).verify()
+    except Exception:  # noqa: BLE001
+        return None                                   # SVG / unreadable: keep the saved tag
+    return logo_tone(data)
 
 
 # ------------------------------------------------------------------ previews

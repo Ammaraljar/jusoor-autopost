@@ -53,18 +53,31 @@ LAYOUTS: dict[str, tuple[str, ...]] = {
     "split": ("pride", "appreciation", "awareness", "commercial", "festive"),
     "ticket": ("commercial", "festive"),
     "speech": ("appreciation", "festive", "commercial", "awareness"),
-    "photo_card": ("appreciation", "awareness", "commercial", "festive"),
+    # layouts with a photo of the occasion (a curated, people-free picture)
+    "photo_card": ("appreciation", "awareness", "commercial", "festive", "spiritual", "pride"),
+    "photo_arch": ("spiritual", "festive", "pride", "appreciation", "awareness"),
+    "photo_round": ("spiritual", "festive", "pride", "appreciation", "awareness", "commercial"),
+    "photo_top": ("festive", "pride", "appreciation", "awareness", "commercial", "spiritual"),
+    "photo_frame": ("festive", "appreciation", "commercial", "awareness", "pride"),
 }
-# occasions whose pictures are sensitive: drawn designs only, never a stock photo
-NO_PHOTO_KINDS = ("religious", "weekly", "national")
-NO_PHOTO_TONES = ("spiritual", "pride", "memorial")
-# safe photo searches (no people) by motif, for the days that may carry a photo
+PHOTO_LAYOUTS = ("photo_card", "photo_arch", "photo_round", "photo_top", "photo_frame")
+# days of remembrance stay fully drawn (no photo at all)
+NO_PHOTO_KINDS: tuple[str, ...] = ()
+NO_PHOTO_TONES = ("memorial",)
+# The photo search of each occasion is chosen here, never by the AI: scenes and objects, no people.
+SCENES = {
+    "ramadan_start": "ramadan lanterns night", "nuzul_quran": "ramadan lanterns mosque", "last_ten": "mosque night lights",
+    "eid_fitr": "eid lanterns decoration", "eid_adha": "eid decoration lanterns", "dhul_hijjah": "mosque dome sunset",
+    "arafah": "desert mountain sunrise", "hijri_new_year": "crescent moon sky", "ashura": "mosque architecture",
+    "mawlid": "mosque architecture night", "isra_miraj": "night sky stars mosque", "friday": "mosque architecture dome",
+}
+# safe photo searches (no people) by motif
 SAFE_KEYWORDS = {
     "book": "open books library desk", "heart": "pastel flowers bouquet", "ribbon": "pink ribbon flowers",
     "leaf": "green leaves nature light", "globe": "travel map globe suitcase", "cup": "coffee cup beans",
     "tag": "shopping bags gifts colorful", "camera": "vintage camera photography", "sparkle": "confetti celebration lights",
     "home": "modern house exterior", "star": "christmas lights decoration", "lamp": "diya oil lamps flowers",
-    "lantern": "lanterns lights festival",
+    "lantern": "lanterns lights festival", "crescent": "crescent moon lanterns", "mosque": "mosque architecture",
 }
 
 MOTIFS = {
@@ -193,6 +206,14 @@ def uses_photo(occ: dict) -> bool:
 
 
 def safe_keywords(occ: dict) -> str:
+    """The curated photo search of an occasion (scenes and objects, never people)."""
+    key = str(occ.get("key") or "")
+    name = key.split(":")[-1]
+    if name in SCENES:
+        return SCENES[name]
+    countries = occ.get("countries") or []
+    if occ.get("kind") == "national" and len(countries) == 1 and countries[0] in data.COUNTRIES:
+        return f"{data.COUNTRIES[countries[0]][1]} landmark skyline"
     return SAFE_KEYWORDS.get(occ.get("motif") or "", "flowers light pastel")
 
 
@@ -205,7 +226,7 @@ def layouts_for(occ: dict) -> list[str]:
     if occ.get("number") is None:
         out = [x for x in out if x != "big_number"]
     if not uses_photo(occ):
-        out = [x for x in out if x != "photo_card"]
+        out = [x for x in out if x not in PHOTO_LAYOUTS]
     return out or ["watercolor"]
 
 
@@ -223,7 +244,14 @@ def spec_for(occ: dict, lang: str, design: int) -> dict:
     name = occ.get("name_ar") if lang == "ar" else (occ.get("name_en") or occ.get("name_ar"))
     options = layouts_for({**occ, "flag": list(flag)})
     rnd = random.Random(f"{occ.get('key')}")
-    rnd.shuffle(options)                                     # each occasion has its own order of layouts
+    # each occasion has its own order of layouts; designs with a photo and drawn ones take turns
+    photos = [x for x in options if x in PHOTO_LAYOUTS]
+    drawn = [x for x in options if x not in PHOTO_LAYOUTS]
+    rnd.shuffle(photos)
+    rnd.shuffle(drawn)
+    options = []
+    for i in range(max(len(photos), len(drawn))):
+        options += [x[i] for x in (photos, drawn) if i < len(x)]
     return {"layout": options[design % len(options)], "layouts": len(options), "motif": occ.get("motif") or "sparkle",
             "tone": occ.get("tone") or "festive", "kind": occ.get("kind"), "name": name or "",
             "number": occ.get("number"), "flag": list(flag), "religious": religious, "key": occ.get("key") or "",
@@ -444,11 +472,44 @@ CSS = """
 .oc-speech .oc-body { inset: 310px 150px 370px; }
 .oc-speech .oc-text { font-size: 100px; }
 /* photo card (only on days whose photos are not sensitive) */
-.oc-photo_card .oc-photo { position: absolute; left: 90px; right: 90px; top: 220px; height: 560px; border-radius: 40px;
+.oc-photo_card .oc-photo { position: absolute; left: 90px; right: 90px; top: 230px; height: 550px; border-radius: 40px;
   background-size: cover; background-position: center; box-shadow: 0 24px 50px rgba(31,42,68,.18); border: 10px solid #fff; }
 .oc-photo_card .oc-body { inset: 800px 110px 150px; gap: 16px; }
 .oc-photo_card .oc-text { font-size: 84px; }
 .oc-photo_card .oc-logo { top: 70px; }
+/* photo inside an arch */
+.oc-photo_arch .oc-photo { position: absolute; left: 240px; right: 240px; top: 232px; height: 570px; border-radius: 310px 310px 30px 30px;
+  background-size: cover; background-position: center; border: 10px solid #fff; box-shadow: 0 24px 50px rgba(31,42,68,.18); }
+.oc-photo_arch .oc-ring { position: absolute; left: 214px; right: 214px; top: 206px; height: 622px; border-radius: 340px 340px 44px 44px;
+  border: 4px solid var(--oc-a1); }
+.oc-photo_arch .oc-body { inset: 845px 100px 130px; gap: 14px; }
+.oc-photo_arch .oc-text { font-size: 80px; }
+/* round photo */
+.oc-photo_round .oc-photo { position: absolute; width: 540px; height: 540px; left: 270px; top: 240px; border-radius: 50%;
+  background-size: cover; background-position: center; border: 14px solid #fff; box-shadow: 0 24px 50px rgba(31,42,68,.2); }
+.oc-photo_round .oc-ring { position: absolute; width: 610px; height: 610px; left: 235px; top: 205px; border-radius: 50%;
+  border: 5px dashed var(--oc-a1); }
+.oc-photo_round .oc-badge { position: absolute; left: 690px; top: 640px; width: 130px; height: 130px; border-radius: 50%;
+  background: var(--oc-a1); display: grid; place-items: center; box-shadow: 0 12px 30px rgba(31,42,68,.2); z-index: 3; }
+.oc-photo_round .oc-badge .oc-motif { width: 74px; height: 74px; color: #fff; }
+.oc-photo_round .oc-body { inset: 845px 100px 130px; gap: 14px; }
+.oc-photo_round .oc-text { font-size: 80px; }
+/* photo across the top, a soft wave under it */
+.oc-photo_top .oc-photo { position: absolute; left: 0; right: 0; top: 0; height: 700px; background-size: cover; background-position: center; }
+.oc-photo_top .oc-wave { position: absolute; left: 0; right: 0; top: 600px; width: 1080px; height: 140px; }
+.oc-photo_top .oc-logo .logo { background: rgba(255,255,255,.94); padding: 12px 26px; border-radius: 22px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+.oc-photo_top .oc-logo .logo.plate { background: var(--oc-ink); }
+.oc-photo_top .oc-body { inset: 760px 100px 140px; gap: 14px; }
+.oc-photo_top .oc-text { font-size: 82px; }
+/* tilted photo print with tape */
+.oc-photo_frame .oc-photo { position: absolute; left: 190px; right: 190px; top: 240px; height: 540px; background-size: cover;
+  background-position: center; border: 18px solid #fff; border-bottom-width: 60px; transform: rotate(-3deg);
+  box-shadow: 0 26px 50px rgba(31,42,68,.2); }
+.oc-photo_frame .oc-tape { position: absolute; width: 170px; height: 46px; background: var(--oc-soft); opacity: .9; z-index: 3;
+  top: 220px; left: 455px; transform: rotate(-6deg); }
+.oc-photo_frame .oc-body { inset: 850px 100px 130px; gap: 14px; }
+.oc-photo_frame .oc-text { font-size: 80px; }
 /* remembrance: calm */
 .memorial .oc-text h1 em { color: var(--oc-ink); }
 """
@@ -483,6 +544,7 @@ def build(spec, brand, lang: str, logo_html: str, logo_start: bool) -> tuple[str
                ) if flag else ""
     fit = {"arch": "460,50", "geo": "420,48", "medallion": "380,46", "stamp": "430,48", "card": "430,48",
            "split": "330,46", "ticket": "290,44", "speech": "340,46", "photo_card": "220,40", "ribbon": "420,46",
+           "photo_arch": "250,40", "photo_round": "250,40", "photo_top": "290,40", "photo_frame": "240,40",
            "balloons": "560,50", "hills": "430,50"}.get(layout, "520,52")
     text = f'<div class="oc-text" data-fit="{fit}"><h1>{title}</h1>{sub}</div>'
     head = f'<div class="oc-num">{number}</div>' if number else _svg(motif)
@@ -583,12 +645,18 @@ def build(spec, brand, lang: str, logo_html: str, logo_start: bool) -> tuple[str
     elif layout == "speech":
         deco = (f'<svg class="oc-layer" viewBox="0 0 1080 1350">{_confetti(rnd, accents, 18, (40, 1060, 1040, 1320))}</svg>'
                 '<div class="oc-panel"></div><div class="oc-tail"></div>')
-    elif layout == "photo_card":
+    elif layout in PHOTO_LAYOUTS:
         if spec.background:
-            deco = f'<div class="oc-photo" style="background-image:url({_uri(spec.background)})"></div>'
+            img = f'<div class="oc-photo" style="background-image:url({_uri(spec.background)})"></div>'
+            extra = {"photo_arch": '<div class="oc-ring"></div>',
+                     "photo_round": f'<div class="oc-ring"></div><div class="oc-badge">{_svg(motif)}</div>',
+                     "photo_top": ('<svg class="oc-wave" viewBox="0 0 1080 140" preserveAspectRatio="none">'
+                                   f'<path d="M0 70 C200 0 380 130 600 60 C800 0 930 90 1080 40 V140 H0z" fill="{c["bg1"]}"/></svg>'),
+                     "photo_frame": '<i class="oc-tape"></i>'}.get(layout, "")
+            deco = (extra + img) if layout in ("photo_arch", "photo_round") else (img + extra)
             body_parts = [kicker, text, when]
         else:
-            layout = "watercolor"
+            layout = "watercolor"                   # no safe photo was found: a drawn design instead
 
     body = "".join(x for x in body_parts if x)
     content = (f'<div class="oc oc-{layout} {tone}" style="{style}">{deco}{_logo_block(logo_html)}'

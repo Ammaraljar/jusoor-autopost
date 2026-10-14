@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import io
 import logging
 
@@ -57,7 +58,7 @@ def search_pexels(query: str, count: int = 6, page: int = 1) -> list[dict]:
                          params={"query": query, "orientation": "portrait", "per_page": count, "page": page},
                          headers={"Authorization": key}, timeout=20)
         resp.raise_for_status()
-        return [{"url": p["src"].get("large2x") or p["src"]["large"],
+        return [{"url": p["src"].get("large2x") or p["src"]["large"], "about": p.get("alt") or "",
                  "credit": f"Photo: {p.get('photographer', '')} / Pexels"} for p in resp.json().get("photos", [])]
     except Exception as exc:  # noqa: BLE001
         log.warning("pexels search failed: %s", exc)
@@ -92,7 +93,7 @@ def search_pixabay(query: str, count: int = 8, page: int = 1) -> list[dict]:
                                  "min_width": 1000},
                          timeout=20)
         resp.raise_for_status()
-        return [{"url": h.get("largeImageURL") or h.get("webformatURL"), "credit": ""}
+        return [{"url": h.get("largeImageURL") or h.get("webformatURL"), "credit": "", "about": h.get("tags") or ""}
                 for h in resp.json().get("hits", []) if h.get("largeImageURL") or h.get("webformatURL")]
     except Exception as exc:  # noqa: BLE001
         log.warning("pixabay search failed: %s", exc)
@@ -111,6 +112,7 @@ def search_unsplash(query: str, count: int = 8, page: int = 1) -> list[dict]:
                          headers={"Authorization": f"Client-ID {key}", "Accept-Version": "v1"}, timeout=20)
         resp.raise_for_status()
         return [{"url": r["urls"].get("regular") or r["urls"].get("full"),
+                 "about": " ".join(x for x in (r.get("alt_description"), r.get("description")) if x),
                  "credit": f"Photo: {(r.get('user') or {}).get('name', '')} / Unsplash"}
                 for r in resp.json().get("results", []) if r.get("urls")]
     except Exception as exc:  # noqa: BLE001
@@ -160,6 +162,20 @@ def sources_of(gen: dict) -> list[str]:
     return list(ALL_SOURCES)
 
 
+# Words that mark a photo as unsuitable for a sensitive post (occasion greetings): people, faces,
+# alcohol, pork. A photo whose library gives no description at all is not trusted either.
+UNSAFE_WORDS = re.compile(r"\b(person|people|man|men|woman|women|girl|girls|boy|boys|child|children|kid|kids|baby|"
+                          r"family|couple|crowd|portrait|face|faces|hand|hands|selfie|lady|guy|teen|student|students|"
+                          r"worker|player|praying|prayer|pilgrim|pilgrims|bride|groom|model|wine|beer|champagne|"
+                          r"cocktail|alcohol|bar|pub|pork|pig|bikini|party)\b", re.I)
+
+
+def is_safe(candidate: dict) -> bool:
+    """A stock photo described as people-free (and free of alcohol / pork)."""
+    about = str(candidate.get("about") or "").strip()
+    return bool(about) and not UNSAFE_WORDS.search(about)
+
+
 def stock_photos(keywords: str, count: int, page: int = 1, sources: list[str] | None = None) -> list[dict]:
     """The keyed libraries (Pexels, Pixabay, Unsplash) mixed for variety; free ones when still short."""
     sources = [s for s in (sources or list(STOCK)) if s in STOCK]
@@ -176,8 +192,11 @@ def stock_photos(keywords: str, count: int, page: int = 1, sources: list[str] | 
 def collect_backgrounds(article_image: str | None, keywords: str, mode: str, needed: int,
                         exclude: set[str] | None = None, fresh: bool = False,
                         library: list[dict] | None = None, fallback_keywords: str = "",
-                        sources: list[str] | None = None) -> list[dict]:
+                        sources: list[str] | None = None, strict: bool = False) -> list[dict]:
     """Return a list of {url, bytes, hash, credit} backgrounds (may be shorter than needed).
+
+    strict=True (occasion greetings): only stock photos whose description shows no people, no
+    alcohol and no pork — never the article's photo or the library's.
 
     Order: the article's own photo, matching photos from the company's library, stock photos
     (Pexels, Pixabay, Openverse), then the rest of the library. fresh=True ("new backgrounds")
@@ -213,6 +232,8 @@ def collect_backgrounds(article_image: str | None, keywords: str, mode: str, nee
         if fresh:
             candidates += article
     candidates = [c for c in candidates if c["url"] not in exclude]
+    if strict:
+        candidates = [c for c in candidates if is_safe(c)]
     out: list[dict] = []
     seen: set[str] = set()
     tried: set[str] = set()

@@ -722,7 +722,7 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
         occasion_index = (int(stored_index) + (1 if next_design else 0)) if stored_index is not None else \
             _next_occasion_layout(draft_id)
         occasion_spec = occasion_card.spec_for(occasion, style.language, occasion_index)
-        wants_photo = occasion_spec["photo"] and occasion_spec["layout"] == "photo_card"
+        wants_photo = occasion_spec["photo"] and occasion_spec["layout"] in occasion_card.PHOTO_LAYOUTS
         needs_bg = wants_photo and (needs_bg or next_design)
         refresh_backgrounds = refresh_backgrounds and wants_photo
         keywords, article_image, fallback_keywords = occasion_card.safe_keywords(occasion), None, ""
@@ -739,8 +739,10 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
         with session_scope() as db:
             library = media.pick(db, f"{keywords} {hook_text}", needed + 4, used)
         # Network calls run in a worker thread so the server keeps answering while photos download
+        # greetings: only stock photos described as people-free (no faces, alcohol or pork)
         backgrounds = await asyncio.to_thread(images.collect_backgrounds, article_image, keywords, mode, needed,
-                                              used, refresh_backgrounds, library, fallback_keywords, sources)
+                                              used, refresh_backgrounds, library, fallback_keywords, sources,
+                                              is_occasion)
         if not backgrounds and mode != "source" and article_image and not refresh_backgrounds:
             backgrounds = await asyncio.to_thread(images.collect_backgrounds, article_image, keywords, "source", 1)
         if refresh_backgrounds and len(backgrounds) < 2:
