@@ -506,6 +506,26 @@ def delete_newsletter(nid: int, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
+class NewsletterBulk(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=500)
+    action: str = Field(pattern="^(delete)$")
+
+
+@router.post("/newsletters/bulk")
+def newsletters_bulk(body: NewsletterBulk, db: Session = Depends(get_db)):
+    """Delete several newsletters at once (one being sent right now is kept)."""
+    done, skipped = 0, 0
+    for nl in db.scalars(select(Newsletter).where(Newsletter.id.in_(body.ids))):
+        if nl.status == "sending":
+            skipped += 1
+            continue
+        for d in db.scalars(select(Delivery).where(Delivery.newsletter_id == nl.id)):
+            db.delete(d)
+        db.delete(nl)
+        done += 1
+    return {"done": done, "skipped": skipped}
+
+
 @router.post("/newsletters/{nid}/duplicate")
 def duplicate(nid: int, db: Session = Depends(get_db)):
     src = _nl(db, nid)
