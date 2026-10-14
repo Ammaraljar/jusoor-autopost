@@ -1058,5 +1058,10 @@
   "en": "At most {} photos per post",
   "ms": "Maksimum {} foto bagi setiap hantaran",
   "fr": "{} photos au maximum par publication"
+ },
+ "اكتب اسم العرض": {
+  "en": "Enter the offer name",
+  "ms": "Masukkan nama tawaran",
+  "fr": "Saisissez le nom de l’offre"
  }
 }
