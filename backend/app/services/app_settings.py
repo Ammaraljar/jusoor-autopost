@@ -54,6 +54,15 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "auto_schedule_approved": False,      # approved posts go to the next free slot by themselves
         "auto_approve_min_relevance": 0,      # 0 = off; e.g. 8 → posts scoring 8+/10 that pass QA are scheduled
     },
+    "occasions": {
+        "countries": [],                      # the countries the company speaks to (ISO codes)
+        "kinds": {"weekly": True, "religious": True, "national": True, "international": True, "commercial": True},
+        "auto_create": True,                  # write each occasion's post by itself, lead_days before
+        "lead_days": 3,
+        "auto_schedule": True,                # put it on the plan on the occasion's day
+        "post_time": "09:00",
+        "dialect_by_country": True,           # Arabic posts for one Arab country use that country's dialect
+    },
 }
 
 

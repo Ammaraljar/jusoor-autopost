@@ -260,7 +260,13 @@ def run_autoplan() -> dict[str, int]:
                                           .order_by(Draft.relevance.desc(), Draft.created_at)))
         # the best posts take the limited places first (e.g. one post a week on LinkedIn)
         candidates.sort(key=lambda d: (-(d.relevance or 0), d.created_at))
-        for d in candidates[:20]:
+        # an approved occasion greeting goes on its own day, never on the next free slot
+        from . import occasions
+        for d in db.scalars(select(Draft).where(Draft.status == "approved", Draft.scheduled_at.is_(None),
+                                                Draft.origin == "occasion")).all():
+            if occasions.schedule_post(db, d.id):
+                done += 1
+        for d in [c for c in candidates if c.origin != "occasion"][:20]:
             try:
                 schedule(db, d)
                 done += 1

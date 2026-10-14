@@ -90,6 +90,22 @@ class Jobs:
                 except Exception:  # noqa: BLE001
                     log.exception("scheduled newsletters failed for company %s", org)
 
+    async def scheduled_occasions(self) -> None:
+        """Occasion posts are written a few days ahead; next year's occasions are prepared in December."""
+        from datetime import date
+        from . import occasions
+        today = date.today()
+        for org in self._active_orgs():
+            with use_org(org):
+                try:
+                    with session_scope() as db:
+                        occasions.ensure_year(db, today.year)
+                        if today.month == 12:
+                            occasions.ensure_year(db, today.year + 1)
+                    await occasions.run_due()
+                except Exception:  # noqa: BLE001
+                    log.exception("occasion posts failed for company %s", org)
+
     def start(self) -> None:
         if not get_settings().scheduler_enabled:
             return
@@ -102,6 +118,8 @@ class Jobs:
         self.scheduler.add_job(self.scheduled_publish, "interval", minutes=1, id="publish",
                                max_instances=1, coalesce=True)
         self.scheduler.add_job(self.scheduled_autoplan, "interval", minutes=5, id="autoplan",
+                               max_instances=1, coalesce=True)
+        self.scheduler.add_job(self.scheduled_occasions, "interval", minutes=30, id="occasions",
                                max_instances=1, coalesce=True)
         self.scheduler.start()
 

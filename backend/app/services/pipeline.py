@@ -601,9 +601,21 @@ def _next_design_index(draft_id: int) -> int:
         rows = db.scalars(select(Draft.palette).where(Draft.id != draft_id, Draft.palette.is_not(None))
                           .order_by(Draft.id.desc()).limit(5)).all()
     for p in rows:
-        if isinstance(p, dict) and p.get("design") is not None:
+        if isinstance(p, dict) and p.get("design") is not None and not p.get("occasion"):
             return int(p["design"]) + 1
     return 0
+
+
+def _next_occasion_layout(draft_id: int) -> int:
+    """The greeting layout after the one of the company's previous greeting."""
+    with session_scope() as db:
+        rows = db.scalars(select(Draft.palette).where(Draft.id != draft_id, Draft.content_type == "occasion",
+                                                      Draft.palette.is_not(None))
+                          .order_by(Draft.id.desc()).limit(3)).all()
+    for p in rows:
+        if isinstance(p, dict) and p.get("design") is not None:
+            return int(p["design"]) + 1
+    return draft_id % 3
 
 
 async def render_draft(draft_id: int, positions: list[int] | None = None, refresh_backgrounds: bool = False,
@@ -642,6 +654,8 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
                                         if s.background_url)) if is_album else []
         if is_album:
             needs_bg = False             # an album keeps its own photos, never stock ones
+        is_occasion = draft.content_type == "occasion"
+        occasion = dict((draft.ai_meta or {}).get("occasion") or {}) if is_occasion else {}
 
     backgrounds = []
     if needs_bg:
@@ -679,8 +693,17 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
         album_gallery = [album_design.thumb(d) for d in datas if d]
 
     palette_to_store = stored_palette
+    occasion_spec = None
     if is_album:
         style.palette, palette_to_store = None, None          # the brand's own colours around the photos
+    elif is_occasion:
+        # a greeting keeps the brand's exact colours; its layout rotates from one greeting to the next
+        from . import occasion_card
+        stored_index = (stored_palette or {}).get("design")
+        index = (int(stored_index) + (1 if next_design else 0)) if stored_index is not None else \
+            _next_occasion_layout(draft_id)
+        occasion_spec = occasion_card.spec_for(occasion, style.language, index)
+        style.palette, palette_to_store = None, {"design": index, "occasion": True}
     else:
         stored_index = (stored_palette or {}).get("design")
         if next_design and stored_index is not None:
@@ -733,7 +756,7 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
                              badge=badge if kind == "cover" else None,
                              credit=credit if kind != "cta" else "", variant=pos,
                              highlight=highlight if kind == "cover" else None,
-                             logo=chosen_logo, logo_plate=plate,
+                             logo=chosen_logo, logo_plate=plate, occasion=occasion_spec,
                              album=({"count": len(album_urls),
                                      # opening: a peek at what follows; closing: the last photo + the first ones
                                      "gallery": album_gallery[1:4] if kind == "cover"
