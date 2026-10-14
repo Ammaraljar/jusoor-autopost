@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, ChevronDown, Inbox, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, ExternalLink, Eye, EyeOff, Inbox, KeyRound, Trash2, X } from 'lucide-react';
 import { useI18n } from '../lib/i18n';
 
 /* ---------- toasts ---------- */
@@ -246,6 +246,77 @@ export function BulkBar({ sel, actions, onAction, busy, selectedLabel, clearLabe
         </Button>
       ))}
       <Button size="sm" variant="ghost" onClick={sel.clear}>{clearLabel}</Button>
+    </div>
+  );
+}
+
+
+/* ----------------------------------------------------------------- keys & connections */
+/** A secret (API key / token): hidden by default, shows whether one is saved, where to get one, remove. */
+export function SecretField({ id, value, onChange, state, placeholder, onRemove, removing, disabled, getUrl, warn }) {
+  const { t } = useI18n();
+  const [show, setShow] = useState(false);
+  const saved = state?.set;
+  const source = state?.source === 'dashboard' ? t('from_db') : state?.source === 'platform' ? t('from_platform') : t('from_env');
+  return (
+    <div className="secret">
+      <div className={`secret-row ${saved ? 'saved' : ''}`}>
+        <KeyRound size={16} className="secret-ico" aria-hidden="true" />
+        <input id={id} className="secret-input ltr" dir="ltr" type={show ? 'text' : 'password'} autoComplete="new-password"
+          spellCheck={false} disabled={disabled} value={value ?? ''} onChange={(e) => onChange(e.target.value)}
+          placeholder={saved ? `${t('key_replace')} (•••• ${state.hint || ''})` : (placeholder || t('key_paste'))} />
+        <button type="button" className="secret-eye" onClick={() => setShow((v) => !v)} aria-label={show ? t('hide') : t('show')}
+          disabled={!value}>{show ? <EyeOff size={16} /> : <Eye size={16} />}</button>
+      </div>
+      <div className="secret-meta">
+        {saved
+          ? <span className="key-chip ok"><CheckCircle2 size={13} /> {t('key_set')} •••• {state.hint} · {source}</span>
+          : <span className="key-chip"><KeyRound size={13} /> {t('key_missing')}</span>}
+        {warn && <span className="key-chip warn"><AlertTriangle size={13} /> {warn}</span>}
+        <span className="spacer" />
+        {getUrl && <a className="link-btn" href={getUrl.startsWith('http') ? getUrl : `https://${getUrl}`} target="_blank" rel="noreferrer"><ExternalLink size={13} /> {t('get_key')}</a>}
+        {saved && onRemove && (
+          <button type="button" className="link-btn danger" onClick={onRemove} disabled={removing}>
+            <Trash2 size={13} /> {t('remove_key')}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** One service card (AI engine, photo library, publishing account, mail service…). */
+export function ConnCard({ name, sub, on, badges, actions, children, className = '' }) {
+  const { t } = useI18n();
+  return (
+    <div className={`conn ${on ? 'on' : ''} ${className}`}>
+      <div className="conn-head">
+        <span className="conn-avatar" aria-hidden="true">{(name || '?').replace(/[^A-Za-z؀-ۿ]/g, '').slice(0, 1).toUpperCase()}</span>
+        <div className="conn-title">
+          <b>{name}</b>
+          {sub && <small>{sub}</small>}
+        </div>
+        <span className={`conn-state ${on ? 'on' : ''}`}>{on ? <CheckCircle2 size={14} /> : <span className="dot" />}{on ? t('conn_on') : t('conn_off')}</span>
+        {badges}
+      </div>
+      {children && <div className="conn-body">{children}</div>}
+      {actions && <div className="conn-actions">{actions}</div>}
+    </div>
+  );
+}
+
+/** Appears while a form has unsaved changes: keeps Save in reach on long pages. */
+export function SaveBar({ dirty, busy, onSave, onReset, extra }) {
+  const { t } = useI18n();
+  if (!dirty) return null;
+  return (
+    <div className="save-bar" role="region" aria-label={t('unsaved_changes')}>
+      <AlertTriangle size={16} />
+      <span>{t('unsaved_changes')}</span>
+      <span className="spacer" />
+      {extra}
+      {onReset && <button type="button" className="btn btn-ghost btn-sm" onClick={onReset}>{t('discard')}</button>}
+      <button type="button" className="btn btn-primary" onClick={onSave} disabled={busy}>{busy ? <Spinner size={15} /> : <CheckCircle2 size={16} />}{t('save_changes')}</button>
     </div>
   );
 }
