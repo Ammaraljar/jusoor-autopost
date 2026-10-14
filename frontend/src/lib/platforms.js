@@ -5,3 +5,9 @@ export const PLATFORM_LABELS = {
   telegram: 'Telegram', discord: 'Discord', youtube: 'YouTube',
 };
 export const platformLabel = (p) => PLATFORM_LABELS[p] || p;
+
+/** {platform: {provider, limit, period}} — older settings (one provider for all) read the same way. */
+export function channelsOf(p) {
+  if (p?.channels && Object.keys(p.channels).length) return p.channels;
+  return Object.fromEntries((p?.default_platforms || []).map((x) => [x, { provider: p.default_provider, limit: 0, period: 'week' }]));
+}
