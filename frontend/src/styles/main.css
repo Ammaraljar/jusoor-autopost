@@ -292,6 +292,11 @@ html[dir="ltr"] .toasts { transform: translateX(-50%); }
   background: var(--navy); color: #fff; border-radius: 14px; padding: 10px 14px; margin: 8px 0 14px;
   box-shadow: 0 10px 30px rgba(22,36,79,.25); }
 .bulk-bar b { color: var(--gold-light, #D9B96A); font-size: 16px; }
+.bulk-bar.bulk-bar-bottom { position: static; margin: 14px 0 8px; }
+.nl-row { display: flex; align-items: center; gap: 12px; }
+.nl-row > input[type=checkbox] { width: 18px; height: 18px; flex: none; accent-color: var(--navy); cursor: pointer; }
+.nl-row > a { flex: 1; min-width: 0; color: inherit; text-decoration: none; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.nl-row.on { outline: 2px solid var(--gold); outline-offset: -2px; }
 .bulk-bar .btn { background: rgba(255,255,255,.08); color: #fff; border-color: rgba(255,255,255,.18); }
 .bulk-bar .btn:hover { background: rgba(255,255,255,.16); }
 .bulk-bar .btn-danger { color: #fff; background: #B3261E; border-color: #B3261E; }
