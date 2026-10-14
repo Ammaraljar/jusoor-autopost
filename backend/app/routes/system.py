@@ -207,7 +207,7 @@ _SOURCE_FIELDS = ("name", "kind", "base_url", "feed_url", "listing_urls", "link_
                   "body_selector", "purpose", "dialect", "category", "country", "language", "priority", "enabled",
                   "check_interval_minutes", "max_items_per_run")
 _BRAND_FIELDS = ("name", "handle", "website", "voice", "colors", "font_family", "logo_placement", "card_style",
-                 "color_mode", "logo_backdrop", "cta_text", "publish_config", "is_default")
+                 "color_mode", "logo_backdrop", "cta_text", "publish_config", "is_default", "contact")
 
 
 @router.get("/backup", dependencies=[RequireUser])

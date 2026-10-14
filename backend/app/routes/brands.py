@@ -38,6 +38,7 @@ class BrandIn(BaseModel):
     templates: list[str] | None = None
     font_latin: str | None = None
     hdr: bool | None = None
+    contact: dict[str, Any] | None = None
 
 
 def _out(b: Brand) -> dict:
@@ -47,6 +48,8 @@ def _out(b: Brand) -> dict:
     data["card_theme"] = b.card_theme or "magazine"
     data["font_latin"] = b.font_latin or "Cairo"
     data["hdr"] = b.hdr is not False
+    from ..services import flyer
+    data["contact"] = flyer.clean_contact(b.contact)
     data["font_options"] = font_lib.options()
     data["has_default_colors"] = bool(b.default_colors or b.logo_path)
     data["colors"] = colours.complete_colors(b.colors)
@@ -92,6 +95,9 @@ def update_brand(bid: int, body: BrandIn, db: Session = Depends(get_db)):
         data["font_latin"] = font_lib.valid_latin(data["font_latin"])
     if data.get("templates") is not None:
         data["templates"] = [t for t in data["templates"] if t in colours.TEMPLATES]
+    if data.get("contact") is not None:
+        from ..services import flyer
+        data["contact"] = flyer.clean_contact(data["contact"])
     if data.get("colors") is not None:
         # roles that still follow the old main colours move with the new ones (title, text, card…)
         data["colors"] = colours.complete_colors(data["colors"], colours.complete_colors(b.colors))
@@ -274,6 +280,18 @@ async def preview(bid: int, body: PreviewIn, db: Session = Depends(get_db)):
     lang = body.language if body.language in SAMPLES else "ar"
     family = pipeline.family_of(db, current_org.get())
     style = pipeline.brand_style(b, lang, family)
+    if body.kind == "flyer":                 # a product / offer flyer with the company's contact data
+        from ..services import flyer
+        sample = flyer.clean(flyer.SAMPLE.get(lang) or flyer.SAMPLE["en"])
+        logo, plate = colours.logo_for_light(style.logos, style.logo)
+        site = b.website or ""
+        fl = {**sample, "layout": flyer.LAYOUTS[(body.variant or 0) % len(flyer.LAYOUTS)],
+              "contact": flyer.clean_contact(b.contact),
+              "qr_url": site if site.startswith("http") else (f"https://{site}" if site else "")}
+        jpeg = await renderer.render(SlideSpec(kind="cover", heading=sample["headline"], body=sample["tagline"],
+                                               position=0, total=1, background=colours.sample_background("content"),
+                                               logo=logo, logo_plate=plate, flyer=fl), style)
+        return {"image": "data:image/jpeg;base64," + base64.b64encode(jpeg).decode()}
     heading, text = SAMPLES[lang].get(body.kind, SAMPLES[lang]["cover"])
     if body.kind == "cta" and b.cta_text:
         heading = b.cta_text
