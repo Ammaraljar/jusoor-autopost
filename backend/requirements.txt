@@ -15,3 +15,5 @@ openpyxl>=3.1
 python-multipart>=0.0.9
 pytest>=8.0
 tzdata>=2024.1
+holidays>=0.60
+hijridate>=2.5
