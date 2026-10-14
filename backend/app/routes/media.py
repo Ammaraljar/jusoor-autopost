@@ -3,14 +3,14 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from ..auth import RequireUser, RequireWriter
-from ..db import MediaAsset, get_db
-from ..services import media, storage
+from ..db import MediaAsset, get_db, session_scope, utcnow
+from ..services import app_settings, media, storage, tasks
 
 router = APIRouter(prefix="/api/media", tags=["media"], dependencies=[RequireUser, RequireWriter])
 MAX_FILES = 30
@@ -121,3 +121,78 @@ def bulk_delete(body: BulkDelete, db: Session = Depends(get_db)):
     for a in rows:
         _remove(db, a)
     return {"deleted": len(rows)}
+
+
+# ---------------------------------------------------------------- connected libraries
+class ImportIn(BaseModel):
+    url: str = Field(min_length=8, max_length=2000)
+    tags: str = ""
+    title: str = ""
+    keep: bool = True            # remember the library so it can be synced again
+
+
+def _sources(db: Session) -> list[dict]:
+    return list(app_settings.get_section(db, "media").get("sources") or [])
+
+
+def _remember(url: str, kind: str, tags: str, title: str, result: dict) -> None:
+    with session_scope() as db:
+        sources = [s for s in _sources(db) if s.get("url") != url]
+        old = next((s for s in _sources(db) if s.get("url") == url), {})
+        sources.append({"url": url, "kind": kind, "tags": tags, "title": title, "last_sync": utcnow().isoformat(),
+                        "count": int(old.get("count") or 0) + result["added"]})
+        app_settings.update_section(db, "media", {"sources": sources[-30:]})
+
+
+def _start_import(background: BackgroundTasks, url: str, tags: str, title: str, keep: bool) -> dict:
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(400, "أضف رابطًا يبدأ بـ https://")
+    job_id = tasks.new()
+
+    async def work() -> dict:
+        def run() -> dict:
+            with session_scope() as db:
+                return media.import_library(db, url, tags, title)
+        result = await asyncio.to_thread(run)
+        if keep and result["kind"] != "image":
+            _remember(url, result["kind"], tags, title, result)
+        return result
+    background.add_task(tasks.run, job_id, work, "انتهت المهلة — المكتبة كبيرة أو بطيئة، جرّب مجلدًا أصغر")
+    return {"job": job_id, "status": "running"}
+
+
+@router.post("/import")
+def import_library(body: ImportIn, background: BackgroundTasks):
+    """Import a whole library: Dropbox / Google Drive folder, OneDrive, Google Photos album, gallery page."""
+    return _start_import(background, body.url.strip(), body.tags, body.title, body.keep)
+
+
+@router.get("/import/{job_id}")
+def import_status(job_id: str):
+    job = tasks.get(job_id)
+    if job is None:
+        raise HTTPException(404, "انتهت صلاحية العملية — أعد المحاولة")
+    return job
+
+
+@router.get("/sources")
+def list_sources(db: Session = Depends(get_db)):
+    return _sources(db)
+
+
+class SourceRef(BaseModel):
+    url: str
+
+
+@router.post("/sources/sync")
+def sync_source(body: SourceRef, background: BackgroundTasks, db: Session = Depends(get_db)):
+    src = next((s for s in _sources(db) if s.get("url") == body.url), None)
+    if src is None:
+        raise HTTPException(404, "المكتبة غير موجودة")
+    return _start_import(background, src["url"], src.get("tags", ""), src.get("title", ""), True)
+
+
+@router.post("/sources/remove")
+def remove_source(body: SourceRef, db: Session = Depends(get_db)):
+    app_settings.update_section(db, "media", {"sources": [s for s in _sources(db) if s.get("url") != body.url]})
+    return {"ok": True}

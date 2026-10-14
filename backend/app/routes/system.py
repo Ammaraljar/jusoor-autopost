@@ -79,7 +79,9 @@ def status():
     return {
         "ai": generator.ai_info(),
         "images": {"pexels": bool(credentials.current()["pexels_api_key"]),
-                   "pixabay": bool(credentials.current().get("pixabay_api_key"))},
+                   "pixabay": bool(credentials.current().get("pixabay_api_key")),
+                   "unsplash": bool(credentials.current().get("unsplash_api_key")),
+                   "openverse": True, "wikimedia": True},
         "storage": {"backend": s.storage_backend, "public": storage.is_publicly_reachable()},
         "providers": {name: {"configured": cls().configured(), "platforms": list(cls.platforms)}
                       for name, cls in REGISTRY.items()},
@@ -133,6 +135,9 @@ def write_credentials(body: dict, db: Session = Depends(get_db)):
 
 @router.put("/settings/{section}", dependencies=[RequireOwner])
 def save_settings(section: str, body: dict, db: Session = Depends(get_db)):
+    if section == "generation":
+        # the field, language and dialect belong to the company profile (one place, no conflicts)
+        body = {k: v for k, v in body.items() if k not in ("industry", "language", "dialect")}
     try:
         return app_settings.update_section(db, section, body)
     except KeyError as exc:
