@@ -87,6 +87,7 @@ class SlideSpec:
     logo: bytes | None = None            # the logo version chosen for this slide (white/dark/colour)
     album: dict | None = None            # photo-album post: {"count": n, "gallery": [jpeg bytes]}
     occasion: dict | None = None         # occasion greeting: layout, motif, number, flag colours, date line
+    flyer: dict | None = None            # product / offer flyer: layout, texts, prices, contact data, QR link
 
 
 @dataclass
@@ -291,10 +292,16 @@ def build_html(spec: SlideSpec, brand: BrandStyle) -> str:
         card_style = brand.palette["cardStyle"]          # the post's brand colour set decides the card
 
     extra_css = ""
-    if spec.occasion is not None:
+    if spec.flyer is not None:
+        # product / service / offer flyer: logo, headline, features, prices, contact band with QR
+        from . import flyer
+        content, extra_css = flyer.build(spec, brand, lang, _logo_html(brand, spec.logo_plate, spec.logo))
+        theme_class = f"theme-flyer lang-{lang} fam-{brand.family}"
+    elif spec.occasion is not None:
         # occasion greeting: one designed image (frame / arch / pattern)
         from . import occasion_card
-        logo = _logo_html(brand, False, spec.logo)
+        # light designs: the pipeline picks the dark/colour logo; a white-only logo gets the navy plate
+        logo = _logo_html(brand, spec.logo_plate, spec.logo)
         content, extra_css = occasion_card.build(spec, brand, lang, logo, logo_start=(logo_left != rtl))
         theme_class = f"theme-occasion lang-{lang} fam-{brand.family}"
     elif spec.album is not None or spec.kind == "photo":
@@ -331,7 +338,8 @@ def build_html(spec: SlideSpec, brand: BrandStyle) -> str:
                    f'<h2 style="font-size:54px">{_esc(spec.heading)}</h2>'
                    f'<p style="font-size:42px">{_esc(spec.body)}</p></div>{footer}')
 
-    if brand.theme != "magazine" and spec.album is None and spec.kind != "photo" and spec.occasion is None:
+    if brand.theme != "magazine" and spec.album is None and spec.kind != "photo" and spec.occasion is None \
+            and spec.flyer is None:
         theme_class = "theme-classic"
     return _template().format(
         theme=theme_class, extra_css=extra_css, lang=lang, dir="rtl" if rtl else "ltr", font_faces=_font_faces() + "\n" + fonts.faces(fonts.valid_arabic(brand.font_family), fonts.valid_latin(brand.font_latin)),

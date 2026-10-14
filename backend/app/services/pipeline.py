@@ -343,15 +343,40 @@ async def draft_from_product(product_id: int) -> int | None:
         prod.status, prod.draft_id = "drafted", draft.id
         draft_id = draft.id
         ctx = brand_context(brand)
+        price, currency = prod.price or "", prod.currency or ""
     try:
-        post = await generator.generate_from_article(ctx, gen, title, body, "")
+        # the post text and the flyer text (features, prices, requirements) are written at the same time
+        post, flyer_text = await asyncio.gather(generator.generate_from_article(ctx, gen, title, body, ""),
+                                                _flyer_text(ctx, gen, title, body, price, currency))
     except Exception as exc:  # noqa: BLE001
         _fail(draft_id, f"فشل توليد النص: {exc}")
         return draft_id
     with session_scope() as db:
-        _apply_post(db.get(Draft, draft_id), post)
+        d = db.get(Draft, draft_id)
+        _apply_post(d, post)
+        _apply_flyer(d, flyer_text)
     await asyncio.gather(make_variants(draft_id), render_draft(draft_id))
     return draft_id
+
+
+async def _flyer_text(ctx: generator.BrandContext, gen: dict, title: str, body: str, price: str = "",
+                      currency: str = "") -> dict:
+    from . import flyer
+    lang = gen.get("language", "ar")
+    rules = generator.dialect_rules(gen.get("dialect")) if lang == "ar" else ""
+    return await flyer.write(ctx.name, lang, rules, title, body, price, currency)
+
+
+def _apply_flyer(d: Draft, data: dict) -> None:
+    """The first image of a product / offer post becomes its flyer; its title and line are the cover's
+    (so editing the cover in the editor edits the flyer)."""
+    d.ai_meta = {**(d.ai_meta or {}), "flyer": data}
+    cover = next((s for s in d.slides if s.kind == "cover"), None)
+    if cover is not None:
+        cover.heading = data.get("headline") or cover.heading
+        cover.body = data.get("tagline") or cover.body
+        if data.get("highlight") and data["highlight"] in (cover.heading or ""):
+            d.hook_highlight = data["highlight"]
 
 
 async def draft_from_calendar(item_id: int) -> int | None:
@@ -429,7 +454,10 @@ async def finish_offer(draft_id: int) -> None:
         meta = dict(d.ai_meta or {})
         offer, photos, lang = meta.get("offer") or {}, meta.get("photos") or [], d.language
     try:
-        post = await generator.generate_from_article(ctx, gen, title, body, "")
+        post, flyer_text = await asyncio.gather(
+            generator.generate_from_article(ctx, gen, title, body, ""),
+            _flyer_text(ctx, {**gen, "language": lang}, title, body, str(offer.get("price") or ""),
+                        str(offer.get("currency") or "")))
     except Exception as exc:  # noqa: BLE001
         _fail(draft_id, f"فشل توليد النص: {exc}")
         return
@@ -454,6 +482,14 @@ async def finish_offer(draft_id: int) -> None:
                 sl.background_url = photos[i % len(photos)]
         if photos and slides and slides[-1].kind == "cta":
             slides[-1].background_url = photos[-1]
+        # the flyer shows the prices exactly as entered (they replace the AI's when given)
+        if offer.get("price"):
+            flyer_text["prices"] = [{"label": "", "amount": str(offer["price"]), "currency": offer.get("currency", ""),
+                                     "old": str(offer.get("old_price") or "")}] + \
+                [p for p in flyer_text.get("prices", []) if p.get("amount") != str(offer["price"])][:2]
+        if offer.get("valid_until") and not flyer_text.get("badge"):
+            flyer_text["badge"] = f"{words[1]} {offer['valid_until']}"
+        _apply_flyer(d, flyer_text)
     await asyncio.gather(make_variants(draft_id), render_draft(draft_id))
 
 
@@ -597,6 +633,9 @@ def _save_thumb(key: str, jpeg: bytes) -> str | None:
         return None
 
 
+from .flyer import LAYOUTS as FLYER_LAYOUTS  # noqa: E402
+
+
 def _next_design_index(draft_id: int) -> int:
     """The design after the one used by the company's most recent post."""
     with session_scope() as db:
@@ -661,6 +700,37 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
             needs_bg = False             # an album keeps its own photos, never stock ones
         is_occasion = draft.content_type == "occasion"
         occasion = dict((draft.ai_meta or {}).get("occasion") or {}) if is_occasion else {}
+        flyer_data = dict((draft.ai_meta or {}).get("flyer") or {}) if not (is_occasion or is_album) else {}
+        if flyer_data:
+            from . import flyer as flyer_lib
+            contact = flyer_lib.clean_contact(brand.contact)
+            site = brand.website or ""
+            flyer_data.update(
+                contact=contact if contact["show"] else {},
+                qr_url=draft.link_url or contact["qr_url"] or (site if site.startswith("http") else
+                                                                (f"https://{site}" if site else "")),
+                highlight=draft.hook_highlight or flyer_data.get("highlight") or "")
+
+    occasion_spec, occasion_index = None, None
+    if is_occasion:
+        # A greeting's picture is sensitive: its layout is chosen first, and only the one layout that
+        # holds a photo, on a day whose photos are not sensitive, gets one — from the keyed stock
+        # libraries, with a curated people-free search (never the AI's words, the company's library,
+        # an article's photo or the open libraries). Every other greeting is fully drawn.
+        from . import occasion_card
+        stored_index = (stored_palette or {}).get("design")
+        occasion_index = (int(stored_index) + (1 if next_design else 0)) if stored_index is not None else \
+            _next_occasion_layout(draft_id)
+        occasion_spec = occasion_card.spec_for(occasion, style.language, occasion_index)
+        wants_photo = occasion_spec["photo"] and occasion_spec["layout"] == "photo_card"
+        needs_bg = wants_photo and (needs_bg or next_design)
+        refresh_backgrounds = refresh_backgrounds and wants_photo
+        keywords, article_image, fallback_keywords = occasion_card.safe_keywords(occasion), None, ""
+        sources = [x for x in sources if x in ("pexels", "pixabay", "unsplash")]
+        mode = "pexels"
+        if not wants_photo:
+            # a drawn design: no photo at all, and any photo from an earlier layout is dropped
+            slides = [(s[0], s[1], s[2], s[3], s[4], None, s[6]) for s in slides]
 
     backgrounds = []
     if needs_bg:
@@ -698,17 +768,11 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
         album_gallery = [album_design.thumb(d) for d in datas if d]
 
     palette_to_store = stored_palette
-    occasion_spec = None
     if is_album:
         style.palette, palette_to_store = None, None          # the brand's own colours around the photos
     elif is_occasion:
-        # a greeting keeps the brand's exact colours; its layout rotates from one greeting to the next
-        from . import occasion_card
-        stored_index = (stored_palette or {}).get("design")
-        index = (int(stored_index) + (1 if next_design else 0)) if stored_index is not None else \
-            _next_occasion_layout(draft_id)
-        occasion_spec = occasion_card.spec_for(occasion, style.language, index)
-        style.palette, palette_to_store = None, {"design": index, "occasion": True}
+        # a greeting keeps the brand's main colour for its text; its layout rotates from one greeting to the next
+        style.palette, palette_to_store = None, {"design": occasion_index, "occasion": True}
     else:
         stored_index = (stored_palette or {}).get("design")
         if next_design and stored_index is not None:
@@ -754,14 +818,23 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
                 data = await asyncio.to_thread(images.download_image, bg_url)
                 bg = {"url": bg_url, "bytes": data, "hash": hashlib.sha1(data).hexdigest()} if data else None
             # the logo version that reads best on this photo (white / dark / colour)
-            chosen_logo, plate = colours.choose_logo(style.logos, style.logo, bg["bytes"] if bg else None,
-                                                     logo_placement, kind, (style.palette or {}).get("template"))
+            fl_spec = None
+            if flyer_data and kind == "cover":
+                # the flyer layout rotates with the post's design (and moves with "another design")
+                n = int((palette_to_store or {}).get("design") or 0) + design_seed
+                fl_spec = {**flyer_data, "layout": FLYER_LAYOUTS[n % len(FLYER_LAYOUTS)],
+                           "headline": heading, "tagline": body}
+            if occasion_spec is not None or fl_spec is not None:      # light designs: the logo for a light surface
+                chosen_logo, plate = colours.logo_for_light(style.logos, style.logo)
+            else:
+                chosen_logo, plate = colours.choose_logo(style.logos, style.logo, bg["bytes"] if bg else None,
+                                                         logo_placement, kind, (style.palette or {}).get("template"))
             spec = SlideSpec(kind=kind, heading=heading, body=body, position=pos, total=total,
                              background=bg["bytes"] if bg else None,
                              badge=badge if kind == "cover" else None,
                              credit=credit if kind != "cta" else "", variant=pos,
                              highlight=highlight if kind == "cover" else None,
-                             logo=chosen_logo, logo_plate=plate, occasion=occasion_spec,
+                             logo=chosen_logo, logo_plate=plate, occasion=occasion_spec, flyer=fl_spec,
                              album=({"count": len(album_urls),
                                      # opening: a peek at what follows; closing: the last photo + the first ones
                                      "gallery": album_gallery[1:4] if kind == "cover"

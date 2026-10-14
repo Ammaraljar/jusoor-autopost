@@ -34,7 +34,10 @@ async def publish_draft(draft_id: int) -> dict:
         brand = _brand_for(db, draft.brand_id)
         from . import scheduling
         # the publishing limits of each platform (e.g. one post a week on LinkedIn) are always respected
-        targets, held_back = scheduling.within_quota(db, draft.publish_targets or [], utcnow(), draft.id)
+        if draft.origin == "occasion":       # greetings go out on their day on every platform, no limits
+            targets, held_back = list(draft.publish_targets or scheduling.default_targets(db)), {}
+        else:
+            targets, held_back = scheduling.within_quota(db, draft.publish_targets or [], utcnow(), draft.id)
         if not targets and held_back:
             draft.status = "approved"
             draft.scheduled_at = None

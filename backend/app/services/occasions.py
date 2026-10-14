@@ -20,7 +20,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from ..db import Draft, Occasion, Organization, Slide, session_scope
-from . import app_settings, generator, industries
+from . import app_settings, generator, industries, occasion_card
 from . import occasions_data as data
 
 log = logging.getLogger(__name__)
@@ -530,7 +530,8 @@ async def finish_post(draft_id: int) -> None:
         d.caption = generator._text(result.get("caption"))
         d.hashtags = " ".join(generator._normalise_hashtags(result.get("hashtags")))
         d.cta, d.first_comment = generator._text(result.get("cta")), generator._text(result.get("first_comment"))
-        d.image_keywords = generator._text(result.get("image_keywords"))
+        # the photo search is never left to the AI: a curated, people-free one (most greetings use none)
+        d.image_keywords = occasion_card.safe_keywords(occ)
         d.hook_highlight = highlight if highlight and highlight in hook else None
         d.badge, d.relevance = "", 10
         d.ai_meta = {"occasion": occ}
@@ -549,28 +550,36 @@ def _local_dt(db: Session, on: date, hm: str) -> datetime:
 
 
 def schedule_post(db: Session, draft_id: int) -> datetime | None:
-    """Put an occasion post on the plan on its day: the chosen time, or the next free time that day."""
-    from . import pipeline, scheduling
+    """Put an occasion post on its own day, in the morning, on every platform the company publishes on.
+
+    Occasion greetings are outside the regular plan: no daily slots, no gap between posts and no
+    platform limits — a greeting that arrives late is worse than none."""
+    from . import pipeline, qa, scheduling
     d = db.get(Draft, draft_id)
     occ = (d.ai_meta or {}).get("occasion") if d else None
     if not d or not occ or d.status not in ("pending_review", "approved"):
         return None
     row = db.get(Occasion, occ.get("id")) if occ.get("id") else None
     on = date.fromisoformat(occ["date"])
-    hm = (row.post_time if row and row.post_time else None) or settings(db).get("post_time") or "09:00"
-    first = _local_dt(db, on, hm)
-    end = _local_dt(db, on, "23:00")
-    now = datetime.now(timezone.utc) + timedelta(minutes=5)
-    at, last_error = max(first, now), ""
-    while at <= end:
-        try:
-            return scheduling.schedule(db, d, when=at)
-        except ValueError as exc:
-            last_error = str(exc)
-            at += timedelta(minutes=30)
-    if last_error:
-        pipeline._fail_soft(draft_id, f"لم تُجدول مناسبة «{occ.get('name_ar')}» تلقائيًا: {last_error}")
-    return None
+    hm = (row.post_time if row and row.post_time else None) or settings(db).get("post_time") or "08:00"
+    at = _local_dt(db, on, hm)
+    now = datetime.now(timezone.utc)
+    if at < now:
+        if _local_dt(db, on, "23:00") < now:
+            return None                                   # the day is over
+        at = now + timedelta(minutes=5)                   # made on the day itself: as soon as possible
+    report = qa.run_qa(d, d.slides, app_settings.get_section(db, "generation").get("credit_source", True))
+    if not report["passed"]:
+        pipeline._fail_soft(draft_id, "لم تُجدول التهنئة: فشل فحص الجودة")
+        return None
+    targets = scheduling.default_targets(db)
+    if not any(t.get("platforms") for t in targets):
+        pipeline._fail_soft(draft_id, "لم تُجدول التهنئة: لا توجد منصات نشر — حدّدها من الإعدادات ← النشر")
+        return None
+    d.publish_targets = targets
+    d.status, d.scheduled_at, d.error = "scheduled", at, None
+    db.flush()
+    return at
 
 
 async def create_post(occasion_id: int, on: date | None = None) -> int:

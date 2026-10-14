@@ -54,7 +54,9 @@ def day_slots(cfg: dict[str, Any], day: date) -> list[datetime]:
 
 
 def _busy_times(db: Session, start: datetime, end: datetime, exclude_id: int | None = None) -> list[datetime]:
-    q = select(Draft.id, Draft.scheduled_at, Draft.published_at).where(Draft.status.in_(BUSY_STATUSES))
+    # occasion greetings live outside the plan: they never take a regular post's place
+    q = select(Draft.id, Draft.scheduled_at, Draft.published_at).where(Draft.status.in_(BUSY_STATUSES),
+                                                                       Draft.origin != "occasion")
     out = []
     for did, sched, pub in db.execute(q):
         if did == exclude_id:
@@ -162,7 +164,7 @@ def usage(db: Session, platform: str, when: datetime, period: str, exclude_id: i
     cfg = cfg or config(db)
     start, end = _window(cfg, when, period)
     n = 0
-    for d in db.scalars(select(Draft).where(Draft.status.in_(BUSY_STATUSES))):
+    for d in db.scalars(select(Draft).where(Draft.status.in_(BUSY_STATUSES), Draft.origin != "occasion")):
         if d.id == exclude_id:
             continue
         at = d.scheduled_at or d.published_at

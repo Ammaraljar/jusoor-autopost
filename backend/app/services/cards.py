@@ -149,8 +149,43 @@ def _rule(family: str) -> str:
 
 
 def _template(pal: dict) -> str:
-    t = pal.get("template") or pal.get("layout")
-    return t if t in TEMPLATE_SPEC else "magazine"
+    return _template_fx(pal)[0]
+
+
+def _template_fx(pal: dict) -> tuple[str, str]:
+    from .palette import split_template
+    base, fx = split_template(pal.get("template") or pal.get("layout"))
+    return (base if base in TEMPLATE_SPEC else "magazine"), fx
+
+
+# finishes: what each one lays over the photo (the photo filters themselves are in photo.css)
+_LEAF = '<path d="M0 0c40-60 120-70 180-40-60 12-120 40-180 40z"/><path d="M0 0c52 32 128 28 176-12-60 4-120 20-176 12z" opacity=".7"/>'
+FX_DECOR = {
+    "duo": '<div class="fx-layer"></div>',
+    "cool": '<div class="fx-layer"></div>',
+    "corners": '<div class="fx-corners"><i></i><i></i><i></i><i></i></div>',
+    "dots": '<div class="fx-dots"></div>',
+    "grid": '<div class="fx-grid"></div>',
+    "glow": '<div class="fx-glow"></div>',
+    "ring": '<div class="fx-ring"><i></i></div>',
+    "bars": '<div class="fx-bars"><i></i><i></i><i></i></div>',
+    "vignette": '<div class="fx-vignette"></div>',
+    "leaves": (f'<svg class="fx-leaves" viewBox="0 0 1080 1350" aria-hidden="true"><g transform="translate(1080,1350) rotate(200)">{_LEAF}</g>'
+               f'<g transform="translate(1040,1230) rotate(235) scale(.8)">{_LEAF}</g>'
+               f'<g transform="translate(980,1350) rotate(170) scale(.7)">{_LEAF}</g></svg>'),
+    "confetti": '<div class="fx-confetti"></div>',
+    "pattern": ('<svg class="fx-pattern" viewBox="0 0 1080 300" aria-hidden="true"><defs>'
+                '<pattern id="fxp" width="90" height="90" patternUnits="userSpaceOnUse">'
+                '<path d="M45 12l9 24 24 9-24 9-9 24-9-24-24-9 24-9z" fill="none" stroke="currentColor" stroke-width="2.5"/>'
+                '<rect x="28" y="28" width="34" height="34" transform="rotate(45 45 45)" fill="none" stroke="currentColor" stroke-width="2"/>'
+                '</pattern><linearGradient id="fxf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/>'
+                '<stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient><mask id="fxm">'
+                '<rect width="1080" height="300" fill="url(#fxf)"/></mask></defs>'
+                '<rect width="1080" height="300" fill="url(#fxp)" mask="url(#fxm)"/></svg>'),
+    "shapes": '<div class="fx-shapes"><i class="s1"></i><i class="s2"></i><i class="s3"></i></div>',
+    "scan": '<div class="fx-scan"></div>',
+    "paper": '<div class="fx-paper"></div>',
+}
 
 
 def build(spec, brand, lang: str, logo_html: str, logo_plate_html: str, bg: str,
@@ -160,12 +195,15 @@ def build(spec, brand, lang: str, logo_html: str, logo_plate_html: str, bg: str,
     family = pal.get("family") or getattr(brand, "family", None) or "general"
     if family not in _P:
         family = "general"
-    tpl = _template(pal)
+    tpl, fx = _template_fx(pal)
     light, foot_on_card, use_pill = TEMPLATE_SPEC[tpl]
+    fx_class = f" with-{fx}" if fx else ""        # body class (the decoration elements are .fx-*)
+    if fx:
+        bg = bg + FX_DECOR.get(fx, "")          # the finish sits on the photo, under the shades and the words
     cta = pal.get("cta") if pal.get("cta") in ("center", "bottom") else "center"
     lang = lang if lang in SWIPE else "en"
     classes = f"theme-photo tpl-{tpl} fam-{family} lang-{lang}" + (" tx-light" if light else "") \
-        + (" foot-card" if foot_on_card else "")
+        + (" foot-card" if foot_on_card else "") + fx_class
     content_total = max(spec.total - 2, 1)
     handle = f'<span class="pf-handle">{_esc(brand.handle)}</span>' if brand.handle else "<span></span>"
 
@@ -178,7 +216,7 @@ def build(spec, brand, lang: str, logo_html: str, logo_plate_html: str, bg: str,
                 f'<div class="pf-cta pf-cta-{cta}"><div class="pf-cta-logo">{logo_html}</div>'
                 f'<h1 data-fit="{"380" if cta == "center" else "300"},40">{_esc(spec.heading)}</h1>'
                 f'<p>{_esc(spec.body)}</p>{button}{site}<div class="pf-acts">{acts}</div></div>')
-        return body, f"theme-photo fam-{family} lang-{lang} kind-cta cta-{cta}"
+        return body, f"theme-photo fam-{family} lang-{lang} kind-cta cta-{cta}{fx_class}"
 
     badge = BADGES[lang].get(spec.badge or "", "") if spec.badge else ""
     top = f'<div class="pf-top{"" if logo_start else " logo-end"}">{logo_plate_html}'
@@ -283,9 +321,35 @@ TEMPLATE_LABELS: dict[str, tuple[str, str, str, str]] = {
 }
 
 
+FINISH_LABELS: dict[str, tuple[str, str, str, str]] = {
+    "duo": ("لونان", "Duotone", "Dwiton", "Bichromie"), "mono": ("أبيض وأسود", "Black & white", "Hitam putih", "Noir & blanc"),
+    "warm": ("دافئ", "Warm", "Hangat", "Chaud"), "vivid": ("ألوان زاهية", "Vivid", "Terang", "Vif"),
+    "cool": ("بارد", "Cool", "Sejuk", "Froid"), "corners": ("زوايا", "Corners", "Penjuru", "Coins"),
+    "dots": ("نقاط", "Dots", "Titik", "Points"), "grid": ("شبكة", "Grid", "Grid", "Grille"),
+    "glow": ("وهج", "Glow", "Sinar", "Halo"), "ring": ("حلقة", "Ring", "Gelang", "Anneau"),
+    "bars": ("خطوط", "Bars", "Jalur", "Barres"), "vignette": ("إطار معتم", "Vignette", "Vinyet", "Vignette"),
+    "leaves": ("أوراق", "Leaves", "Daun", "Feuilles"), "confetti": ("احتفال", "Confetti", "Konfeti", "Confettis"),
+    "pattern": ("زخرفة", "Pattern", "Corak", "Motif"), "shapes": ("أشكال", "Shapes", "Bentuk", "Formes"),
+    "scan": ("خطوط شاشة", "Scanlines", "Garis imbasan", "Trames"), "paper": ("ورق", "Paper", "Kertas", "Papier"),
+}
+
+
+def template_label(t: str) -> tuple[str, str, str, str]:
+    from .palette import split_template
+    base, fx = split_template(t)
+    b = TEMPLATE_LABELS.get(base, (base,) * 4)
+    if not fx:
+        return b
+    f = FINISH_LABELS[fx]
+    return tuple(f"{b[i]} · {f[i]}" for i in range(4))  # type: ignore[return-value]
+
+
 def template_options(family: str, enabled: list[str] | None) -> list[dict]:
     from . import palette
     kept = set(enabled or [])
-    return [{"id": t, "ar": TEMPLATE_LABELS[t][0], "en": TEMPLATE_LABELS[t][1], "ms": TEMPLATE_LABELS[t][2],
-             "fr": TEMPLATE_LABELS[t][3], "enabled": not kept or t in kept}
-            for t in palette.family_templates(family)]
+    out = []
+    for t in palette.family_templates(family):
+        label = template_label(t)
+        out.append({"id": t, "ar": label[0], "en": label[1], "ms": label[2], "fr": label[3],
+                    "finish": palette.split_template(t)[1], "enabled": not kept or t in kept})
+    return out

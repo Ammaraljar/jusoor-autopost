@@ -346,7 +346,7 @@ def choose_logo(logos: list | None, primary: bytes | None, background: bytes | N
     for tone, data in logos or []:
         if data and tone not in by_tone:
             by_tone[tone] = data
-    on_dark_surface = kind == "cta" or template == "topbar"
+    on_dark_surface = kind == "cta" or split_template(template)[0] == "topbar"
     if len(by_tone) <= 1:
         plate = False if on_dark_surface else logo_needs_plate(background, placement)
         return primary, plate
@@ -366,6 +366,22 @@ def choose_logo(logos: list | None, primary: bytes | None, background: bytes | N
         return by_tone["color"], False
     logo = by_tone.get("light") or primary
     return logo, logo_needs_plate(background, placement)
+
+
+def logo_for_light(logos: list | None, primary: bytes | None) -> tuple[bytes | None, bool]:
+    """The logo for a light (cream/pastel) surface: the dark version, else the colour one; a logo that
+    only exists in white gets the brand's plate behind it so it never disappears."""
+    by_tone: dict[str, bytes] = {}
+    for tone, data in logos or []:
+        if data and tone not in by_tone:
+            by_tone[tone] = data
+    for tone in ("dark", "color"):
+        if tone in by_tone:
+            return by_tone[tone], False
+    logo = by_tone.get("light") or primary
+    if logo is None:
+        return None, False
+    return logo, logo_tone(logo) == "light"
 
 
 # ------------------------------------------------------------------ previews
@@ -419,16 +435,67 @@ FIELD_EXCLUDE: dict[str, set[str]] = {
     "nonprofit": {"sticker"}, "education": set(), "tech": {"leaf"},
     "government": {"sticker", "polaroid", "leaf", "gradient"},
 }
-TEMPLATES = list(dict.fromkeys(SHARED_TEMPLATES + [t for v in FIELD_TEMPLATES.values() for t in v]))
 FAMILIES = ["travel", "news", "tech", "food", "education", "training", "nonprofit", "retail", "luxury",
             "fashion", "health", "beauty", "auto", "events", "government", "rental", "general"]
-DESIGN_COUNT = len(TEMPLATES)
+# Finishes: a photo treatment or a decoration laid over a template ("magazine~duo"). Each field gets
+# the finishes that suit its voice, each on three of its templates — so every field has 40+ designs.
+FINISHES = ("duo", "mono", "warm", "vivid", "cool", "corners", "dots", "grid", "glow", "ring", "bars",
+            "vignette", "leaves", "confetti", "pattern", "shapes", "scan", "paper")
+FAMILY_FINISHES: dict[str, tuple[str, ...]] = {
+    "travel": ("warm", "vivid", "corners", "glow", "pattern", "ring", "cool", "duo"),
+    "news": ("mono", "duo", "scan", "grid", "bars", "vignette", "dots"),
+    "tech": ("duo", "grid", "scan", "dots", "glow", "cool", "shapes"),
+    "food": ("warm", "vivid", "leaves", "confetti", "glow", "vignette", "ring"),
+    "education": ("shapes", "paper", "dots", "cool", "corners", "ring", "warm"),
+    "training": ("shapes", "bars", "dots", "duo", "corners", "cool", "glow"),
+    "nonprofit": ("warm", "leaves", "paper", "mono", "ring", "glow", "corners"),
+    "retail": ("vivid", "confetti", "duo", "bars", "glow", "dots", "shapes"),
+    "luxury": ("mono", "vignette", "corners", "glow", "ring", "warm", "pattern"),
+    "fashion": ("mono", "duo", "vivid", "ring", "glow", "bars", "vignette"),
+    "health": ("cool", "leaves", "ring", "shapes", "glow", "corners", "paper"),
+    "beauty": ("glow", "ring", "warm", "leaves", "vivid", "corners", "mono"),
+    "auto": ("bars", "mono", "vignette", "grid", "scan", "duo", "vivid"),
+    "events": ("confetti", "glow", "vivid", "duo", "ring", "shapes", "bars"),
+    "government": ("pattern", "corners", "mono", "cool", "bars", "paper", "grid"),
+    "rental": ("warm", "cool", "corners", "grid", "ring", "glow", "vivid"),
+    "general": ("duo", "warm", "corners", "glow", "ring", "dots", "shapes", "pattern"),
+}
+MIN_DESIGNS = 40
+
+
+def _base_templates(family: str) -> list[str]:
+    skip = FIELD_EXCLUDE.get(family, set())
+    return [t for t in FIELD_TEMPLATES.get(family, []) + SHARED_TEMPLATES if t not in skip]
 
 
 def family_templates(family: str) -> list[str]:
+    """The field's designs: its templates, then the templates with the field's finishes."""
     family = family if family in FAMILIES else "general"
-    skip = FIELD_EXCLUDE.get(family, set())
-    return [t for t in FIELD_TEMPLATES.get(family, []) + SHARED_TEMPLATES if t not in skip]
+    base = _base_templates(family)
+    combos: list[str] = []
+    finishes = FAMILY_FINISHES.get(family, FAMILY_FINISHES["general"])
+    for k, fx in enumerate(finishes):
+        for j in range(3):
+            combos.append(f"{base[(k * 5 + j * 9 + 1) % len(base)]}~{fx}")
+    combos = list(dict.fromkeys(combos))
+    k = 0
+    while len(base) + len(combos) < MIN_DESIGNS and k < 200:     # never fewer than 40
+        extra = f"{base[(k * 7 + 3) % len(base)]}~{finishes[k % len(finishes)]}"
+        if extra not in combos:
+            combos.append(extra)
+        k += 1
+    return base + combos
+
+
+def split_template(t: str | None) -> tuple[str, str]:
+    """('magazine', 'duo') from 'magazine~duo'; the finish is empty for a plain template."""
+    base, _, fx = (t or "").partition("~")
+    return base, (fx if fx in FINISHES else "")
+
+
+TEMPLATES = list(dict.fromkeys(SHARED_TEMPLATES + [t for v in FIELD_TEMPLATES.values() for t in v]
+                               + [t for f in FAMILIES for t in family_templates(f)]))
+DESIGN_COUNT = len(TEMPLATES)
 
 
 def design_count(family: str = "general", enabled: list[str] | None = None) -> int:

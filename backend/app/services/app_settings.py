@@ -68,7 +68,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "auto_create": True,                  # write each occasion's post by itself, lead_days before
         "lead_days": 3,
         "auto_schedule": True,                # put it on the plan on the occasion's day
-        "post_time": "09:00",
+        "post_time": "08:00",                 # occasion greetings go out in the morning of the day
         "dialect_by_country": True,           # Arabic posts for one Arab country use that country's dialect
     },
 }
