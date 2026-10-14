@@ -156,7 +156,7 @@ export default function Review() {
 
 function DraftCard({ d, picked, onPick }) {
   const { t, lang } = useI18n();
-  const origin = d.origin === 'source' ? d.source : d.origin === 'calendar' ? t('calendar_origin') : d.origin === 'offer' ? t('offer_new') : t('manual');
+  const origin = d.origin === 'source' ? d.source : d.origin === 'calendar' ? t('calendar_origin') : d.origin === 'offer' ? t('offer_new') : d.origin === 'occasion' ? t('occasion_origin') : t('manual');
   return (
     <Link to={`/drafts/${d.id}`} className={`card draft-card ${picked ? 'picked' : ''}`}>
       <div className="thumb">
