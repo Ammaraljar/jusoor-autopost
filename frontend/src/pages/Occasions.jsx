@@ -200,7 +200,7 @@ function SetupCard({ cfg, byCode, open, onToggle, catalog, year, onSaved }) {
   const [picking, setPicking] = useState(false);
   const [busy, run] = useAction();
   const v = f || { countries: cfg.countries || [], kinds: cfg.kinds || {}, auto_create: cfg.auto_create ?? true,
-    lead_days: cfg.lead_days ?? 3, auto_schedule: cfg.auto_schedule ?? true, post_time: cfg.post_time || '09:00',
+    lead_days: cfg.lead_days ?? 3, auto_schedule: cfg.auto_schedule ?? true, post_time: cfg.post_time || '08:00',
     dialect_by_country: cfg.dialect_by_country ?? true };
   const set = (k, val) => setF({ ...v, [k]: val });
   const save = () => run('save', async () => {

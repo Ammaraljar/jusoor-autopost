@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, ArrowDown, ArrowUp, Building2, CalendarClock, CheckCircle2, HardDrive, Images, KeyRound,
-  PenLine, Rss, Server, Send } from 'lucide-react';
+  LayoutTemplate, PenLine, Rss, Server, Send } from 'lucide-react';
 import CompanyCard from '../components/CompanyCard';
 import KeysCard from '../components/KeysCard';
+import TemplatePicker from '../components/TemplatePicker';
 import { Button, ErrorBox, Field, Loading, PageHead, SaveBar, useAction, useLoad } from '../components/ui';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -13,7 +14,7 @@ import { useI18n } from '../lib/i18n';
 
 const PROVIDER_NAMES = { buffer: 'Buffer', meta: 'Meta Graph API', uploadpost: 'upload-post.com' };
 const TABS = [
-  { id: 'content', icon: PenLine }, { id: 'photos', icon: Images }, { id: 'publishing', icon: Send },
+  { id: 'content', icon: PenLine }, { id: 'designs', icon: LayoutTemplate }, { id: 'photos', icon: Images }, { id: 'publishing', icon: Send },
   { id: 'keys', icon: KeyRound }, { id: 'system', icon: Server },
 ];
 const PHOTO_SOURCES = ['article', 'library', 'pexels', 'pixabay', 'unsplash', 'openverse', 'wikimedia'];
@@ -239,6 +240,8 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {tab === 'designs' && <DesignsTab />}
+
       {tab === 'photos' && (
         <div className="settings-grid">
           <section className="card card-pad stack">
@@ -342,6 +345,38 @@ export default function SettingsPage() {
         </div>
       )}
     </>
+  );
+}
+
+/** Post designs: which of the field's 40+ designs the company keeps (per brand identity). */
+function DesignsTab() {
+  const { t } = useI18n();
+  const brands = useLoad(() => api.get('/api/brands'), []);
+  const [bid, setBid] = useState(null);
+  const [value, setValue] = useState(null);
+  const [busy, run] = useAction();
+  const list = brands.data || [];
+  const brand = list.find((b) => b.id === bid) || list.find((b) => b.is_default) || list[0];
+  useEffect(() => { if (brand) setValue(brand.templates || []); }, [brand?.id, brands.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (brands.error) return <ErrorBox error={brands.error} onRetry={brands.reload} />;
+  if (!brand || value === null) return <Loading />;
+  const saved = brand.templates || [];
+  const dirty = JSON.stringify(value) !== JSON.stringify(saved);
+  const save = () => run('save', async () => { await api.patch(`/api/brands/${brand.id}`, { templates: value }); await brands.reload(true); }, t('saved'));
+  return (
+    <div className="stack">
+      {list.length > 1 && (
+        <div className="tabs" style={{ display: 'inline-flex' }}>
+          {list.map((b) => (
+            <button key={b.id} type="button" className={`tab ${b.id === brand.id ? 'active' : ''}`} onClick={() => setBid(b.id)}>{b.name}</button>
+          ))}
+        </div>
+      )}
+      <TemplatePicker key={brand.id} brand={brand} value={value} onChange={setValue} classic={brand.card_theme === 'classic'}
+        onUseTemplates={() => run('theme', async () => { await api.patch(`/api/brands/${brand.id}`, { card_theme: 'magazine' }); await brands.reload(true); }, t('saved'))} />
+      <p className="xs muted" style={{ margin: 0 }}>{t('designs_other_hint')}</p>
+      <SaveBar dirty={dirty} busy={busy === 'save'} onSave={save} onReset={() => setValue(saved)} />
+    </div>
   );
 }
 

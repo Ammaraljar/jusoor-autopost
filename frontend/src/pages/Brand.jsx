@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { CheckSquare, Eye, ImagePlus, LayoutTemplate, Plus, RefreshCw, RotateCcw, Save, Square, Star, Trash2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Contact, Eye, ImagePlus, LayoutTemplate, MapPin, Phone, Plus, RefreshCw, RotateCcw, Save, Star, Trash2 } from 'lucide-react';
 import { Button, ErrorBox, Field, Loading, PageHead, Spinner, useAction, useLoad } from '../components/ui';
 import { api, mediaUrl } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -82,8 +83,8 @@ function BrandForm({ brand, onChanged }) {
       name: f.name, handle: f.handle, website: f.website, voice: f.voice, cta_text: f.cta_text,
       colors: f.colors, logo_placement: f.logo_placement, card_style: f.card_style, card_theme: f.card_theme || 'magazine', publish_config: f.publish_config,
       color_mode: f.color_mode || 'auto', logo_backdrop: f.logo_backdrop || 'auto',
-      font_family: f.font_family || 'Cairo', font_latin: f.font_latin || 'Cairo', templates: f.templates || [],
-      hdr: f.hdr !== false,
+      font_family: f.font_family || 'Cairo', font_latin: f.font_latin || 'Cairo',
+      hdr: f.hdr !== false, contact: f.contact || {},
     });
     // the server completes the colour roles that follow the main colours (title, text, card…)
     if (saved?.colors) setF((x) => ({ ...x, colors: { ...saved.colors } }));
@@ -112,6 +113,8 @@ function BrandForm({ brand, onChanged }) {
             <textarea className="textarea" rows={3} value={f.voice} placeholder={ex('voice')} onChange={(e) => set('voice', e.target.value)} />
           </Field>
         </div>
+
+        <ContactCard brand={brand} value={f.contact || {}} onChange={(v) => set('contact', v)} />
 
         <div className="card card-pad stack">
           <div className="field-head">
@@ -229,8 +232,14 @@ function BrandForm({ brand, onChanged }) {
           </div>
         </div>
 
-        <TemplatePicker brand={brand} value={f.templates || []} onChange={(v) => set('templates', v)}
-          classic={f.card_theme === 'classic'} onUseTemplates={() => set('card_theme', 'magazine')} />
+        <div className="card card-pad row" style={{ gap: 12 }}>
+          <LayoutTemplate size={18} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <b className="small">{t('templates_title')}</b>
+            <p className="xs muted" style={{ margin: 0 }}>{t('designs_moved_hint')}</p>
+          </div>
+          <Link className="btn btn-sm" to="/settings#designs">{t('designs_open')}</Link>
+        </div>
 
         <div className="card card-pad stack">
           <h3>{t('publishing_channels')}</h3>
@@ -306,64 +315,59 @@ function BrandForm({ brand, onChanged }) {
 }
 
 
-/** The card templates of the company's field: keep all, or only the ones the company likes. */
-function TemplatePicker({ brand, value, onChange, classic, onUseTemplates }) {
-  const { t, lang } = useI18n();
+/** The company's contact data printed at the bottom of product / offer flyers (WhatsApp, branches, QR). */
+function ContactCard({ brand, value, onChange }) {
+  const { t } = useI18n();
   const { user } = useAuth();
-  const list = useLoad(() => api.get(`/api/brands/${brand.id}/templates`), [brand.id]);
-  const [thumbs, setThumbs] = useState({});
+  const [shots, setShots] = useState([]);
   const [busy, setBusy] = useState(false);
-  const items = list.data || [];
-  const kept = value.length ? value : items.map((i) => i.id);
-  const toggle = (id) => {
-    const next = kept.includes(id) ? kept.filter((x) => x !== id) : [...kept, id];
-    if (!next.length) return;
-    onChange(next.length === items.length ? [] : next);
-  };
-  const loadThumbs = async () => {
+  const phones = value.phones || [];
+  const branches = value.branches || [];
+  const put = (k, v) => onChange({ ...value, [k]: v });
+  const edit = (k, list, i, field, v) => put(k, list.map((x, j) => (j === i ? { ...x, [field]: v } : x)));
+  const preview = async () => {
     setBusy(true);
-    const language = user?.org?.language || 'ar';
-    const queue = [...items];
-    const worker = async () => {
-      while (queue.length) {
-        const it = queue.shift();
-        try {
-          const r = await api.post(`/api/brands/${brand.id}/preview`, { kind: 'cover', variant: 0, template: it.id, language });
-          setThumbs((x) => ({ ...x, [it.id]: r.image }));
-        } catch { /* skip */ }
-      }
-    };
-    await Promise.all([worker(), worker(), worker()]);
-    setBusy(false);
+    try {
+      const language = user?.org?.language || 'ar';
+      const out = await Promise.all([0, 1, 2, 5].map((variant) => api.post(`/api/brands/${brand.id}/preview`, { kind: 'flyer', variant, language }).then((r) => r.image)));
+      setShots(out);
+    } finally { setBusy(false); }
   };
   return (
     <div className="card card-pad stack">
       <div className="field-head">
-        <h3 style={{ margin: 0 }}><LayoutTemplate size={16} /> {t('templates_title')}</h3>
-        <Button size="sm" icon={Eye} busy={busy} disabled={!items.length} onClick={loadThumbs}>{t('templates_preview')}</Button>
+        <h3 style={{ margin: 0 }}><Contact size={16} /> {t('contact_title')}</h3>
+        <Button size="sm" icon={Eye} busy={busy} onClick={preview}>{t('flyer_preview')}</Button>
       </div>
-      <p className="xs muted" style={{ marginTop: -8 }}>{t('templates_hint')} — {kept.length}/{items.length}</p>
-      {classic && (
-        <div className="banner warn small" style={{ margin: 0 }}>
-          {t('templates_classic_warn')}{' '}
-          <Button size="sm" variant="primary" onClick={onUseTemplates}>{t('templates_use')}</Button>
+      <p className="xs muted" style={{ marginTop: -8 }}>{t('contact_hint')}</p>
+      <b className="small"><Phone size={14} /> {t('contact_phones')}</b>
+      {phones.map((p, i) => (
+        <div key={i} className="contact-row">
+          <input className="input ltr" dir="ltr" inputMode="tel" value={p.number || ''} placeholder="+966 55 123 4567"
+            onChange={(e) => edit('phones', phones, i, 'number', e.target.value)} />
+          <label className="check small"><input type="checkbox" checked={p.whatsapp !== false}
+            onChange={(e) => edit('phones', phones, i, 'whatsapp', e.target.checked)} /> WhatsApp</label>
+          <button type="button" className="btn btn-sm btn-ghost" aria-label={t('delete')} onClick={() => put('phones', phones.filter((_, j) => j !== i))}><Trash2 size={14} /></button>
         </div>
-      )}
-      <div className="row" style={{ gap: 8 }}>
-        <Button size="sm" icon={CheckSquare} onClick={() => onChange([])}>{t('select_all')}</Button>
+      ))}
+      {phones.length < 4 && <div><Button size="sm" icon={Plus} onClick={() => put('phones', [...phones, { number: '', whatsapp: true }])}>{t('contact_add_phone')}</Button></div>}
+      <b className="small"><MapPin size={14} /> {t('contact_branches')}</b>
+      {branches.map((b, i) => (
+        <div key={i} className="contact-row">
+          <input className="input" style={{ maxWidth: 180 }} value={b.name || ''} placeholder={t('contact_branch_name')}
+            onChange={(e) => edit('branches', branches, i, 'name', e.target.value)} />
+          <input className="input" value={b.address || ''} placeholder={t('contact_branch_address')}
+            onChange={(e) => edit('branches', branches, i, 'address', e.target.value)} />
+          <button type="button" className="btn btn-sm btn-ghost" aria-label={t('delete')} onClick={() => put('branches', branches.filter((_, j) => j !== i))}><Trash2 size={14} /></button>
+        </div>
+      ))}
+      {branches.length < 4 && <div><Button size="sm" icon={Plus} onClick={() => put('branches', [...branches, { name: '', address: '' }])}>{t('contact_add_branch')}</Button></div>}
+      <div className="grid grid-2">
+        <Field label={t('contact_email')}><input className="input ltr" dir="ltr" type="email" value={value.email || ''} onChange={(e) => put('email', e.target.value)} /></Field>
+        <Field label={t('contact_qr')} hint={t('contact_qr_hint')}><input className="input ltr" dir="ltr" value={value.qr_url || ''} placeholder="https://" onChange={(e) => put('qr_url', e.target.value)} /></Field>
       </div>
-      <div className="tpl-grid">
-        {items.map((it) => {
-          const on = kept.includes(it.id);
-          return (
-            <button type="button" key={it.id} className={`tpl-item ${on ? 'on' : ''}`} onClick={() => toggle(it.id)}>
-              <div className="tpl-thumb">{thumbs[it.id] ? <img src={thumbs[it.id]} alt="" /> : <LayoutTemplate size={22} />}</div>
-              <span>{on ? <CheckSquare size={14} /> : <Square size={14} />} {it[lang] || it.en}</span>
-            </button>
-          );
-        })}
-      </div>
-      <p className="xs muted">{t('templates_save_hint')}</p>
+      <label className="check small"><input type="checkbox" checked={value.show !== false} onChange={(e) => put('show', e.target.checked)} /> {t('contact_show')}</label>
+      {shots.length > 0 && <div className="preview-grid flyer-grid">{shots.map((src, i) => <div className="ph" key={i}><img src={src} alt="" /></div>)}</div>}
     </div>
   );
 }
