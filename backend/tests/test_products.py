@@ -18,15 +18,14 @@ SHOP_PAGE = """<html><head><script type="application/ld+json">%s</script>
 
 # a travel agency's offers page that lists its packages in schema.org (ItemList of Products)
 ITEMLIST_PAGE = """<html><head><title>عروض سياحية ماليزيا</title><script type="application/ld+json">%s</script></head>
-<body><h1>عروض سياحية ماليزيا</h1></body></html>""" % json.dumps({"@context": "https://schema.org", "@graph": [
-    {"@type": "WebPage", "name": "عروض"},
-    {"@type": "ItemList", "itemListElement": [
+<body><h1>عروض سياحية ماليزيا</h1></body></html>""" % json.dumps({"@context": "https://schema.org", "@type": "WebPage",
+    "name": "عروض", "mainEntity": {"@type": "ItemList", "itemListElement": [
         {"@type": "Product", "name": "باقة ماليزيا لشهر العسل 8 ليالي", "url": "https://agency.test/package-honeymoon",
          "description": "سيلانجور ولنكاوي وكوالالمبور مع الفنادق والجولات.", "image": "https://agency.test/img/h.jpg",
          "offers": {"@type": "Offer", "price": "2268", "priceCurrency": "SAR"}},
         {"@type": "Product", "name": "باقة ماليزيا العائلية 10 ليالي", "url": "https://agency.test/package-family",
          "description": "برنامج عائلي متكامل.", "image": "https://agency.test/img/f.jpg",
-         "offers": {"@type": "Offer", "price": "3100", "priceCurrency": "SAR"}}]}]}, ensure_ascii=False)
+         "offers": {"@type": "Offer", "price": "3100", "priceCurrency": "SAR"}}]}}, ensure_ascii=False)
 
 # a listing whose cards link to item pages (plus menus and booking buttons that must be ignored)
 CARDS_PAGE = """<html><body><header><a href="/الدولة/1/ماليزيا">ماليزيا</a><a href="/اتصل-بنا">اتصل</a></header>
@@ -47,7 +46,7 @@ DATA_JS = "// data\nwindow.SITE_DATA = " + json.dumps({"company": {"name_ar": "�
         {"id": "malaysia-premium-12n", "title_ar": "ماليزيا الفاخرة الكاملة", "title_en": "The Complete Premium Malaysia",
          "subtitle_ar": "سيلانجور، لنكاوي، كاميرون هايلاند، وكوالالمبور", "days_count": 13, "nights_count": 12,
          "card_img": "https://images.test/photo-1.jpg", "desc_ar": "برنامج فاخر بفنادق 5 نجوم.",
-         "prices": {"adult": {"USD": 1350}},
+         "prices": {"adult": {"USD": 1350}}, "price_note_ar": "تعتمد الأسعار النهائية على تاريخ السفر 2026",
          "itinerary": [{"title_ar": "اليوم الأول", "img": "https://images.test/d1.jpg"}]},
         {"id": "langkawi-5n", "title_ar": "لنكاوي الساحرة", "title_en": "Magical Langkawi", "days_count": 6,
          "nights_count": 5, "card_img": "https://images.test/photo-2.jpg", "desc_ar": "جزيرة لنكاوي.",
@@ -197,3 +196,12 @@ def test_sync_job_then_post_with_link_and_schedule(client, monkeypatch):
         did = d.id
     client.delete(f"/api/drafts/{did}")
     client.post("/api/products/bulk", json={"ids": [x["id"] for x in rows], "action": "delete"})
+
+
+def test_add_item_by_hand(client):
+    r = client.post("/api/products", json={"name": "Sunway Lagoon tickets", "price": "99", "currency": "RM",
+                                           "url": "shopee.com.my/product/1/2", "kind": "offer"})
+    assert r.status_code == 200 and r.json()["url"] == "https://shopee.com.my/product/1/2" and r.json()["origin"] == "manual"
+    r2 = client.post("/api/products", json={"name": "Airport transfer", "kind": "service"})
+    assert r2.json()["url"].startswith("manual:")
+    client.post("/api/products/bulk", json={"ids": [r.json()["id"], r2.json()["id"]], "action": "delete"})
