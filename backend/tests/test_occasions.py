@@ -144,8 +144,18 @@ def test_occasion_designs_are_many_bright_and_photo_safe():
     eid = {"key": "isl:eid_fitr", "kind": "religious", "tone": "festive", "motif": "crescent"}
     sa = {"key": "nat:SA:national_day", "kind": "national", "tone": "pride", "motif": "flag", "number": 96}
     teachers = {"key": "world:teachers_day", "kind": "international", "tone": "appreciation", "motif": "book"}
-    assert not oc.uses_photo(eid) and not oc.uses_photo(sa) and oc.uses_photo(teachers)
-    assert "photo_card" not in oc.layouts_for(eid) and "photo_card" not in oc.layouts_for(sa)
+    memorial = {"key": "nat:XX:martyrs", "kind": "national", "tone": "memorial", "motif": "leaf"}
+    # greetings carry photos (curated, people-free searches) — except days of remembrance
+    assert oc.uses_photo(eid) and oc.uses_photo(sa) and oc.uses_photo(teachers) and not oc.uses_photo(memorial)
+    assert not set(oc.PHOTO_LAYOUTS) & set(oc.layouts_for(memorial))
+    assert len(set(oc.PHOTO_LAYOUTS) & set(oc.layouts_for(eid))) >= 4
+    photo_turns = [oc.spec_for(eid, "ar", i)["layout"] in oc.PHOTO_LAYOUTS for i in range(6)]
+    assert photo_turns == [True, False, True, False, True, False]          # photo and drawn designs alternate
+    assert oc.safe_keywords(eid) == "eid lanterns decoration"
+    assert oc.safe_keywords({**sa, "countries": ["SA"]}) == "Saudi Arabia landmark skyline"
+    from app.services import images
+    assert images.is_safe({"about": "lanterns hanging at night"})
+    assert not images.is_safe({"about": "man holding a lantern"}) and not images.is_safe({"about": ""})
     assert "confetti" not in oc.layouts_for({**eid, "tone": "spiritual"})
     assert "big_number" in oc.layouts_for(sa) and "big_number" not in oc.layouts_for(teachers)
     assert "lanterns" not in oc.layouts_for(teachers)
@@ -161,3 +171,10 @@ def test_logo_for_light_prefers_dark_then_colour_then_plate():
     assert logo_for_light([("light", b"L"), ("dark", b"D"), ("color", b"C")], b"L") == (b"D", False)
     assert logo_for_light([("light", b"L"), ("color", b"C")], b"L") == (b"C", False)
     assert logo_for_light([], None) == (None, False)
+    # a white logo saved as the "colour" version is read as white: the plate goes behind it
+    import io as _io
+    from PIL import Image as _Image
+    buf = _io.BytesIO()
+    _Image.new("RGBA", (200, 80), (255, 255, 255, 255)).save(buf, "PNG")
+    white = buf.getvalue()
+    assert logo_for_light([("color", white)], white) == (white, True)

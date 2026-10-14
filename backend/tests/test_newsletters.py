@@ -211,3 +211,13 @@ def test_newsletter_brief_and_stock_photos(client, monkeypatch):
     assert c["hero_image"] == "https://stock.test/luxury-beach-resort.jpg"
     assert c["sections"][0]["image"] == "https://stock.test/family-dinner.jpg"
     assert c["brief"]["goal"] == "Book the summer package"
+
+
+def test_newsletters_can_be_selected_and_deleted_together(client):
+    ids = [client.post("/api/newsletters", json={"topic": f"Bulk {i}", "list_ids": []}).json()["id"] for i in range(3)]
+    r = client.post("/api/newsletters/bulk", json={"ids": ids[:2], "action": "delete"}).json()
+    assert r == {"done": 2, "skipped": 0}
+    left = {n["id"] for n in client.get("/api/newsletters").json()}
+    assert ids[2] in left and not (set(ids[:2]) & left)
+    assert client.post("/api/newsletters/bulk", json={"ids": ids, "action": "send"}).status_code == 422
+    client.delete(f"/api/newsletters/{ids[2]}")
