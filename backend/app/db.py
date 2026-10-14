@@ -5,11 +5,12 @@ and SQLite for local development / tests.
 """
 from __future__ import annotations
 
+import datetime as _dt
 import os
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import date, datetime, timezone
-from typing import Any, Iterator
+from typing import Any, Iterator, Optional
 
 from sqlalchemy import (JSON, Boolean, Date, DateTime, ForeignKey, Integer, String, Text,
                         UniqueConstraint, create_engine)
@@ -368,6 +369,33 @@ class Delivery(TenantMixin, Base):
     click_count: Mapped[int] = mapped_column(Integer, default=0)
     unsubscribed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     answer: Mapped[str | None] = mapped_column(String(200), nullable=True)   # poll answer (survey newsletters)
+
+
+class Occasion(TenantMixin, Base):
+    """A day the company greets its audience on: weekly, religious, national, world, shopping or its own."""
+    __tablename__ = "occasions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    year: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)   # None = every week
+    key: Mapped[str] = mapped_column(String(120), index=True)
+    kind: Mapped[str] = mapped_column(String(20), default="custom")   # weekly|religious|national|international|commercial|custom
+    tone: Mapped[str] = mapped_column(String(20), default="festive")
+    motif: Mapped[str] = mapped_column(String(20), default="sparkle")
+    name_ar: Mapped[str] = mapped_column(Text, default="")
+    name_en: Mapped[str] = mapped_column(Text, default="")
+    date: Mapped[Optional[_dt.date]] = mapped_column(Date, nullable=True, index=True)
+    weekday: Mapped[int | None] = mapped_column(Integer, nullable=True)        # 0 = Monday (weekly occasions)
+    recurrence: Mapped[str] = mapped_column(String(10), default="yearly")     # once | yearly | weekly
+    countries: Mapped[list[Any]] = mapped_column(default=list)
+    number: Mapped[int | None] = mapped_column(Integer, nullable=True)       # anniversary / year number
+    hijri: Mapped[str] = mapped_column(String(60), default="")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    relevant: Mapped[bool] = mapped_column(Boolean, default=True)            # fits the company's field
+    post_time: Mapped[str | None] = mapped_column(String(5), nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="")                     # instructions for the post
+    source: Mapped[str] = mapped_column(String(10), default="auto")          # auto | custom
+    edited: Mapped[bool] = mapped_column(Boolean, default=False)             # the company changed date/name
+    drafts: Mapped[dict[str, Any]] = mapped_column(default=dict)             # {date: draft id}
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class AppSetting(Base):

@@ -12,7 +12,8 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
 from .db import init_db, session_scope
-from .routes import auth_routes, brands, drafts, media, newsletters, planning, products, sources, system, team
+from .routes import (auth_routes, brands, drafts, media, newsletters, occasions, planning, products, sources, system,
+                     team)
 from .services.jobs import jobs
 from .services.pipeline import ensure_default_brand
 from .services.renderer import renderer
@@ -88,7 +89,8 @@ class CachedStatic(StaticFiles):
 
 
 for r in (system.router, auth_routes.router, drafts.router, sources.router, planning.router, brands.router,
-          team.router, team.admin, media.router, products.router, newsletters.router, newsletters.public):
+          team.router, team.admin, media.router, products.router, newsletters.router, newsletters.public,
+          occasions.router):
     app.include_router(r)
 
 if settings.storage_backend == "local":
