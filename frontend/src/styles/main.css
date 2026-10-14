@@ -551,3 +551,84 @@ html[dir="ltr"] .select { background-position: right 12px center; padding-left: 
 .search-box .input { padding-inline-start: 36px; }
 .search-box .input::-webkit-search-cancel-button { cursor: pointer; }
 @media (max-width: 860px) { .search-box { min-width: 0; width: 100%; flex: 1 1 100%; } }
+
+/* ---------------- Occasions ---------------- */
+.occ-setup { margin-bottom: 16px; overflow: visible; }
+.occ-setup-head { width: 100%; display: flex; align-items: center; gap: 10px; padding: 14px 20px; border: 0;
+  background: transparent; color: var(--text); font: inherit; cursor: pointer; text-align: start; min-height: 52px; }
+.occ-setup-head:hover { background: var(--control-hover); border-radius: inherit; }
+.occ-flags { font-size: 17px; letter-spacing: 1px; white-space: nowrap; }
+.occ-chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.occ-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 6px 5px 12px; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--border); font-weight: 700; font-size: 13px; }
+[dir="rtl"] .occ-chip { padding: 5px 12px 5px 6px; }
+.occ-chip button { width: 24px; height: 24px; border-radius: 50%; border: 0; background: var(--control-bg); color: var(--text-2);
+  cursor: pointer; font-size: 16px; line-height: 1; }
+.occ-chip button:hover { background: var(--danger-bg); color: var(--danger); }
+.occ-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 14px; border-radius: 999px;
+  border: 1.5px solid var(--border); font-weight: 700; font-size: 13px; cursor: pointer; user-select: none;
+  transition: background .15s var(--ease), border-color .15s var(--ease); }
+.occ-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.occ-toggle.on { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.occ-toggle:focus-within { box-shadow: var(--focus-ring); }
+.occ-auto { display: grid; gap: 12px; }
+.occ-auto .check { flex-wrap: wrap; font-weight: 600; }
+.occ-auto .check .occ-num-input { flex: 0 0 76px; width: 76px; height: 38px; min-height: 38px; padding: 4px 8px; text-align: center; }
+.occ-auto .check .occ-time-input { flex: 0 0 130px; width: 130px; height: 38px; min-height: 38px; padding: 4px 8px; }
+.occ-weekly { margin-bottom: 16px; padding-top: 14px; padding-bottom: 8px; }
+.occ-sec-head { display: flex; align-items: center; gap: 8px; color: var(--text-2); margin-bottom: 4px; }
+.occ-filters { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin: 4px 0 18px; }
+.occ-filters .search-box { flex: 1 1 220px; }
+.occ-months { display: grid; gap: 20px; }
+.occ-month-head { display: flex; align-items: baseline; gap: 10px; font-size: 16px; margin: 0 0 8px; }
+.occ-list { padding: 4px 0; }
+.occ-row { display: grid; grid-template-columns: 64px 1fr auto; gap: 14px; align-items: center; padding: 12px 18px;
+  border-top: 1px solid var(--border); }
+.occ-list .occ-row:first-child, .occ-weekly .occ-row { border-top: 0; }
+.occ-row.off .occ-main, .occ-row.off .occ-date { opacity: .5; }
+.occ-row.past { opacity: .62; }
+.occ-date { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 58px;
+  border-radius: 14px; background: var(--gold-tint); color: var(--text); text-align: center; }
+.occ-date b { font-size: 22px; line-height: 1.1; }
+.occ-date small { font-size: 11px; color: var(--text-2); font-weight: 700; }
+.occ-weekly .occ-date b { font-size: 14px; }
+.occ-main { min-width: 0; display: grid; gap: 4px; }
+.occ-name { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 15px; flex-wrap: wrap; }
+.occ-num { background: var(--primary); color: var(--on-primary); border-radius: 999px; padding: 1px 10px; font-size: 12px;
+  font-weight: 800; direction: ltr; }
+.occ-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 12px; }
+.occ-kind { border-radius: 7px; padding: 2px 8px; font-weight: 700; background: var(--surface-2); border: 1px solid var(--border); }
+.occ-kind.k-religious, .occ-kind.k-weekly { background: var(--ok-bg); color: var(--ok); border-color: transparent; }
+.occ-kind.k-national { background: var(--danger-bg); color: var(--danger); border-color: transparent; }
+.occ-kind.k-international { background: var(--info-bg); color: var(--info); border-color: transparent; }
+.occ-kind.k-commercial { background: var(--gold-tint); color: #8A6A12; border-color: transparent; }
+.occ-meta .occ-flags { font-size: 15px; }
+.occ-actions { display: flex; align-items: center; gap: 8px; }
+.occ-post { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: inherit; }
+.occ-post img { width: 40px; height: 50px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
+.occ-note { margin-top: 14px; }
+.switch { position: relative; width: 46px; height: 28px; border-radius: 999px; border: 0; padding: 0; cursor: pointer;
+  background: var(--border); transition: background .18s var(--ease); flex: none; }
+.switch i { position: absolute; top: 3px; inset-inline-start: 3px; width: 22px; height: 22px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .18s var(--ease); }
+.switch.on { background: var(--ok); }
+.switch.on i { transform: translateX(18px); }
+[dir="rtl"] .switch.on i { transform: translateX(-18px); }
+.switch:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.switch:disabled { opacity: .6; cursor: progress; }
+.occ-group { margin-bottom: 14px; }
+.occ-group-head { margin-bottom: 6px; }
+.occ-country-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px; }
+.occ-country { display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 12px; border-radius: 10px;
+  border: 1.5px solid var(--border); cursor: pointer; font-weight: 600; font-size: 14px; }
+.occ-country:hover { background: var(--control-hover); }
+.occ-country.on { border-color: var(--primary); background: var(--gold-tint); }
+.occ-country input { accent-color: var(--primary); }
+.occ-flag { font-size: 20px; }
+@media (max-width: 720px) {
+  .occ-row { grid-template-columns: 54px 1fr; padding: 12px 14px; }
+  .occ-actions { grid-column: 1 / -1; justify-content: flex-end; flex-wrap: wrap; }
+  .occ-filters .seg { width: 100%; overflow-x: auto; flex-wrap: nowrap; }
+  .occ-filters .seg-item { white-space: nowrap; }
+  .occ-country-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
