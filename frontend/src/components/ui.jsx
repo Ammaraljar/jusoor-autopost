@@ -233,10 +233,10 @@ export function SelectAll({ sel, label }) {
 }
 
 /** Sticky bar shown while items are selected. actions: [{key, label, icon, variant, confirm}] */
-export function BulkBar({ sel, actions, onAction, busy, selectedLabel, clearLabel }) {
+export function BulkBar({ sel, actions, onAction, busy, selectedLabel, clearLabel, place = 'top' }) {
   if (!sel.count) return null;
   return (
-    <div className="bulk-bar">
+    <div className={`bulk-bar ${place === 'bottom' ? 'bulk-bar-bottom' : ''}`}>
       <b>{sel.count}</b> <span>{selectedLabel}</span>
       <div className="spacer" />
       {actions.map((a) => (
