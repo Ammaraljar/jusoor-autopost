@@ -1,5 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Inbox, X } from 'lucide-react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { AlertTriangle, CheckCircle2, ChevronDown, Inbox, X } from 'lucide-react';
 import { useI18n } from '../lib/i18n';
 
 /* ---------- toasts ---------- */
@@ -81,6 +81,38 @@ export function Button({ busy, icon: Icon, children, variant = '', size = '', ..
   );
 }
 
+/** A button that opens a short list of choices (e.g. the kinds of post to create). */
+export function Menu({ label, icon, variant = '', items }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    const key = (e) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', key);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', key); };
+  }, [open]);
+  return (
+    <div className="menu" ref={ref}>
+      <Button variant={variant} icon={icon} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        {label}<ChevronDown size={15} className={`menu-caret ${open ? 'up' : ''}`} />
+      </Button>
+      {open && (
+        <div className="menu-pop" role="menu">
+          {items.map(({ key, icon: Icon, label: text, hint, onClick }) => (
+            <button key={key} type="button" role="menuitem" className="menu-item"
+              onClick={() => { setOpen(false); onClick(); }}>
+              {Icon && <span className="menu-ico"><Icon size={18} /></span>}
+              <span><b>{text}</b>{hint && <small>{hint}</small>}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Field({ label, hint, children, action }) {
   return (
     <label className="field">
@@ -100,7 +132,9 @@ export function Modal({ title, children, footer, onClose, wide }) {
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose?.();
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';            // the page behind does not scroll
+    return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
   }, [onClose]);
   return (
     <div className="modal-back" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
