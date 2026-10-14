@@ -109,7 +109,7 @@ function NewNewsletter({ onClose }) {
   const posts = useLoad(() => api.get('/api/drafts?status=approved,scheduled,published&limit=30'), []);
   const products = useLoad(() => api.get('/api/products').catch(() => []), []);
   const articles = useLoad(() => api.get('/api/newsletters/articles').catch(() => []), []);
-  const [f, setF] = useState({ kind: '', topic: '', list_ids: [], draft_ids: [], product_ids: [], article_ids: [],
+  const [f, setF] = useState({ kind: '', topic: '', goal: '', audience: '', instructions: '', list_ids: [], draft_ids: [], product_ids: [], article_ids: [],
     design: '', language: user?.org?.language || 'ar', font: '',
     event: { date: '', time: '', place: '', url: '' }, poll: { question: '', options: ['', '', ''] } });
   const [busy, run] = useAction();
@@ -155,6 +155,17 @@ function NewNewsletter({ onClose }) {
         <div className="banner info small" style={{ margin: 0 }}>{TYPE_ICONS[f.kind]} {kind?.desc[lang] || kind?.desc.en}</div>
         <Field label={t('nl_topic')} hint={t('nl_topic_hint')}>
           <input className="input" value={f.topic} placeholder={ex('topic')} onChange={(e) => set('topic', e.target.value)} />
+        </Field>
+        <div className="grid grid-2">
+          <Field label={t('nl_goal')} hint={t('nl_goal_hint')}>
+            <input className="input" value={f.goal} onChange={(e) => set('goal', e.target.value)} />
+          </Field>
+          <Field label={t('nl_audience_brief')} hint={t('nl_audience_hint')}>
+            <input className="input" value={f.audience} onChange={(e) => set('audience', e.target.value)} />
+          </Field>
+        </div>
+        <Field label={t('nl_instructions')} hint={t('nl_instructions_hint')}>
+          <textarea className="textarea" rows={3} value={f.instructions} onChange={(e) => set('instructions', e.target.value)} />
         </Field>
         {kind?.event && (
           <div className="grid grid-2">

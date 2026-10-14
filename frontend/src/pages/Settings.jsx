@@ -4,12 +4,62 @@ import CompanyCard from '../components/CompanyCard';
 import KeysCard from '../components/KeysCard';
 import { Button, ErrorBox, Field, Loading, PageHead, useAction, useLoad } from '../components/ui';
 import { api } from '../lib/api';
-import { platformLabel } from '../lib/platforms';
+import { channelsOf, platformLabel } from '../lib/platforms';
 import { fmtDateTime } from '../lib/format';
 import { DIALECTS, LANGUAGES, useI18n } from '../lib/i18n';
 
 const PROVIDER_NAMES = { buffer: 'Buffer', meta: 'Meta Graph API', uploadpost: 'upload-post.com' };
 const ENV_HINT = { buffer: 'BUFFER_API_KEY', meta: 'META_ACCESS_TOKEN', uploadpost: 'UPLOADPOST_API_KEY' };
+
+function ChannelsTable({ p, providers, platforms, onChange }) {
+  const { t } = useI18n();
+  const channels = channelsOf(p);
+  const setRow = (platform, patch) => {
+    const row = { provider: '', limit: 0, period: 'week', ...(channels[platform] || {}), ...patch };
+    onChange({ ...channels, [platform]: row });
+  };
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      <div>
+        <b className="small">{t('channels_title')}</b>
+        <p className="xs muted" style={{ margin: '2px 0 0' }}>{t('channels_hint')}</p>
+      </div>
+      <div className="channels" role="table">
+        <div className="ch-row ch-head" role="row">
+          <span role="columnheader">{t('platform')}</span>
+          <span role="columnheader">{t('channel_service')}</span>
+          <span role="columnheader">{t('channel_limit')}</span>
+        </div>
+        {platforms.map((pl) => {
+          const row = channels[pl] || {};
+          const options = Object.entries(providers).filter(([, info]) => (info.platforms || []).includes(pl));
+          const on = !!row.provider;
+          return (
+            <div key={pl} className={`ch-row ${on ? 'on' : 'off'}`} role="row">
+              <b role="cell">{platformLabel(pl)}</b>
+              <select role="cell" className="select sm" aria-label={t('channel_service')} value={row.provider || ''}
+                onChange={(e) => setRow(pl, { provider: e.target.value })}>
+                <option value="">{t('channel_off')}</option>
+                {options.map(([name, info]) => (
+                  <option key={name} value={name}>{PROVIDER_NAMES[name]}{info.configured ? '' : ` (${t('not_configured')})`}</option>
+                ))}
+              </select>
+              <div role="cell" className="ch-limit">
+                <input className="input sm" type="number" min={0} max={100} disabled={!on} aria-label={t('channel_limit')}
+                  value={row.limit || ''} placeholder="∞" onChange={(e) => setRow(pl, { limit: Number(e.target.value) || 0 })} />
+                <select className="select sm" disabled={!on} value={row.period || 'week'} onChange={(e) => setRow(pl, { period: e.target.value })}>
+                  <option value="day">{t('per_day')}</option>
+                  <option value="week">{t('per_week')}</option>
+                  <option value="month">{t('per_month')}</option>
+                </select>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export default function SettingsPage() {
   const { t, lang } = useI18n();
@@ -118,30 +168,16 @@ export default function SettingsPage() {
 
           <div className="card card-pad stack">
             <h3>{t('publishing')}</h3>
-            <div className="grid grid-2">
-              <Field label={t('default_provider')}>
-                <select className="select" value={p.default_provider} onChange={(e) => set('publishing', 'default_provider', e.target.value)}>
-                  {opts.providers.map((o) => <option key={o} value={o}>{PROVIDER_NAMES[o]}</option>)}
-                </select>
-              </Field>
+            <ChannelsTable p={p} providers={st.providers || {}} platforms={opts.platforms}
+              onChange={(channels) => set('publishing', 'channels', channels)} />
+            {Object.values(channelsOf(p)).some((c) => c.provider === 'buffer') && (
               <Field label={t('buffer_mode')}>
                 <select className="select" value={p.buffer_mode} onChange={(e) => set('publishing', 'buffer_mode', e.target.value)}>
                   <option value="shareNow">{t('share_now')}</option>
                   <option value="addToQueue">{t('add_queue')}</option>
                 </select>
               </Field>
-            </div>
-            <Field label={t('default_platforms')}>
-              <div className="row">
-                {opts.platforms.map((o) => (
-                  <label key={o} className="check small">
-                    <input type="checkbox" checked={p.default_platforms.includes(o)} onChange={() => set('publishing', 'default_platforms',
-                      p.default_platforms.includes(o) ? p.default_platforms.filter((x) => x !== o) : [...p.default_platforms, o])} />
-                    {platformLabel(o)}
-                  </label>
-                ))}
-              </div>
-            </Field>
+            )}
             <label className="check">
               <input type="checkbox" checked={p.first_comment_enabled} onChange={(e) => set('publishing', 'first_comment_enabled', e.target.checked)} />
               {t('first_comment_enabled')}

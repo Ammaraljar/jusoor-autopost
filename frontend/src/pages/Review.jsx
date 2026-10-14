@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { CalendarClock, Camera, Check, ChevronDown, ChevronLeft, ImagePlus, Images, Lightbulb, RefreshCw, RotateCcw, Search, Sparkles, Trash2, X } from 'lucide-react';
-import { BulkBar, Button, Empty, ErrorBox, Field, Modal, PageHead, SelectAll, Spinner, StatusPill, useAction, useLoad, useSelection } from '../components/ui';
+import { CalendarClock, Camera, Check, ChevronDown, ChevronLeft, ImagePlus, Images, Lightbulb, Plus, RefreshCw, RotateCcw, Search, Sparkles, Tag, Trash2, X } from 'lucide-react';
+import { BulkBar, Button, Empty, ErrorBox, Field, Menu, Modal, PageHead, SelectAll, Spinner, StatusPill, useAction, useLoad, useSelection } from '../components/ui';
 import { api, mediaUrl } from '../lib/api';
 import ScrapeModal from '../components/ScrapeModal';
 import { dayBucket, fmtDate, relative } from '../lib/format';
@@ -21,6 +21,7 @@ export default function Review() {
   const [collapsed, setCollapsed] = useState({});
   const [showManual, setShowManual] = useState(false);
   const [showAlbum, setShowAlbum] = useState(false);
+  const [showOffer, setShowOffer] = useState(false);
   const [showScrape, setShowScrape] = useState(false);
   const [busy, run] = useAction();
 
@@ -75,11 +76,14 @@ export default function Review() {
   return (
     <>
       <PageHead title={t('review_title')} sub={t('review_sub')}>
-        <Button icon={Lightbulb} onClick={() => setShowManual(true)}>{t('new_post')}</Button>
-        <Button icon={Camera} onClick={() => setShowAlbum(true)}>{t('album_new')}</Button>
-        <Button variant="primary" icon={RefreshCw} busy={busy === 'scrape' || jobs.data?.running} onClick={() => setShowScrape(true)}>
+        <Button icon={RefreshCw} busy={busy === 'scrape' || jobs.data?.running} onClick={() => setShowScrape(true)}>
           {t('run_scrape')}
         </Button>
+        <Menu variant="primary" icon={Plus} label={t('create_post')} items={[
+          { key: 'topic', icon: Lightbulb, label: t('new_post'), hint: t('create_topic_hint'), onClick: () => setShowManual(true) },
+          { key: 'offer', icon: Tag, label: t('offer_new'), hint: t('create_offer_hint'), onClick: () => setShowOffer(true) },
+          { key: 'album', icon: Camera, label: t('album_new'), hint: t('create_album_hint'), onClick: () => setShowAlbum(true) },
+        ]} />
       </PageHead>
 
       {jobs.data?.running && <div className="banner info"><Spinner size={16} /> {t('scrape_running')}</div>}
@@ -102,9 +106,9 @@ export default function Review() {
           ))}
         </div>
         <div className="spacer" />
-        <div style={{ position: 'relative', minWidth: 220 }}>
-          <Search size={16} className="muted" style={{ position: 'absolute', insetInlineStart: 10, top: 11 }} />
-          <input className="input" style={{ paddingInlineStart: 34 }} placeholder={t('search')} value={q}
+        <div className="search-box">
+          <Search size={16} className="muted" />
+          <input className="input" type="search" placeholder={t('search')} value={q}
             onChange={(e) => setQ(e.target.value)} />
         </div>
       </div>
@@ -145,13 +149,14 @@ export default function Review() {
       {showScrape && <ScrapeModal onClose={() => setShowScrape(false)} onStarted={() => jobs.reload(true)} />}
       {showManual && <ManualModal onClose={() => setShowManual(false)} onDone={() => drafts.reload(true)} />}
       {showAlbum && <AlbumModal onClose={() => setShowAlbum(false)} />}
+      {showOffer && <OfferModal onClose={() => setShowOffer(false)} />}
     </>
   );
 }
 
 function DraftCard({ d, picked, onPick }) {
   const { t, lang } = useI18n();
-  const origin = d.origin === 'source' ? d.source : d.origin === 'calendar' ? t('calendar_origin') : t('manual');
+  const origin = d.origin === 'source' ? d.source : d.origin === 'calendar' ? t('calendar_origin') : d.origin === 'offer' ? t('offer_new') : t('manual');
   return (
     <Link to={`/drafts/${d.id}`} className={`card draft-card ${picked ? 'picked' : ''}`}>
       <div className="thumb">
@@ -186,37 +191,106 @@ function DraftCard({ d, picked, onPick }) {
 
 const ALBUM_MAX = 10;
 
-function AlbumModal({ onClose }) {
-  const { t } = useI18n();
-  const ex = useExample();
-  const navigate = useNavigate();
-  const fileRef = useRef(null);
-  const [title, setTitle] = useState('');
-  const [text, setText] = useState('');
-  const [dialect, setDialect] = useState('');
+/** Photos for a post: uploaded from the device (reorderable) and/or picked from the library. */
+function usePhotos(max) {
   const [files, setFiles] = useState([]);          // [{file, url}]
   const [picked, setPicked] = useState([]);        // library ids
-  const [showLib, setShowLib] = useState(false);
-  const [busy, run] = useAction();
-  const library = useLoad(() => (showLib ? api.get('/api/media') : Promise.resolve(null)), [showLib]);
-  const total = files.length + picked.length;
-
   useEffect(() => () => files.forEach((f) => URL.revokeObjectURL(f.url)), []); // eslint-disable-line
+  const total = files.length + picked.length;
   const addFiles = (list) => {
-    const room = ALBUM_MAX - total;
+    const room = max - total;
     const next = [...list].filter((f) => f.type.startsWith('image/')).slice(0, Math.max(0, room))
       .map((file) => ({ file, url: URL.createObjectURL(file) }));
     setFiles((x) => [...x, ...next]);
   };
+  const fill = (fd) => {
+    files.forEach((f) => fd.append('files', f.file));
+    fd.append('media_ids', picked.join(','));
+  };
+  return { files, setFiles, picked, setPicked, total, addFiles, fill, max };
+}
+
+function PhotoPicker({ photos, label, hint, coverTag = true }) {
+  const { t } = useI18n();
+  const fileRef = useRef(null);
+  const [showLib, setShowLib] = useState(false);
+  const library = useLoad(() => (showLib ? api.get('/api/media') : Promise.resolve(null)), [showLib]);
+  const { files, setFiles, picked, setPicked, total, addFiles, max } = photos;
   const move = (i, d) => setFiles((x) => {
     const j = i + d;
     if (j < 0 || j >= x.length) return x;
     const y = [...x]; [y[i], y[j]] = [y[j], y[i]]; return y;
   });
+  return (
+    <Field label={`${label} (${total}/${max})`} hint={hint}>
+      <div className="album-grid" onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}>
+        {files.map((f, i) => (
+          <div key={f.url} className="album-tile">
+            <img src={f.url} alt="" />
+            {coverTag && i === 0 && !picked.length && <span className="album-tag">{t('album_cover')}</span>}
+            <div className="album-tools">
+              <button type="button" onClick={() => move(i, -1)} aria-label="←">‹</button>
+              <button type="button" onClick={() => setFiles((x) => x.filter((_, k) => k !== i))} aria-label={t('delete')}><X size={14} /></button>
+              <button type="button" onClick={() => move(i, 1)} aria-label="→">›</button>
+            </div>
+          </div>
+        ))}
+        {total < max && (
+          <button type="button" className="album-add" onClick={() => fileRef.current?.click()}>
+            <ImagePlus size={26} /><span>{t('album_add')}</span>
+          </button>
+        )}
+      </div>
+      <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" multiple hidden
+        onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
+      <div className="row" style={{ marginTop: 8 }}>
+        <Button size="sm" icon={Images} onClick={() => setShowLib((v) => !v)}>{t('album_from_library')}{picked.length ? ` (${picked.length})` : ''}</Button>
+      </div>
+      {showLib && (
+        <div className="album-grid lib" style={{ marginTop: 8 }}>
+          {(library.data || []).map((a) => {
+            const on = picked.includes(a.id);
+            return (
+              <button type="button" key={a.id} className={`album-tile pick-lib ${on ? 'on' : ''}`}
+                disabled={!on && total >= max}
+                onClick={() => setPicked((x) => (on ? x.filter((k) => k !== a.id) : [...x, a.id]))}>
+                <img src={mediaUrl(a.url)} alt="" loading="lazy" />
+                {on && <span className="album-tag">{picked.indexOf(a.id) + 1}</span>}
+              </button>
+            );
+          })}
+          {library.data && !library.data.length && <span className="xs muted">{t('album_library_empty')}</span>}
+        </div>
+      )}
+    </Field>
+  );
+}
+
+function DialectField({ value, onChange }) {
+  const { t } = useI18n();
+  return (
+    <Field label={t('dialect')}>
+      <select className="select" value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">{t('dialect_default')}</option>
+        {DIALECTS.map((x) => <option key={x} value={x}>{t(`dialect_${x}`)}</option>)}
+      </select>
+    </Field>
+  );
+}
+
+function AlbumModal({ onClose }) {
+  const { t } = useI18n();
+  const ex = useExample();
+  const navigate = useNavigate();
+  const [title, setTitle] = useState('');
+  const [text, setText] = useState('');
+  const [dialect, setDialect] = useState('');
+  const photos = usePhotos(ALBUM_MAX);
+  const [busy, run] = useAction();
   const submit = () => run('go', async () => {
     const fd = new FormData();
-    files.forEach((f) => fd.append('files', f.file));
-    fd.append('media_ids', picked.join(','));
+    photos.fill(fd);
     fd.append('title', title);
     fd.append('text', text);
     if (dialect) fd.append('dialect', dialect);
@@ -229,7 +303,7 @@ function AlbumModal({ onClose }) {
     <Modal wide title={t('album_new')} onClose={onClose}
       footer={<>
         <Button onClick={onClose}>{t('cancel')}</Button>
-        <Button variant="primary" icon={Sparkles} busy={busy === 'go'} disabled={!total || (!title.trim() && !text.trim())} onClick={submit}>
+        <Button variant="primary" icon={Sparkles} busy={busy === 'go'} disabled={!photos.total || (!title.trim() && !text.trim())} onClick={submit}>
           {t('generate')}
         </Button>
       </>}>
@@ -241,55 +315,70 @@ function AlbumModal({ onClose }) {
         <Field label={t('album_text')} hint={t('album_text_hint')}>
           <textarea className="textarea" rows={3} value={text} placeholder={ex('notes')} onChange={(e) => setText(e.target.value)} />
         </Field>
-        <Field label={`${t('album_photos')} (${total}/${ALBUM_MAX})`} hint={t('album_photos_hint')}>
-          <div className="album-grid"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}>
-            {files.map((f, i) => (
-              <div key={f.url} className="album-tile">
-                <img src={f.url} alt="" />
-                {i === 0 && !picked.length && <span className="album-tag">{t('album_cover')}</span>}
-                <div className="album-tools">
-                  <button type="button" onClick={() => move(i, -1)} aria-label="←">‹</button>
-                  <button type="button" onClick={() => setFiles((x) => x.filter((_, k) => k !== i))} aria-label={t('delete')}><X size={14} /></button>
-                  <button type="button" onClick={() => move(i, 1)} aria-label="→">›</button>
-                </div>
-              </div>
-            ))}
-            {total < ALBUM_MAX && (
-              <button type="button" className="album-add" onClick={() => fileRef.current?.click()}>
-                <ImagePlus size={26} /><span>{t('album_add')}</span>
-              </button>
-            )}
-          </div>
-          <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" multiple hidden
-            onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
-          <div className="row" style={{ marginTop: 8 }}>
-            <Button size="sm" icon={Images} onClick={() => setShowLib((v) => !v)}>{t('album_from_library')}{picked.length ? ` (${picked.length})` : ''}</Button>
-          </div>
-          {showLib && (
-            <div className="album-grid lib" style={{ marginTop: 8 }}>
-              {(library.data || []).map((a) => {
-                const on = picked.includes(a.id);
-                return (
-                  <button type="button" key={a.id} className={`album-tile pick-lib ${on ? 'on' : ''}`}
-                    disabled={!on && total >= ALBUM_MAX}
-                    onClick={() => setPicked((x) => (on ? x.filter((k) => k !== a.id) : [...x, a.id]))}>
-                    <img src={mediaUrl(a.url)} alt="" loading="lazy" />
-                    {on && <span className="album-tag">{picked.indexOf(a.id) + 1}</span>}
-                  </button>
-                );
-              })}
-              {library.data && !library.data.length && <span className="xs muted">{t('album_library_empty')}</span>}
-            </div>
-          )}
+        <PhotoPicker photos={photos} label={t('album_photos')} hint={t('album_photos_hint')} />
+        <DialectField value={dialect} onChange={setDialect} />
+      </div>
+    </Modal>
+  );
+}
+
+const OFFER_KINDS = ['package', 'offer', 'service', 'limited'];
+
+function OfferModal({ onClose }) {
+  const { t } = useI18n();
+  const navigate = useNavigate();
+  const [f, setF] = useState({ kind: 'offer', title: '', details: '', price: '', old_price: '', currency: '',
+    valid_until: '', audience: '', link: '' });
+  const [dialect, setDialect] = useState('');
+  const photos = usePhotos(10);
+  const [busy, run] = useAction();
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const submit = () => run('go', async () => {
+    const fd = new FormData();
+    photos.fill(fd);
+    Object.entries(f).forEach(([k, v]) => fd.append(k, v));
+    if (dialect) fd.append('dialect', dialect);
+    const r = await api.post('/api/drafts/offer', fd);
+    onClose();
+    navigate(`/drafts/${r.draft_id}`);
+  }, t('started'));
+
+  return (
+    <Modal wide title={t('offer_new')} onClose={onClose}
+      footer={<>
+        <Button onClick={onClose}>{t('cancel')}</Button>
+        <Button variant="primary" icon={Sparkles} busy={busy === 'go'} disabled={f.title.trim().length < 2} onClick={submit}>
+          {t('generate')}
+        </Button>
+      </>}>
+      <div className="stack">
+        <p className="muted small" style={{ margin: 0 }}>{t('offer_hint')}</p>
+        <div className="seg" role="radiogroup">
+          {OFFER_KINDS.map((k) => (
+            <button type="button" key={k} role="radio" aria-checked={f.kind === k}
+              className={`seg-item ${f.kind === k ? 'on' : ''}`} onClick={() => set('kind', k)}>{t(`offer_${k}`)}</button>
+          ))}
+        </div>
+        <Field label={t('offer_title')}>
+          <input className="input" value={f.title} onChange={(e) => set('title', e.target.value)} autoFocus />
         </Field>
-        <Field label={t('dialect')}>
-          <select className="select" value={dialect} onChange={(e) => setDialect(e.target.value)}>
-            <option value="">{t('dialect_default')}</option>
-            {DIALECTS.map((x) => <option key={x} value={x}>{t(`dialect_${x}`)}</option>)}
-          </select>
+        <Field label={t('offer_details')} hint={t('offer_details_hint')}>
+          <textarea className="textarea" rows={3} value={f.details} onChange={(e) => set('details', e.target.value)} />
         </Field>
+        <div className="grid grid-3">
+          <Field label={t('offer_price')}><input className="input" inputMode="decimal" value={f.price} onChange={(e) => set('price', e.target.value)} /></Field>
+          <Field label={t('offer_old_price')}><input className="input" inputMode="decimal" value={f.old_price} onChange={(e) => set('old_price', e.target.value)} /></Field>
+          <Field label={t('offer_currency')}><input className="input" value={f.currency} placeholder="RM / SAR / USD" onChange={(e) => set('currency', e.target.value)} /></Field>
+        </div>
+        <div className="grid grid-2">
+          <Field label={t('offer_valid')}><input className="input" value={f.valid_until} placeholder={t('offer_valid_ph')} onChange={(e) => set('valid_until', e.target.value)} /></Field>
+          <Field label={t('offer_link')}><input className="input ltr" value={f.link} placeholder="https://" onChange={(e) => set('link', e.target.value)} /></Field>
+        </div>
+        <Field label={t('offer_audience')}>
+          <input className="input" value={f.audience} onChange={(e) => set('audience', e.target.value)} />
+        </Field>
+        <PhotoPicker photos={photos} label={t('offer_photos')} hint={t('offer_photos_hint')} coverTag={false} />
+        <DialectField value={dialect} onChange={setDialect} />
       </div>
     </Modal>
   );

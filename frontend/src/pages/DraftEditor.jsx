@@ -4,7 +4,7 @@ import { AlertTriangle, ArrowRight, Bot, Check, CheckCircle2, ChevronLeft, Chevr
   ImagePlus, Images, RotateCcw, Save, Send, Sparkles, Trash2, Wand2, X, XCircle } from 'lucide-react';
 import { Button, ErrorBox, Field, Loading, Modal, Spinner, StatusPill, useAction, useLoad } from '../components/ui';
 import { api, mediaUrl } from '../lib/api';
-import { platformLabel } from '../lib/platforms';
+import { channelsOf, platformLabel } from '../lib/platforms';
 import { fmtDate, fmtDateTime, toLocalInput } from '../lib/format';
 import { useAuth } from '../lib/auth';
 import { DIALECTS, useI18n } from '../lib/i18n';
@@ -457,7 +457,12 @@ function PublishModal({ draft, onClose, onDone }) {
   useEffect(() => {
     const pub = settings.data?.values.publishing;
     if (pub && Object.keys(targets).length === 0) {
-      setTargets({ [pub.default_provider]: pub.default_platforms });
+      // each platform with the service chosen for it in the settings (several services at once)
+      const map = {};
+      Object.entries(channelsOf(pub)).forEach(([platform, c]) => {
+        if (c.provider) map[c.provider] = [...(map[c.provider] || []), platform];
+      });
+      setTargets(map);
     }
   }, [settings.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
