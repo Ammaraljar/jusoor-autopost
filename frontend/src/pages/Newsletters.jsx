@@ -3,7 +3,7 @@ import { Link, NavLink, Route, Routes, useNavigate, useParams } from 'react-rout
 import { BarChart3, Calendar, Copy, Download, Eye, FileUp, ListPlus, Mail, MailCheck, Plus, RefreshCw, Save,
   Send, Settings2, Trash2, UserMinus, UserPlus, Users, X } from 'lucide-react';
 import { BulkBar, Button, Empty, ErrorBox, Field, Loading, Modal, PageHead, SelectAll, Spinner, StatusPill,
-  useAction, useLoad, useSelection } from '../components/ui';
+  SecretField, useAction, useLoad, useSelection } from '../components/ui';
 import { api, mediaUrl } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { fmtDateTime, toLocalInput } from '../lib/format';
@@ -740,10 +740,10 @@ function SendingAccount() {
   const set = (k, x) => setF((y) => ({ ...y, [k]: x }));
   const save = () => run('save', async () => { cfg.setData(await api.put('/api/email/settings', f)); }, t('saved'));
   const owner = can('owner');
+  const KEY_URLS = { brevo_api_key: 'https://app.brevo.com/settings/keys/api', resend_api_key: 'https://resend.com/api-keys' };
   const secret = (k) => (
-    <>
-      <input className="input ltr" type="password" autoComplete="new-password" disabled={!owner} value={f[k]} placeholder={v[k]?.set ? `•••• ${v[k].hint}` : ''} onChange={(e) => set(k, e.target.value)} />
-    </>
+    <SecretField value={f[k]} disabled={!owner} state={v[k]?.set ? { ...v[k], source: 'dashboard' } : v[k]}
+      getUrl={KEY_URLS[k]} onChange={(x) => set(k, x)} />
   );
   return (
     <>
@@ -753,9 +753,10 @@ function SendingAccount() {
         <div className="card card-pad stack">
           <span className={`pill ${v.ready ? 'ok' : ''}`} style={{ alignSelf: 'flex-start' }}>{v.ready ? t('nl_ready') : t('nl_not_ready')}</span>
           <Field label={t('nl_provider')}>
-            <div className="row" style={{ gap: 6 }}>
+            <div className="seg" role="radiogroup">
               {[['brevo', 'Brevo'], ['resend', 'Resend'], ['smtp', t('nl_smtp')]].map(([id, label]) => (
-                <button key={id} type="button" disabled={!owner} className={`btn btn-sm ${f.provider === id ? 'btn-primary' : ''}`} onClick={() => set('provider', id)}>{label}</button>
+                <button key={id} type="button" role="radio" aria-checked={f.provider === id} disabled={!owner}
+                  className={`seg-item ${f.provider === id ? 'on' : ''}`} onClick={() => set('provider', id)}>{label}</button>
               ))}
             </div>
           </Field>

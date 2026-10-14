@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
-import { Images, Link2, Search, Tag, Trash2, Upload } from 'lucide-react';
-import { BulkBar, Button, Empty, ErrorBox, Field, Loading, Modal, PageHead, SelectAll, useAction, useLoad, useSelection } from '../components/ui';
+import { Link as RouterLink } from 'react-router-dom';
+import { CheckCircle2, Cloud, FolderSync, Globe, Images, KeyRound, Link2, RefreshCw, Search, Tag, Trash2, Upload } from 'lucide-react';
+import { BulkBar, Button, Empty, ErrorBox, Field, Loading, Modal, PageHead, SelectAll, useAction, useLoad, useSelection, useToast } from '../components/ui';
 import { api, mediaUrl } from '../lib/api';
 import { useExample } from '../lib/useExample';
 import { useI18n } from '../lib/i18n';
@@ -75,6 +76,106 @@ function EditModal({ asset, onClose, onSaved }) {
   );
 }
 
+
+const KIND_LABEL = { dropbox: 'Dropbox', gdrive: 'Google Drive', onedrive: 'OneDrive / SharePoint', gphotos: 'Google Photos', page: 'lib_kind_page' };
+const STOCK = [
+  { id: 'pexels', name: 'Pexels', key: true }, { id: 'pixabay', name: 'Pixabay', key: true },
+  { id: 'unsplash', name: 'Unsplash', key: true }, { id: 'openverse', name: 'Openverse', key: false },
+  { id: 'wikimedia', name: 'Wikimedia Commons', key: false },
+];
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Whole libraries linked to the company (imported now, synced again later) + the stock libraries. */
+function ConnectedLibraries({ onImported }) {
+  const { t, lang } = useI18n();
+  const toast = useToast();
+  const sources = useLoad(() => api.get('/api/media/sources'), []);
+  const status = useLoad(() => api.get('/api/status'), []);
+  const [url, setUrl] = useState('');
+  const [tags, setTags] = useState('');
+  const [busy, run] = useAction();
+  const poll = async (job) => {
+    for (let i = 0; i < 100; i += 1) {
+      await wait(i < 4 ? 1500 : 3000);
+      const s = await api.get(`/api/media/import/${job}`);
+      if (s.status === 'done') return s.result;
+      if (s.status === 'failed') throw new Error(s.error);
+    }
+    throw new Error(t('products_timeout'));
+  };
+  const report = (r) => toast(`${t('added_count')}: ${r.added}${r.skipped ? ` · ${t('lib_skipped')}: ${r.skipped}` : ''}`, r.added ? 'success' : 'info');
+  const connect = () => run('connect', async () => {
+    const { job } = await api.post('/api/media/import', { url: url.trim(), tags, keep: true });
+    report(await poll(job));
+    setUrl('');
+    sources.reload(true);
+    onImported();
+  });
+  const sync = (src) => run(`sync-${src.url}`, async () => {
+    const { job } = await api.post('/api/media/sources/sync', { url: src.url });
+    report(await poll(job));
+    sources.reload(true);
+    onImported();
+  });
+  const remove = (src) => window.confirm(t('lib_remove_confirm')) && run(`rm-${src.url}`, async () => {
+    await api.post('/api/media/sources/remove', { url: src.url });
+    sources.reload(true);
+  });
+  const imgs = status.data?.images || {};
+  return (
+    <section className="card card-pad stack lib-connect">
+      <div>
+        <h3><FolderSync size={17} /> {t('lib_connect_title')}</h3>
+        <p className="xs muted" style={{ margin: 0 }}>{t('lib_connect_hint')}</p>
+      </div>
+      <div className="lib-providers">
+        {['Dropbox', 'Google Drive', 'OneDrive', 'SharePoint', 'Google Photos', t('lib_kind_page')].map((n) => (
+          <span key={n} className="lib-provider"><Cloud size={14} /> {n}</span>
+        ))}
+      </div>
+      <div className="lib-connect-row">
+        <input className="input ltr" dir="ltr" type="url" value={url} placeholder="https://www.dropbox.com/scl/fo/…  ·  https://drive.google.com/drive/folders/…"
+          onChange={(e) => setUrl(e.target.value)} />
+        <input className="input" value={tags} placeholder={t('tags')} onChange={(e) => setTags(e.target.value)} />
+        <Button variant="primary" icon={Link2} busy={busy === 'connect'} disabled={!url.trim().startsWith('http')} onClick={connect}>
+          {busy === 'connect' ? t('lib_importing') : t('lib_connect')}
+        </Button>
+      </div>
+      {(sources.data || []).length > 0 && (
+        <div className="lib-sources">
+          {sources.data.map((src) => (
+            <div key={src.url} className="lib-source">
+              <span className="lib-kind">{KIND_LABEL[src.kind]?.startsWith('lib_') ? t(KIND_LABEL[src.kind]) : KIND_LABEL[src.kind] || src.kind}</span>
+              <a className="xs ltr lib-url" href={src.url} target="_blank" rel="noreferrer">{src.url}</a>
+              <span className="xs muted">{src.count || 0} {t('photos')}{src.last_sync ? ` · ${new Date(src.last_sync).toLocaleDateString(lang === 'ar' ? 'ar-EG-u-nu-latn' : lang)}` : ''}</span>
+              <Button size="sm" icon={RefreshCw} busy={busy === `sync-${src.url}`} onClick={() => sync(src)}>{t('lib_sync')}</Button>
+              <button type="button" className="btn btn-sm btn-ghost btn-danger icon-btn" aria-label={t('delete')} onClick={() => remove(src)}><Trash2 size={15} /></button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="divider" />
+      <div>
+        <b className="small">{t('lib_stock_title')}</b>
+        <p className="xs muted" style={{ margin: '2px 0 8px' }}>{t('lib_stock_hint')}</p>
+        <div className="lib-stock">
+          {STOCK.map((s) => {
+            const on = s.key ? imgs[s.id] : true;
+            return (
+              <div key={s.id} className={`lib-stock-item ${on ? 'on' : ''}`}>
+                {on ? <CheckCircle2 size={16} /> : <KeyRound size={16} />}
+                <b>{s.name}</b>
+                <span className="xs muted">{s.key ? (on ? t('configured') : t('key_missing')) : t('lib_free')}</span>
+              </div>
+            );
+          })}
+          <RouterLink className="btn btn-sm" to="/settings#keys"><KeyRound size={14} /> {t('lib_add_keys')}</RouterLink>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function Library() {
   const ex = useExample();
   const { t } = useI18n();
@@ -119,6 +220,7 @@ export default function Library() {
           onChange={(e) => { upload(e.target.files); e.target.value = ''; }} />
       </PageHead>
       {items.error && <ErrorBox error={items.error} onRetry={items.reload} />}
+      <ConnectedLibraries onImported={() => items.reload(true)} />
 
       <div className="card card-pad" style={{ marginBottom: 16 }}>
         <div className="grid grid-2">

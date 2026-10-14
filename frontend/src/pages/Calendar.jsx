@@ -6,6 +6,8 @@ import { api, mediaUrl } from '../lib/api';
 import { isoDay } from '../lib/format';
 import { useExample } from '../lib/useExample';
 import { useI18n } from '../lib/i18n';
+import { useAuth } from '../lib/auth';
+import { platformLabel } from '../lib/platforms';
 
 const CONTENT_TYPES = ['travel', 'tips', 'news', 'educational', 'promotional', 'storytelling', 'announcement', 'event', 'comparison', 'product'];
 const PLATFORMS = ['instagram', 'facebook', 'linkedin', 'tiktok'];
@@ -186,9 +188,14 @@ function MovePostModal({ post, onClose, onChanged }) {
 
 function ItemModal({ item, campaigns, onClose, onChanged }) {
   const ex = useExample();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const [f, setF] = useState({ topic: '', notes: '', content_type: 'travel', platform: 'instagram', campaign_id: '', ...item });
+  const opts = useLoad(() => api.get('/api/settings').then((r) => r.options), []);
+  const fieldTypes = opts.data?.content_types_by_industry?.[user?.org?.industry || 'general'] || CONTENT_TYPES;
+  const typeLabel = (id) => opts.data?.content_type_labels?.[id]?.[lang] || opts.data?.content_type_labels?.[id]?.en || id;
+  const [f, setF] = useState({ topic: '', notes: '', content_type: fieldTypes[0] || 'tips', platform: 'instagram', campaign_id: '', ...item });
+  const types = fieldTypes.includes(f.content_type) ? fieldTypes : [f.content_type, ...fieldTypes];
   const [busy, run] = useAction();
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
   const payload = () => ({
@@ -234,12 +241,12 @@ function ItemModal({ item, campaigns, onClose, onChanged }) {
           <Field label={t('time')}><input className="input" type="time" value={f.time} onChange={(e) => set('time', e.target.value)} /></Field>
           <Field label={t('content_type')}>
             <select className="select" value={f.content_type} onChange={(e) => set('content_type', e.target.value)}>
-              {CONTENT_TYPES.map((c) => <option key={c}>{c}</option>)}
+              {types.map((c) => <option key={c} value={c}>{typeLabel(c)}</option>)}
             </select>
           </Field>
           <Field label={t('platform')}>
             <select className="select" value={f.platform} onChange={(e) => set('platform', e.target.value)}>
-              {PLATFORMS.map((c) => <option key={c}>{c}</option>)}
+              {PLATFORMS.map((c) => <option key={c} value={c}>{platformLabel(c)}</option>)}
             </select>
           </Field>
         </div>
