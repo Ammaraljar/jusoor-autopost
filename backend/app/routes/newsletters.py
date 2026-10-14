@@ -393,6 +393,9 @@ class NewsletterIn(BaseModel):
     font: str = ""
     list_ids: list[int] = []
     topic: str = ""
+    goal: str = Field("", max_length=600)            # what the email should achieve
+    audience: str = Field("", max_length=600)        # who receives it
+    instructions: str = Field("", max_length=2000)   # content instructions for the writer
     draft_ids: list[int] = []
     product_ids: list[int] = []
     sections: int = Field(0, ge=0, le=8)          # 0 = what the newsletter type usually has
@@ -407,7 +410,7 @@ def create_newsletter(body: NewsletterIn, background: BackgroundTasks, db: Sessi
     design = body.design if body.design in newsletter.LAYOUTS else (
         suggested if suggested in field_designs else field_designs[0])
     lang = body.language or newsletter.org_language(db, current_org.get())
-    extra = {}
+    extra = {"brief": {"goal": body.goal, "audience": body.audience, "instructions": body.instructions}}
     if body.event and any(body.event.model_dump().values()):
         extra["event"] = {k: v.strip() for k, v in body.event.model_dump().items() if v.strip()}
     if body.poll and body.poll.question.strip() and [o for o in body.poll.options if o.strip()]:

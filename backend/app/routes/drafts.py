@@ -140,6 +140,40 @@ async def create_album(background: BackgroundTasks, files: list[UploadFile] = Fi
     return {"ok": True, "draft_id": draft_id}
 
 
+@router.post("/offer")
+async def create_offer(background: BackgroundTasks, files: list[UploadFile] = File(default=[]),
+                       media_ids: str = Form(""), kind: str = Form("offer"), title: str = Form(...),
+                       details: str = Form(""), price: str = Form(""), old_price: str = Form(""),
+                       currency: str = Form(""), valid_until: str = Form(""), audience: str = Form(""),
+                       link: str = Form(""), brand_id: int | None = Form(None), dialect: str = Form(""),
+                       db: Session = Depends(get_db)):
+    """A marketing post for a package, an offer, a service or a limited-time deal."""
+    from ..db import MediaAsset
+    from ..services import media, newsletter
+    if len(title.strip()) < 2:
+        raise HTTPException(400, "اكتب اسم العرض")
+    if len(files) > 10:
+        raise HTTPException(400, "الحد الأقصى {} صور في المنشور الواحد".replace("{}", "10"))
+    urls: list[str] = []
+    ids = [int(x) for x in media_ids.replace(" ", "").split(",") if x.isdigit()]
+    if ids:
+        found = {a.id: a.url for a in db.scalars(select(MediaAsset).where(MediaAsset.id.in_(ids)))}
+        urls += [found[i] for i in ids if i in found]
+    for f in files:
+        try:
+            urls.append(media.add_image(db, await f.read(), title=title, tags=title).url)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    db.commit()
+    offer = {"kind": kind if kind in pipeline.OFFER_KINDS else "offer", "title": title.strip()[:200],
+             "details": details.strip()[:3000], "price": price.strip()[:40], "old_price": old_price.strip()[:40],
+             "currency": currency.strip()[:10], "valid_until": valid_until.strip()[:40],
+             "audience": audience.strip()[:300], "link": newsletter.href(link.strip())[:800] if link.strip() else ""}
+    draft_id = pipeline.create_offer_draft(offer, urls, brand_id, dialect or None)
+    background.add_task(pipeline.finish_offer, draft_id)
+    return {"ok": True, "draft_id": draft_id}
+
+
 class BulkBody(BaseModel):
     ids: list[int] = Field(min_length=1, max_length=500)
     action: str                     # approve | reject | restore | unschedule | delete | auto_schedule
@@ -477,6 +511,9 @@ async def regenerate_all(draft_id: int, background: BackgroundTasks, db: Session
     db.commit()
     if d.content_type == "album":       # an album keeps its photos: only its texts are rewritten
         background.add_task(pipeline.finish_album, draft_id)
+        return {"ok": True}
+    if d.origin == "offer":
+        background.add_task(pipeline.finish_offer, draft_id)
         return {"ok": True}
 
     async def job():
