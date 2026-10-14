@@ -52,6 +52,18 @@ function Campaigns() {
   const typeName = (id) => { const x = (types.data || []).find((y) => y.id === id); return x ? (x[lang] || x.en) : ''; };
   const account = useLoad(() => api.get('/api/email/settings'), []);
   const [creating, setCreating] = useState(false);
+  const [busy, run] = useAction();
+  const sel = useSelection(list.data || []);
+  const bulk = (action) => run(`bulk-${action}`, async () => {
+    const r = await api.post('/api/newsletters/bulk', { ids: sel.ids, action });
+    sel.clear();
+    list.reload(true);
+    if (r.skipped) throw new Error(t('nl_bulk_skipped'));
+  }, t('done'));
+  const bulkBar = (place) => (
+    <BulkBar sel={sel} busy={busy} selectedLabel={t('selected')} clearLabel={t('clear_selection')} onAction={bulk} place={place}
+      actions={[{ key: 'delete', label: t('delete'), icon: Trash2, variant: 'danger', confirm: t('confirm_delete') }]} />
+  );
   useEffect(() => {
     if (!(list.data || []).some((n) => ['generating', 'sending'].includes(n.status))) return undefined;
     const id = setInterval(() => list.reload(true), 4000);
@@ -70,8 +82,13 @@ function Campaigns() {
       {list.error && <ErrorBox error={list.error} onRetry={list.reload} />}
       {(list.data || []).length === 0 ? <Empty icon={Mail}>{t('nl_empty')}</Empty> : (
         <div className="stack">
+          <div className="row" style={{ justifyContent: 'flex-end' }}><SelectAll sel={sel} label={t('select_all')} /></div>
+          {bulkBar('top')}
           {list.data.map((n) => (
-            <Link key={n.id} to={`/newsletters/${n.id}`} className="card card-pad row" style={{ color: 'inherit', textDecoration: 'none' }}>
+            <div key={n.id} className={`card card-pad nl-row ${sel.has(n.id) ? 'on' : ''}`}>
+              <input type="checkbox" checked={sel.has(n.id)} onChange={() => sel.toggle(n.id)} aria-label={t('select')}
+                disabled={n.status === 'sending'} />
+              <Link to={`/newsletters/${n.id}`}>
               <div style={{ flex: '1 1 260px', minWidth: 0 }}>
                 <b dir="auto">{n.subject || '…'}</b>
                 <div className="xs muted">
@@ -89,8 +106,10 @@ function Campaigns() {
                   <span><b>{n.stats.click_rate}%</b> {t('nl_clicked')}</span>
                 </div>
               )}
-            </Link>
+              </Link>
+            </div>
           ))}
+          {bulkBar('bottom')}
         </div>
       )}
       {creating && <NewNewsletter onClose={() => setCreating(false)} />}

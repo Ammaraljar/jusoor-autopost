@@ -19,6 +19,7 @@ export default function Products() {
   const [adding, setAdding] = useState(false);
   const list = (items.data || []).filter((p) => filter === 'all' || p.status === filter);
   const sel = useSelection(list);
+  const bulkActions = BULK_ACTIONS(t);
   const site = url.trim() || brands.data?.[0]?.website || '';
 
   // Reading a link runs on the server as a job (JavaScript sites open in a real browser): poll until done
@@ -90,6 +91,8 @@ export default function Products() {
         {list.length > 0 && <SelectAll sel={sel} label={t('select_all')} />}
       </div>
 
+      <BulkBar sel={sel} busy={busy} selectedLabel={t('selected')} clearLabel={t('clear_selection')} onAction={bulk}
+        actions={bulkActions} />
       {list.length === 0 ? <div className="card"><Empty icon={ShoppingBag}>{t('products_empty')}</Empty></div> : (
         <div className="stack">
           {list.map((p) => (
@@ -121,17 +124,20 @@ export default function Products() {
         </div>
       )}
       <BulkBar sel={sel} busy={busy} selectedLabel={t('selected')} clearLabel={t('clear_selection')} onAction={bulk}
-        actions={[
-          { key: 'schedule', label: t('products_posts_schedule'), icon: CalendarClock, variant: 'primary' },
-          { key: 'draft', label: t('products_make_posts'), icon: Sparkles },
-          { key: 'skip', label: t('products_skip'), icon: EyeOff },
-          { key: 'restore', label: t('restore'), icon: RotateCcw },
-          { key: 'delete', label: t('delete'), icon: Trash2, variant: 'danger', confirm: t('confirm_delete') },
-        ]} />
+        place="bottom" actions={bulkActions} />
       {adding && <AddModal onClose={() => setAdding(false)} onSaved={() => { setAdding(false); setFilter('new'); items.reload(true); }} />}
     </>
   );
 }
+
+// the same action row sits above the list (it follows while scrolling) and below it
+const BULK_ACTIONS = (t) => ([
+  { key: 'schedule', label: t('products_posts_schedule'), icon: CalendarClock, variant: 'primary' },
+  { key: 'draft', label: t('products_make_posts'), icon: Sparkles },
+  { key: 'skip', label: t('products_skip'), icon: EyeOff },
+  { key: 'restore', label: t('restore'), icon: RotateCcw },
+  { key: 'delete', label: t('delete'), icon: Trash2, variant: 'danger', confirm: t('confirm_delete') },
+]);
 
 function AddModal({ onClose, onSaved }) {
   const { t } = useI18n();
