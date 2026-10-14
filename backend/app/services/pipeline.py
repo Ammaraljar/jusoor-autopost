@@ -385,6 +385,76 @@ async def draft_from_calendar(item_id: int) -> int | None:
     return draft_id
 
 
+OFFER_KINDS = {"package": "a package (several things bundled at one price)", "offer": "a special offer / deal",
+               "service": "a service the company provides", "limited": "a limited-time offer"}
+PRICE_WORDS = {"ar": ("بدلًا من", "حتى"), "en": ("instead of", "until"), "ms": ("berbanding", "sehingga"),
+               "fr": ("au lieu de", "jusqu’au")}
+
+
+def create_offer_draft(offer: dict, photo_urls: list[str] | None = None, brand_id: int | None = None,
+                       dialect: str | None = None) -> int:
+    """A marketing post for one package / offer / service, in any field."""
+    photos = list(dict.fromkeys(u for u in (photo_urls or []) if u))[:10]
+    with session_scope() as db:
+        brand = _brand_for(db, brand_id)
+        gen = app_settings.get_section(db, "generation")
+        lines = [f"Offer type: {OFFER_KINDS.get(offer.get('kind'), OFFER_KINDS['offer'])}",
+                 f"Name: {offer.get('title', '')}"]
+        for key, label in (("details", "What is included / details"), ("price", "Price"),
+                           ("old_price", "Old price (before the offer)"), ("valid_until", "Valid until"),
+                           ("audience", "Who it is for"), ("link", "Booking / details link")):
+            if offer.get(key):
+                lines.append(f"{label}: {offer[key]}" + (f" {offer.get('currency', '')}" if key in ("price", "old_price") else ""))
+        draft = Draft(brand_id=brand.id, origin="offer", original_title=offer.get("title", ""),
+                      original_body="\n".join(lines), language=gen["language"], tone=gen["tone"],
+                      content_type="promotional", platform=gen["platform"], dialect=dialect or gen.get("dialect"),
+                      link_url=offer.get("link") or None, ai_meta={"offer": offer}, status="generating")
+        db.add(draft)
+        db.flush()
+        if photos:
+            draft.ai_meta = {"offer": offer, "photos": photos}
+        return draft.id
+
+
+async def finish_offer(draft_id: int) -> None:
+    with session_scope() as db:
+        d = db.get(Draft, draft_id)
+        brand = _brand_for(db, d.brand_id)
+        gen = {**app_settings.get_section(db, "generation"), "purpose": "product", "content_type": "promotional"}
+        if d.dialect:
+            gen["dialect"] = d.dialect
+        ctx, title, body = brand_context(brand), d.original_title, d.original_body
+        meta = dict(d.ai_meta or {})
+        offer, photos, lang = meta.get("offer") or {}, meta.get("photos") or [], d.language
+    try:
+        post = await generator.generate_from_article(ctx, gen, title, body, "")
+    except Exception as exc:  # noqa: BLE001
+        _fail(draft_id, f"فشل توليد النص: {exc}")
+        return
+    with session_scope() as db:
+        d = db.get(Draft, draft_id)
+        _apply_post(d, post)
+        d.badge = "offer"
+        d.ai_meta = {**(d.ai_meta or {}), "offer": offer, **({"photos": photos} if photos else {})}
+        # the price and the deadline always show on the cover exactly as entered
+        words = PRICE_WORDS.get(lang, PRICE_WORDS["en"])
+        price = f"{offer['price']} {offer.get('currency', '')}".strip() if offer.get("price") else ""
+        if price and offer.get("old_price"):
+            price += f" ({words[0]} {offer['old_price']} {offer.get('currency', '')})".replace(" )", ")")
+        line = " · ".join(x for x in [price, f"{words[1]} {offer['valid_until']}" if offer.get("valid_until") else ""] if x)
+        if line:
+            d.subtitle = line
+        slides = sorted(d.slides, key=lambda s: s.position)
+        for i, sl in enumerate(slides):
+            if sl.kind == "cover" and line:
+                sl.body = line
+            if photos and sl.kind != "cta":       # the company's own photos of the offer
+                sl.background_url = photos[i % len(photos)]
+        if photos and slides and slides[-1].kind == "cta":
+            slides[-1].background_url = photos[-1]
+    await asyncio.gather(make_variants(draft_id), render_draft(draft_id))
+
+
 def create_album_draft(photo_urls: list[str], title: str = "", text: str = "", brand_id: int | None = None,
                        dialect: str | None = None, platform: str = "instagram") -> int:
     """A post made of the company's own photos: designed opening, photo-only slides, designed closing."""

@@ -40,6 +40,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "publishing": {
         "default_provider": "buffer",
         "default_platforms": ["instagram", "facebook"],
+        # per platform: which service publishes it and how often {platform: {provider, limit, period}}
+        "channels": {},
         "first_comment_enabled": False,
         "buffer_mode": "shareNow",
         # Daily plan

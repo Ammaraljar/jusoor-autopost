@@ -16,7 +16,7 @@ from sqlalchemy import func, select
 
 from ..config import get_settings
 from ..db import Brand, Contact, Delivery, Draft, Newsletter, Organization, Product, session_scope, use_org, utcnow
-from . import cards, generator, industries, mailer, pipeline, storage
+from . import cards, generator, images, industries, mailer, pipeline, storage
 
 log = logging.getLogger(__name__)
 
@@ -358,9 +358,11 @@ NEWSLETTER_TOOL = {
                 "title": {"type": "string"}, "text": {"type": "string", "description": "2-4 sentences."},
                 "button": {"type": "string", "description": "Short button label if the item has a link."},
                 "ref": {"type": "integer", "description": "Number of the material item this section is about, or 0."},
-                "image": {"type": "integer", "description": "Number of the best photo (P1, P2… → 1, 2…) or 0."}},
+                "image": {"type": "integer", "description": "Number of the best photo (P1, P2… → 1, 2…) or 0."},
+                "image_query": {"type": "string", "description": "2-4 English words for a stock photo that fits."}},
                 "required": ["title", "text"]}},
             "hero_image": {"type": "integer", "description": "Number of the best photo for the top of the email, or 0."},
+            "hero_query": {"type": "string", "description": "2-4 English words for a stock photo of the email's theme."},
             "cta_title": {"type": "string", "description": "A short line above the main button."},
             "cta_text": {"type": "string", "description": "Main button label (2-4 words)."},
             "ps": {"type": "string", "description": "Optional P.S. line, or empty."},
@@ -453,6 +455,7 @@ async def generate(newsletter_id: int, topic: str = "", draft_ids: list[int] | N
     """Fill a newsletter with AI-written content of its kind (curated, educational, promotional…)."""
     from . import newsletter_types
     extra = extra or {}
+    brief = {k: (v or "").strip() for k, v in (extra.get("brief") or {}).items() if (v or "").strip()}
     with session_scope() as db:
         nl = db.get(Newsletter, newsletter_id)
         brand = db.scalar(select(Brand).order_by(Brand.is_default.desc(), Brand.id))
@@ -470,6 +473,10 @@ async def generate(newsletter_id: int, topic: str = "", draft_ids: list[int] | N
     user = (f"Write a {kind['name'][1]} email newsletter for {ctx.name}'s subscribers.\n"
             f"Newsletter type and how to write it: {kind['brief']}\n"
             + (f"Topic / angle: {topic}\n" if topic else "")
+            + (f"Goal of this email (what the reader should think or do): {brief['goal']}\n" if brief.get("goal") else "")
+            + (f"Who receives it: {brief['audience']}\n" if brief.get("audience") else "")
+            + (f"Content instructions from the editor (follow them): {brief['instructions']}\n"
+               if brief.get("instructions") else "")
             + (f"Event details: {json.dumps(event, ensure_ascii=False)}\n" if event else "")
             + (f"Material to feature (one section per item, set ref to its number):\n{listing}\n" if material
                else f"Write {sections} sections.\n")
@@ -479,7 +486,9 @@ async def generate(newsletter_id: int, topic: str = "", draft_ids: list[int] | N
                 "fits; do not reuse a photo:\n" + "\n".join(f"P{i}: {x['desc'] or '(no description)'}"
                                                              for i, x in enumerate(pool, 1)) + "\n") if pool else "")
             + "Email style: personal, scannable, useful; short paragraphs; one clear main call to action. "
-              "Use only facts from the material or the topic. Use the newsletter tool.")
+              "Use only facts from the material or the topic. For hero_query and each section's image_query write "
+              "2-4 English words describing a photo that matches its meaning and the email's tone (used when none "
+              "of the company's photos fits). Use the newsletter tool.")
     system = generator.build_system_prompt(ctx, gen).split("Writing playbook")[0] + \
         "You write email newsletters. Write everything in the language and dialect above."
     if generator.ai_available():
@@ -502,7 +511,8 @@ async def generate(newsletter_id: int, topic: str = "", draft_ids: list[int] | N
             used.add(url)
         return url
     hero = photo(data.get("hero_image"))
-    secs = []
+    secs: list[dict] = []
+    queries: list[str] = []
     for s in (data.get("sections") or [])[:8]:
         if not isinstance(s, dict):
             continue
@@ -514,8 +524,24 @@ async def generate(newsletter_id: int, topic: str = "", draft_ids: list[int] | N
                      "link": m.get("link") or "", "source": m.get("source") or ""})
         if secs[-1]["image"]:
             used.add(secs[-1]["image"])
+        queries.append(generator._text(s.get("image_query"))[:60])
     if not hero:      # no AI choice: the best-matching photo, never a random one
         hero = next((x["url"] for x in pool if x["url"] not in used and (x["score"] or x["origin"] == "item")), "")
+    # when none of the company's photos fits, a stock photo chosen for the meaning and tone of that part
+    hero_query = generator._text(data.get("hero_query"))[:60]
+    wanted = ([("hero", hero_query)] if not hero and hero_query else []) + \
+        [(i, q) for i, (sec, q) in enumerate(zip(secs, queries)) if not sec["image"] and q][:3]
+    if wanted:
+        found = await asyncio.gather(*(asyncio.to_thread(images.stock_photos, q, 3) for _, q in wanted))
+        for (slot, _), hits in zip(wanted, found):
+            url = next((h.get("url") for h in hits or [] if h.get("url") and h.get("url") not in used), "")
+            if not url:
+                continue
+            used.add(url)
+            if slot == "hero":
+                hero = url
+            else:
+                secs[slot]["image"] = url
     with session_scope() as db:
         nl = db.get(Newsletter, newsletter_id)
         nl.subject = generator._text(data.get("subject"))[:300] or nl.subject
@@ -526,6 +552,8 @@ async def generate(newsletter_id: int, topic: str = "", draft_ids: list[int] | N
                    "ps": generator._text(data.get("ps"))}
         if event:
             content["event"] = event
+        if brief:
+            content["brief"] = brief           # kept for the editor; never shown to readers
         if kind.get("poll"):
             poll = extra.get("poll") or {"question": generator._text(data.get("poll_question")),
                                          "options": [generator._text(o) for o in (data.get("poll_options") or [])

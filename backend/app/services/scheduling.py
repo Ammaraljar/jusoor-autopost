@@ -113,9 +113,86 @@ def next_free_slot(db: Session, after: datetime | None = None, draft_id: int | N
     return None
 
 
-def default_targets(db: Session) -> list[dict[str, Any]]:
+# ------------------------------------------------------------------ channels: provider + quota per platform
+PERIODS = ("day", "week", "month")
+PERIOD_AR = {"day": "اليوم", "week": "هذا الأسبوع", "month": "هذا الشهر"}
+
+
+def channels(db: Session) -> dict[str, dict[str, Any]]:
+    """{platform: {provider, limit, period}} — which service publishes each platform, and how often.
+    limit 0 = no limit. Older settings (one provider for everything) are read the same way."""
     pub = app_settings.get_section(db, "publishing")
-    return [{"provider": pub.get("default_provider", "buffer"), "platforms": list(pub.get("default_platforms") or [])}]
+    raw = pub.get("channels") or {}
+    if not raw:
+        raw = {p: {"provider": pub.get("default_provider", "buffer")} for p in pub.get("default_platforms") or []}
+    out = {}
+    for platform, c in raw.items():
+        if not isinstance(c, dict) or not c.get("provider"):
+            continue
+        period = c.get("period") if c.get("period") in PERIODS else "week"
+        out[platform] = {"provider": str(c["provider"]), "limit": max(0, int(c.get("limit") or 0)), "period": period}
+    return out
+
+
+def default_targets(db: Session) -> list[dict[str, Any]]:
+    """Every enabled platform with its own service — several services can publish one post together."""
+    groups: dict[str, list[str]] = {}
+    for platform, c in channels(db).items():
+        groups.setdefault(c["provider"], []).append(platform)
+    return [{"provider": p, "platforms": pl} for p, pl in groups.items()]
+
+
+def _window(cfg: dict[str, Any], when: datetime, period: str) -> tuple[datetime, datetime]:
+    local = when.astimezone(cfg["tz"])
+    day = datetime.combine(local.date(), time(0), tzinfo=cfg["tz"])
+    if period == "day":
+        start, end = day, day + timedelta(days=1)
+    elif period == "week":                      # Monday to Sunday
+        start = day - timedelta(days=local.weekday())
+        end = start + timedelta(days=7)
+    else:
+        start = day.replace(day=1)
+        end = (start + timedelta(days=32)).replace(day=1)
+    return start.astimezone(timezone.utc), end.astimezone(timezone.utc)
+
+
+def usage(db: Session, platform: str, when: datetime, period: str, exclude_id: int | None = None,
+          cfg: dict | None = None) -> int:
+    """Posts already published or planned on this platform in the period that contains `when`."""
+    cfg = cfg or config(db)
+    start, end = _window(cfg, when, period)
+    n = 0
+    for d in db.scalars(select(Draft).where(Draft.status.in_(BUSY_STATUSES))):
+        if d.id == exclude_id:
+            continue
+        at = d.scheduled_at or d.published_at
+        if at is None:
+            continue
+        if at.tzinfo is None:
+            at = at.replace(tzinfo=timezone.utc)
+        if start <= at < end and any(platform in (t.get("platforms") or []) for t in d.publish_targets or []):
+            n += 1
+    return n
+
+
+def within_quota(db: Session, targets: list[dict], when: datetime, exclude_id: int | None = None
+                 ) -> tuple[list[dict], dict[str, str]]:
+    """The targets whose platform still has room at that time, and why the others were held back."""
+    ch, cfg = channels(db), config(db)
+    kept, blocked = [], {}
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    for t in targets or []:
+        ok = []
+        for p in t.get("platforms") or []:
+            c = ch.get(p)
+            if c and c["limit"] and usage(db, p, when, c["period"], exclude_id, cfg) >= c["limit"]:
+                blocked[p] = f"اكتمل حد {p}: {c['limit']} منشور {PERIOD_AR[c['period']]}"
+            else:
+                ok.append(p)
+        if ok:
+            kept.append({**t, "platforms": ok})
+    return kept, blocked
 
 
 def schedule(db: Session, draft: Draft, when: datetime | None = None, targets: list | None = None) -> datetime:
@@ -126,17 +203,30 @@ def schedule(db: Session, draft: Draft, when: datetime | None = None, targets: l
         raise ValueError("لا يمكن جدولة منشور لم يجتز فحص الجودة")
     if draft.status in ("generating", "publishing", "published"):
         raise ValueError("لا يمكن جدولة هذا المنشور في حالته الحالية")
+    wanted = targets or draft.publish_targets or default_targets(db)
+    if not any(t.get("platforms") for t in wanted):
+        raise ValueError("لا توجد منصات نشر افتراضية — حدّدها من الإعدادات ← النشر")
     if when is None:
-        when = next_free_slot(db, draft_id=draft.id)
-        if when is None:
-            raise ValueError("لا توجد مواعيد فارغة في الأيام القادمة — ارفع عدد المنشورات اليومي من الإعدادات")
+        # the next free slot where at least one of the post's platforms still has room in its quota
+        after, kept = None, []
+        for _ in range(120):
+            when = next_free_slot(db, after=after, draft_id=draft.id)
+            if when is None:
+                raise ValueError("لا توجد مواعيد فارغة في الأيام القادمة — ارفع عدد المنشورات اليومي من الإعدادات")
+            kept, _blocked = within_quota(db, wanted, when, draft.id)
+            if kept:
+                break
+            after = when + timedelta(minutes=1)
+        if not kept:
+            raise ValueError("اكتملت حدود النشر لكل منصات هذا المنشور في الأيام القادمة")
     else:
         problem = check(db, when, draft.id)
         if problem:
             raise ValueError(problem)
-    draft.publish_targets = targets or draft.publish_targets or default_targets(db)
-    if not any(t.get("platforms") for t in draft.publish_targets):
-        raise ValueError("لا توجد منصات نشر افتراضية — حدّدها من الإعدادات ← النشر")
+        kept, blocked = within_quota(db, wanted, when, draft.id)
+        if not kept:
+            raise ValueError("؛ ".join(blocked.values()))
+    draft.publish_targets = kept
     draft.status, draft.scheduled_at, draft.error = "scheduled", when, None
     db.flush()
     return when
@@ -168,6 +258,8 @@ def run_autoplan() -> dict[str, int]:
             candidates += list(db.scalars(select(Draft).where(Draft.status == "pending_review",
                                                               Draft.relevance >= threshold)
                                           .order_by(Draft.relevance.desc(), Draft.created_at)))
+        # the best posts take the limited places first (e.g. one post a week on LinkedIn)
+        candidates.sort(key=lambda d: (-(d.relevance or 0), d.created_at))
         for d in candidates[:20]:
             try:
                 schedule(db, d)

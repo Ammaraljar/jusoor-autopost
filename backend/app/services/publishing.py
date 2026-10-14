@@ -32,7 +32,15 @@ async def publish_draft(draft_id: int) -> dict:
             draft.error = "الصور غير متاحة على رابط عام. فعّل STORAGE_BACKEND=supabase أو اضبط PUBLIC_BASE_URL."
             return {"ok": False, "error": draft.error}
         brand = _brand_for(db, draft.brand_id)
-        targets = draft.publish_targets or []
+        from . import scheduling
+        # the publishing limits of each platform (e.g. one post a week on LinkedIn) are always respected
+        targets, held_back = scheduling.within_quota(db, draft.publish_targets or [], utcnow(), draft.id)
+        if not targets and held_back:
+            draft.status = "approved"
+            draft.scheduled_at = None
+            draft.error = "لم يُنشر الآن: " + "؛ ".join(held_back.values())
+            return {"ok": False, "error": draft.error}
+        draft.publish_targets = targets
         credit = gen.get("credit_source", True)
         slides = sorted(draft.slides, key=lambda s: s.position)
         # Each platform gets its own post: its own text and its own images (carousel or a single image)
@@ -83,6 +91,8 @@ async def publish_draft(draft_id: int) -> dict:
         else:
             draft.status = "failed"
             draft.error = "؛ ".join(f"{r['provider']}/{r['platform']}: {r['error']}" for r in all_results) or "لا توجد وجهات نشر"
+        if draft.status == "published" and held_back:
+            draft.error = ((draft.error + "؛ ") if draft.error else "") + "لم يُنشر على: " + "؛ ".join(held_back.values())
         if draft.calendar_item_id and draft.status == "published":
             item = db.get(CalendarItem, draft.calendar_item_id)
             if item:
