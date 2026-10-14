@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarClock, ExternalLink, EyeOff, Link2, PackageSearch, RotateCcw, ShoppingBag, Sparkles, Trash2 } from 'lucide-react';
-import { BulkBar, Button, Empty, ErrorBox, Loading, PageHead, SelectAll, StatusPill, useAction, useLoad, useSelection, useToast } from '../components/ui';
+import { CalendarClock, ExternalLink, EyeOff, Link2, PackageSearch, Plus, RotateCcw, ShoppingBag, Sparkles, Trash2 } from 'lucide-react';
+import { BulkBar, Button, Empty, ErrorBox, Field, Loading, Modal, PageHead, SelectAll, StatusPill, useAction, useLoad, useSelection, useToast } from '../components/ui';
 import { api, mediaUrl } from '../lib/api';
 import { useI18n } from '../lib/i18n';
 
@@ -16,6 +16,7 @@ export default function Products() {
   const [filter, setFilter] = useState('new');
   const [busy, run] = useAction();
   const [result, setResult] = useState(null);
+  const [adding, setAdding] = useState(false);
   const list = (items.data || []).filter((p) => filter === 'all' || p.status === filter);
   const sel = useSelection(list);
   const site = url.trim() || brands.data?.[0]?.website || '';
@@ -53,7 +54,9 @@ export default function Products() {
 
   return (
     <>
-      <PageHead title={t('products_title')} sub={t('products_sub')} />
+      <PageHead title={t('products_title')} sub={t('products_sub')}>
+        <Button icon={Plus} onClick={() => setAdding(true)}>{t('products_add_manual')}</Button>
+      </PageHead>
       {items.error && <ErrorBox error={items.error} onRetry={items.reload} />}
       <section className="card card-pad stack prod-read">
         <label className="field-head" htmlFor="prod-url"><Link2 size={16} /> {t('products_link')}</label>
@@ -70,7 +73,8 @@ export default function Products() {
           <div className="banner ok">{t('products_found')}: <b>{result.found}</b> · {t('products_added')}: <b>{result.added}</b>
             <span className="muted xs">({t(`products_method_${String(result.method || '').replace('browser-', '')}`) || result.method})</span></div>
         ) : (
-          <div className="banner warn">{result.blocked ? t('products_blocked') : t('products_none')}</div>
+          <div className="banner warn">{result.blocked ? t('products_blocked') : t('products_none')}
+            <button type="button" className="btn btn-sm" style={{ marginInlineStart: 'auto' }} onClick={() => setAdding(true)}><Plus size={14} /> {t('products_add_manual')}</button></div>
         ))}
       </section>
 
@@ -100,7 +104,7 @@ export default function Products() {
                   <StatusPill status={p.status === 'drafted' ? 'approved' : p.status === 'skipped' ? 'rejected' : 'pending_review'} label={t(`products_${p.status}`)} />
                 </div>
                 <p className="xs muted clamp-2" dir="auto" style={{ margin: '6px 0' }}>{p.description}</p>
-                <a className="xs ltr prod-link" href={p.url} target="_blank" rel="noreferrer"><ExternalLink size={11} /> {decodeURI(p.url)}</a>
+                {p.url.startsWith('http') && <a className="xs ltr prod-link" href={p.url} target="_blank" rel="noreferrer"><ExternalLink size={11} /> {(() => { try { return decodeURI(p.url); } catch { return p.url; } })()}</a>}
               </div>
               <div className="prod-actions">
                 {p.draft_id ? (
@@ -124,6 +128,41 @@ export default function Products() {
           { key: 'restore', label: t('restore'), icon: RotateCcw },
           { key: 'delete', label: t('delete'), icon: Trash2, variant: 'danger', confirm: t('confirm_delete') },
         ]} />
+      {adding && <AddModal onClose={() => setAdding(false)} onSaved={() => { setAdding(false); setFilter('new'); items.reload(true); }} />}
     </>
+  );
+}
+
+function AddModal({ onClose, onSaved }) {
+  const { t } = useI18n();
+  const [f, setF] = useState({ name: '', url: '', description: '', price: '', currency: '', image_url: '', kind: 'product' });
+  const [busy, run] = useAction();
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const save = () => run('save', async () => {
+    await api.post('/api/products', { ...f, image_url: f.image_url.trim() || null });
+    onSaved();
+  }, t('saved'));
+  return (
+    <Modal title={t('products_add_manual')} onClose={onClose} footer={<>
+      <span className="spacer" />
+      <Button variant="ghost" onClick={onClose}>{t('cancel')}</Button>
+      <Button variant="primary" icon={Plus} busy={busy === 'save'} disabled={f.name.trim().length < 2} onClick={save}>{t('add')}</Button>
+    </>}>
+      <div className="stack">
+        <div className="seg">
+          {['product', 'service', 'course', 'offer', 'event'].map((k) => (
+            <button key={k} type="button" className={`seg-item ${f.kind === k ? 'on' : ''}`} onClick={() => set('kind', k)}>{t(`kind_${k}`)}</button>
+          ))}
+        </div>
+        <Field label={t('offer_title')}><input className="input" value={f.name} onChange={(e) => set('name', e.target.value)} /></Field>
+        <Field label={t('products_page_link')}><input className="input ltr" dir="ltr" value={f.url} placeholder="https://" onChange={(e) => set('url', e.target.value)} /></Field>
+        <div className="grid grid-2">
+          <Field label={t('offer_price')}><input className="input" value={f.price} onChange={(e) => set('price', e.target.value)} /></Field>
+          <Field label={t('offer_currency')}><input className="input" value={f.currency} placeholder="RM / SAR / USD" onChange={(e) => set('currency', e.target.value)} /></Field>
+        </div>
+        <Field label={t('products_image_link')}><input className="input ltr" dir="ltr" value={f.image_url} placeholder="https://…jpg" onChange={(e) => set('image_url', e.target.value)} /></Field>
+        <Field label={t('offer_details')}><textarea className="textarea" rows={4} value={f.description} onChange={(e) => set('description', e.target.value)} /></Field>
+      </div>
+    </Modal>
   );
 }
