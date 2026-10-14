@@ -23,8 +23,17 @@
   --radius-sm: 9px;
   --shadow: 0 1px 2px rgba(22, 36, 79, .06), 0 6px 20px rgba(22, 36, 79, .06);
   --shadow-lg: 0 20px 60px rgba(15, 26, 59, .25);
-  --font: 'Cairo', system-ui, sans-serif;
+  --font: 'Cairo', system-ui, -apple-system, 'Segoe UI', Tahoma, sans-serif;
   --sidebar-w: 248px;
+
+  /* action colours: the main button is the brand navy, the highlight action the brand gold */
+  --primary: #16244F;  --primary-hover: #22356E;  --primary-press: #0F1A3B;  --on-primary: #FFFFFF;
+  --accent: #C6A23C;   --accent-hover: #D4B35A;   --accent-press: #B08E2C;   --on-accent: #16244F;
+  --control-bg: #FFFFFF; --control-hover: #F3F1EA; --control-press: #EAE6DB;
+  --focus-ring: 0 0 0 3px rgba(198,162,60,.45);
+  --control-h: 40px;
+  --ease: cubic-bezier(.2,.7,.3,1);
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -39,6 +48,10 @@
     --gold-tint: #2A2A33;
     --ok-bg: #123527; --warn-bg: #3A2C10; --danger-bg: #3D1A1A; --info-bg: #15294F;
     --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.25);
+    --primary: #D4B35A; --primary-hover: #E0C373; --primary-press: #C6A23C; --on-primary: #0F1A3B;
+    --accent: #D4B35A;  --accent-hover: #E0C373;  --accent-press: #C6A23C;  --on-accent: #0F1A3B;
+    --control-bg: #17224A; --control-hover: #1E2B58; --control-press: #243566;
+    color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
@@ -52,4 +65,8 @@
   --gold-tint: #2A2A33;
   --ok-bg: #123527; --warn-bg: #3A2C10; --danger-bg: #3D1A1A; --info-bg: #15294F;
   --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.25);
+  --primary: #D4B35A; --primary-hover: #E0C373; --primary-press: #C6A23C; --on-primary: #0F1A3B;
+  --accent: #D4B35A;  --accent-hover: #E0C373;  --accent-press: #C6A23C;  --on-accent: #0F1A3B;
+  --control-bg: #17224A; --control-hover: #1E2B58; --control-press: #243566;
+  color-scheme: dark;
 }
