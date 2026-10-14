@@ -19,6 +19,7 @@ const Team = lazy(() => import('./pages/Team'));
 const Admin = lazy(() => import('./pages/Admin'));
 const Products = lazy(() => import('./pages/Products'));
 const Newsletters = lazy(() => import('./pages/Newsletters'));
+const Occasions = lazy(() => import('./pages/Occasions'));
 
 export default function App() {
   const { loading, session } = useAuth();
@@ -33,6 +34,7 @@ export default function App() {
         <Route path="sources" element={<Sources />} />
         <Route path="calendar" element={<CalendarPage />} />
         <Route path="campaigns" element={<Campaigns />} />
+        <Route path="occasions" element={<Occasions />} />
         <Route path="brand" element={<Brand />} />
         <Route path="stats" element={<Stats />} />
         <Route path="settings" element={<SettingsPage />} />
