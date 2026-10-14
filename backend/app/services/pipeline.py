@@ -639,6 +639,9 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
         badge = draft.badge
         highlight = [draft.hook_highlight] if draft.hook_highlight else None
         mode = "pexels" if draft.content_type == "program" else gen.get("image_source", "auto")
+        sources = images.sources_of(gen)
+        if draft.content_type == "program":          # another company's programme: never its photos
+            sources = [x for x in sources if x != "article"] or ["library"]
         prev_status = draft.status
         color_mode = brand.color_mode or "auto"
         stored_palette = draft.palette
@@ -665,7 +668,7 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
             library = media.pick(db, f"{keywords} {hook_text}", needed + 4, used)
         # Network calls run in a worker thread so the server keeps answering while photos download
         backgrounds = await asyncio.to_thread(images.collect_backgrounds, article_image, keywords, mode, needed,
-                                              used, refresh_backgrounds, library, fallback_keywords)
+                                              used, refresh_backgrounds, library, fallback_keywords, sources)
         if not backgrounds and mode != "source" and article_image and not refresh_backgrounds:
             backgrounds = await asyncio.to_thread(images.collect_backgrounds, article_image, keywords, "source", 1)
         if refresh_backgrounds and len(backgrounds) < 2:

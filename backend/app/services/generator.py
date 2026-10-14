@@ -169,6 +169,9 @@ def build_system_prompt(brand: BrandContext, gen: dict[str, Any]) -> str:
         if gen.get("purpose") == "own_site":
             extra += (f"\n- Never write 'according to {brand.name}' or credit an outside source; relevance is always "
                       "high (8-10) because it is the brand's own content.")
+    from . import content_types
+    ctype = gen.get('content_type', 'news')
+    content_line = content_types.label(ctype, "en") + (f" — {content_types.guidance(ctype)}" if content_types.guidance(ctype) else "")
     if language == "ar":
         examples = ('Hook formulas (pick the one the material supports best): a number ("٥ أشياء…"), a secret or a\n'
                     '  common mistake ("خطأ يقع فيه أغلب…"), a direct question, a clear benefit ("وفّر…"), or\n'
@@ -188,7 +191,7 @@ Industry: {profile['en']}.
 Brand voice: {brand.voice or 'warm, trustworthy, expert and inspiring'}.
 Target audience: {audience}.
 Marketing objective: {gen.get('objective') or profile['objective']}.
-Write everything in {lang}. Tone: {gen.get('tone', profile['tone'])}. Content type: {gen.get('content_type', 'news')}.
+Write everything in {lang}. Tone: {gen.get('tone', profile['tone'])}. Content type: {content_line}.
 Platform: {gen.get('platform', 'instagram')} carousel (1080x1350).
 
 Writing playbook (this is what makes people stop, save and share):

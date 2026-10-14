@@ -16,6 +16,8 @@ PLATFORMS = ["instagram", "facebook", "linkedin", "tiktok", "x", "threads", "pin
              "google_business", "telegram", "discord"]
 PROVIDERS = ["buffer", "meta", "uploadpost"]
 DIALECTS = ["fusha", "msa", "egyptian", "gulf", "maghreb"]
+# photo sources: the post's own photo, the company's library, stock libraries (with or without a key)
+IMAGE_SOURCES = ["article", "library", "pexels", "pixabay", "unsplash", "openverse", "wikimedia"]
 
 DEFAULTS: dict[str, dict[str, Any]] = {
     "generation": {
@@ -27,7 +29,9 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "objective": "بناء الثقة وزيادة التفاعل وتوجيه المتابعين لحجز رحلاتهم مع جسور",
         "min_relevance": 6,
         "content_slides": 4,
-        "image_source": "auto",     # auto | source | pexels
+        "image_source": "auto",     # (older setting) auto | source | pexels — image_sources wins when set
+        # where a post's photos come from, in this order (each one only when it is available)
+        "image_sources": [],        # empty = translated from image_source
         "credit_source": True,
         "dialect": "msa",           # fusha | msa | egyptian | gulf | maghreb
         "industry": "travel",       # see services/industries.py
@@ -53,6 +57,10 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # Automation
         "auto_schedule_approved": False,      # approved posts go to the next free slot by themselves
         "auto_approve_min_relevance": 0,      # 0 = off; e.g. 8 → posts scoring 8+/10 that pass QA are scheduled
+    },
+    "media": {
+        # connected photo libraries the company can sync again: [{url, kind, tags, title, last_sync, count}]
+        "sources": [],
     },
     "occasions": {
         "countries": [],                      # the countries the company speaks to (ISO codes)
@@ -95,7 +103,9 @@ def update_section(db: Session, key: str, values: dict[str, Any]) -> dict[str, A
     return get_section(db, key)
 
 
-def options() -> dict[str, list[str]]:
-    return {"languages": LANGUAGES, "tones": TONES, "content_types": CONTENT_TYPES,
-            "platforms": PLATFORMS, "providers": PROVIDERS, "dialects": DIALECTS,
-            "industries": __import__("app.services.industries", fromlist=["options"]).options()}
+def options() -> dict[str, Any]:
+    from . import content_types, industries
+    return {"languages": LANGUAGES, "tones": TONES, "content_types": list(content_types.CATALOG),
+            "content_type_labels": content_types.options(), "content_types_by_industry": content_types.BY_INDUSTRY,
+            "image_sources": IMAGE_SOURCES, "platforms": PLATFORMS, "providers": PROVIDERS, "dialects": DIALECTS,
+            "industries": industries.options()}
