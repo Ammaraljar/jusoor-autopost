@@ -54,6 +54,8 @@ SCHEMA_KIND = {"product": "product", "productgroup": "product", "individualprodu
 NAV_WORDS = re.compile(r"(login|signin|sign-in|register|cart|checkout|account|wishlist|contact|about|privacy|terms|"
                        r"faq|blog|news|careers|tag|category|categories|search|booking|book-now|inquiry|enquiry|"
                        r"طلب|حجز|تواصل|اتصل|من-نحن|سياسة|شروط|تسجيل|سلة|الصفحة|التصنيف)", re.I)
+# marketplaces that refuse automated reading from servers (their offers are added by hand)
+PROTECTED_HOSTS = ("shopee.", "lazada.", "amazon.", "aliexpress.", "temu.", "noon.com", "tiktok.com")
 IMG_EXT = re.compile(r"\.(jpe?g|png|webp|avif|gif)(\?|$)", re.I)
 
 
@@ -161,7 +163,8 @@ def _jsonld_nodes(soup: BeautifulSoup) -> list[tuple[str, dict]]:
                 continue
             if not isinstance(node, dict):
                 continue
-            for key in ("@graph", "itemListElement", "item", "hasPart", "subjectOf"):
+            for key in ("@graph", "itemListElement", "item", "hasPart", "subjectOf", "mainEntity", "about",
+                        "hasOfferCatalog", "itemOffered", "containsPlace", "subEvent", "workFeatured", "makesOffer"):
                 inner = node.get(key)
                 if isinstance(inner, (list, dict)):
                     stack.extend(inner if isinstance(inner, list) else [inner])
@@ -228,7 +231,9 @@ def _item_from_object(obj: dict, page_url: str, lang: str) -> dict | None:
     if not nk:
         return None
     _dk, desc = _pick(obj, DESC_RE, lang, lambda v: isinstance(v, str) and len(v.strip()) > 10)
-    _pk, price_v = _pick(obj, PRICE_RE, lang)
+    price_obj = {k: v for k, v in obj.items() if isinstance(k, str) and not re.search(r"(note|text|label|desc|info|policy|rule)", k, re.I)}
+    _pk, price_v = _pick(price_obj, PRICE_RE, lang,
+                         lambda v: bool(_price_text(v)[0]) and not (isinstance(v, str) and len(v.strip()) > 30))
     price, currency = _price_text(price_v)
     _ik, img_v = _pick(obj, IMG_RE, lang, lambda v: _image(v) is not None)
     image = _image(img_v)
@@ -783,8 +788,9 @@ async def discover_full(site: str, lang: str = "ar") -> dict:
     items = await ai_items(page, lang)
     if items:
         return _finish(items, "ai", page_url)
-    return {**found, "blocked": not page["text"].strip() or bool(re.search(
-        r"captcha|verify you are human|access denied|robot|التحقق", page["text"][:3000], re.I))}
+    host = urlparse(page_url).netloc.lower()
+    return {**found, "blocked": not page["text"].strip() or any(h in host for h in PROTECTED_HOSTS) or bool(re.search(
+        r"captcha|verify you are human|access denied|robot|log ?in|sign ?in|التحقق|تسجيل الدخول", page["text"][:3000], re.I))}
 
 
 def as_article(p) -> tuple[str, str]:  # noqa: ANN001
@@ -792,5 +798,5 @@ def as_article(p) -> tuple[str, str]:  # noqa: ANN001
     lines = [p.description or ""]
     if p.price:
         lines.append(f"Price: {p.price} {p.currency}".strip())
-    lines.append(f"Type: {p.kind}. Page: {p.url}")
+    lines.append(f"Type: {p.kind}." + (f" Page: {p.url}" if p.url.startswith("http") else ""))
     return p.name, "\n".join(x for x in lines if x)

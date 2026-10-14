@@ -332,10 +332,12 @@ async def draft_from_product(product_id: int) -> int | None:
         brand = _brand_for(db, None)
         gen = {**app_settings.get_section(db, "generation"), "purpose": "product", "content_type": "promotional"}
         title, body = product_lib.as_article(prod)
-        draft = Draft(brand_id=brand.id, origin="product", source_name="", source_url=prod.url,
+        draft = Draft(brand_id=brand.id, origin="product", source_name="",
+                      source_url=prod.url if prod.url.startswith("http") else None,
                       original_title=title, original_body=body, original_image_url=prod.image_url,
                       language=gen["language"], tone=gen["tone"], content_type="promotional",
-                      platform=gen["platform"], dialect=gen.get("dialect"), link_url=prod.url, status="generating")
+                      platform=gen["platform"], dialect=gen.get("dialect"),
+                      link_url=prod.url if prod.url.startswith("http") else None, status="generating")
         db.add(draft)
         db.flush()
         prod.status, prod.draft_id = "drafted", draft.id
