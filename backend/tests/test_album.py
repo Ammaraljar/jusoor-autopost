@@ -74,3 +74,22 @@ def test_ultra_hdr_slide_is_a_valid_jpeg_with_gain_map():
     assert out.count(b"\xff\xd8") >= 2                      # primary + gain-map images
     assert Image.open(io.BytesIO(out)).size == (1080, 1350)  # ordinary viewers still read it
     assert hdr.to_ultra_hdr(b"not a jpeg") == b"not a jpeg"
+
+
+def test_offer_post_any_field(client):
+    files = [("files", ("p.jpg", _jpeg(1200, 900, (10, 120, 200)), "image/jpeg"))]
+    r = client.post("/api/drafts/offer", data={"kind": "limited", "title": "باقة شهر العسل", "details": "7 ليالٍ، فندق 5 نجوم",
+                                               "price": "4999", "old_price": "5999", "currency": "RM",
+                                               "valid_until": "30 نوفمبر", "link": "jusoortravel.com/honeymoon"},
+                    files=files)
+    assert r.status_code == 200, r.text
+    with session_scope() as db:
+        d = db.get(Draft, r.json()["draft_id"])
+        cover = sorted(d.slides, key=lambda s: s.position)[0]
+        assert d.origin == "offer" and d.badge == "offer" and d.link_url == "https://jusoortravel.com/honeymoon"
+        assert "4999 RM" in cover.body and "5999" in cover.body and "30 نوفمبر" in cover.body
+        assert all(s.background_url for s in d.slides)            # the offer's own photo on every slide
+        db.delete(d)
+        for x in db.query(MediaAsset).all():
+            db.delete(x)
+    assert client.post("/api/drafts/offer", data={"title": " "}).status_code == 400

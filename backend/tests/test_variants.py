@@ -86,9 +86,36 @@ def test_publish_sends_each_platform_its_own_post(client, monkeypatch):
     monkeypatch.setattr(publishing.storage, "is_publicly_reachable", lambda: True)
     monkeypatch.setattr(publishing.qa, "run_qa", lambda *a, **k: {"passed": True, "items": []})
     result = asyncio.run(publishing.publish_draft(did))
-    assert result["ok"] and result["status"] == "published"
+    assert result["ok"] and result["status"] == "published", result
     by = {p[0]: (cap, urls) for p, cap, urls in sent}
     assert by["instagram"][0] == "IG text" and len(by["instagram"][1]) == 5       # carousel of 5
     assert by["linkedin"][0] == "LI text" and len(by["linkedin"][1]) == 5
     assert by["x"][0] == "X text" and by["x"][1] == ["https://cdn.example/s0.jpg"]   # one strong image
     client.delete(f"/api/drafts/{did}")
+
+
+def test_channels_quota_and_several_services(client, monkeypatch):
+    from app.services import scheduling
+    monkeypatch.setattr(scheduling.qa, "run_qa", lambda *a, **k: {"passed": True, "items": []})
+    client.put("/api/settings/publishing", json={"posts_per_day": 5, "min_gap_hours": 1, "channels": {
+        "linkedin": {"provider": "uploadpost", "limit": 1, "period": "week"},
+        "facebook": {"provider": "buffer", "limit": 7, "period": "week"},
+        "tiktok": {"provider": ""}}})
+    a, b = _draft(), _draft()
+    with session_scope() as db:
+        assert scheduling.default_targets(db) == [{"provider": "uploadpost", "platforms": ["linkedin"]},
+                                                  {"provider": "buffer", "platforms": ["facebook"]}]
+        da, db_ = db.get(Draft, a), db.get(Draft, b)
+        da.relevance, db_.relevance = 9, 6
+        when = scheduling.schedule(db, da)
+        assert {p for t in da.publish_targets for p in t["platforms"]} == {"linkedin", "facebook"}
+        second = when + __import__("datetime").timedelta(hours=2)
+        scheduling.schedule(db, db_, when=second)
+        cfg = scheduling.config(db)
+        same_week = scheduling._window(cfg, when, "week") == scheduling._window(cfg, second, "week")
+        # LinkedIn's one post a week is taken: the second post that week goes to Facebook only
+        got = [p for t in db_.publish_targets for p in t["platforms"]]
+        assert got == (["facebook"] if same_week else ["linkedin", "facebook"])
+    for did in (a, b):
+        client.delete(f"/api/drafts/{did}")
+    client.put("/api/settings/publishing", json={"channels": {}})

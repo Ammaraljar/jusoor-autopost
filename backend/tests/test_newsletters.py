@@ -188,3 +188,26 @@ def test_post_newsletter_has_no_source_link_and_uses_own_photos(client, monkeypa
     with session_scope() as db:                       # leave the shared library as it was
         for a in db.query(MediaAsset).filter(MediaAsset.url.like("https://cdn.test/lib/%")):
             db.delete(a)
+
+
+def test_newsletter_brief_and_stock_photos(client, monkeypatch):
+    seen = {}
+
+    async def fake(system, user, tool, max_tokens=0):
+        seen["user"] = user
+        return {"subject": "S", "preheader": "", "headline": "H", "intro": "I", "cta_text": "Go",
+                "hero_query": "luxury beach resort",
+                "sections": [{"title": "A", "text": "T", "image_query": "family dinner"}]}
+    monkeypatch.setattr(newsletter.generator, "ai_available", lambda: True)
+    monkeypatch.setattr(newsletter.generator, "_call_model", fake)
+    monkeypatch.setattr(newsletter.images, "stock_photos",
+                        lambda q, n, page=1: [{"url": f"https://stock.test/{q.replace(' ', '-')}.jpg"}])
+    nid = client.post("/api/newsletters", json={"topic": "Summer", "goal": "Book the summer package",
+                                                "audience": "Families in Kuala Lumpur",
+                                                "instructions": "Mention the kids club"}).json()["id"]
+    assert "Book the summer package" in seen["user"] and "Families in Kuala Lumpur" in seen["user"]
+    assert "Mention the kids club" in seen["user"]
+    c = client.get(f"/api/newsletters/{nid}").json()["content"]
+    assert c["hero_image"] == "https://stock.test/luxury-beach-resort.jpg"
+    assert c["sections"][0]["image"] == "https://stock.test/family-dinner.jpg"
+    assert c["brief"]["goal"] == "Book the summer package"
