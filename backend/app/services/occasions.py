@@ -460,6 +460,33 @@ def _dialect_for(countries: list[str], gen: dict[str, Any], cfg: dict[str, Any])
     return dialects.pop() if len(arab) >= 1 and len(dialects) == 1 and len(arab) == len(countries) else None
 
 
+def _post_of(db: Session, row: Occasion, day: str, did: Any) -> Draft | None:
+    """The occasion's own post for that day. A deleted post's number can be given to a new, unrelated
+    post later, so the post must really be this occasion's greeting for this date."""
+    try:
+        d = db.get(Draft, int(did))
+    except (TypeError, ValueError):
+        return None
+    if d is None or d.origin != "occasion":
+        return None
+    occ = (d.ai_meta or {}).get("occasion") or {}
+    if occ.get("id") != row.id and occ.get("key") != row.key:
+        return None
+    return d if not occ.get("date") or occ.get("date") == day else None
+
+
+def own_posts(db: Session, row: Occasion) -> dict[str, Draft]:
+    """{date: draft} of the occasion; links to deleted or foreign posts are dropped from the row."""
+    out = {}
+    for day, did in (row.drafts or {}).items():
+        d = _post_of(db, row, day, did)
+        if d is not None:
+            out[day] = d
+    if len(out) != len(row.drafts or {}):
+        row.drafts = {day: d.id for day, d in out.items()}
+    return out
+
+
 def create_post_draft(occasion_id: int, on: date | None = None) -> int:
     """A draft for one occasion date (the text and design are made by finish_post)."""
     from .pipeline import _brand_for
@@ -468,9 +495,8 @@ def create_post_draft(occasion_id: int, on: date | None = None) -> int:
         if row is None:
             raise ValueError("المناسبة غير موجودة")
         on = on or (next_dates(row, date.today()) or [row.date or date.today()])[0]
-        drafts = dict(row.drafts or {})
-        old = drafts.get(on.isoformat())
-        if old and db.get(Draft, old):
+        drafts = {day: d.id for day, d in own_posts(db, row).items()}
+        if on.isoformat() in drafts:
             raise ValueError("يوجد منشور لهذه المناسبة في هذا التاريخ")
         brand = _brand_for(db, None)
         gen = app_settings.get_section(db, "generation")
@@ -600,7 +626,7 @@ def due(db: Session, today: date | None = None) -> list[tuple[int, date]]:
     for row in db.scalars(select(Occasion).where(Occasion.enabled.is_(True))):
         days = 1 if row.recurrence == "weekly" else lead
         for on in next_dates(row, today, days + 1):
-            if on - timedelta(days=days) <= today <= on and on.isoformat() not in (row.drafts or {}):
+            if on - timedelta(days=days) <= today <= on and on.isoformat() not in own_posts(db, row):
                 out.append((row.id, on))
     out.sort(key=lambda x: x[1])
     return out
@@ -636,8 +662,7 @@ def item_view(db: Session, row: Occasion, today: date | None = None) -> dict[str
     out["next_date"] = nxt[0].isoformat() if nxt else None
     out["date_label"] = date_label(row.date) if row.date else ""
     posts = []
-    for day, did in sorted((row.drafts or {}).items()):
-        d = db.get(Draft, did)
+    for day, d in sorted(own_posts(db, row).items()):
         if d is not None:
             posts.append({"date": day, "draft_id": d.id, "status": d.status, "thumb": d.cover_thumb_url,
                           "scheduled_at": d.scheduled_at.isoformat() if d.scheduled_at else None})
