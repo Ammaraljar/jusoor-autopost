@@ -6,6 +6,7 @@ of the images. YouTube takes videos only, so it is not offered for image posts.
 """
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import httpx
@@ -19,6 +20,7 @@ PLATFORMS = ("instagram", "facebook", "linkedin", "tiktok", "x", "threads", "pin
              "reddit", "google_business", "telegram", "discord")
 MAX_IMAGES = {"bluesky": 4, "google_business": 1, "pinterest": 5, "x": 4}
 TEXT_FALLBACK = {"telegram", "discord"}
+_PROFILES: dict[str, tuple[float, list[dict]]] = {}      # api key → (time, profiles), kept 5 minutes
 
 
 class UploadPostPublisher(Publisher):
@@ -33,7 +35,51 @@ class UploadPostPublisher(Publisher):
         return {"Authorization": f"Apikey {key}"}
 
     async def status(self) -> dict[str, Any]:
-        return {"configured": self.configured()}
+        out: dict[str, Any] = {"configured": self.configured()}
+        if out["configured"]:
+            try:
+                out["profiles"] = await self.profiles(fresh=True)
+            except Exception as exc:  # noqa: BLE001
+                out["error"] = str(exc)[:300]
+        return out
+
+    async def profiles(self, fresh: bool = False) -> list[dict]:
+        """The profiles (users) of the upload-post account and the platforms connected to each."""
+        key = credentials.current()["uploadpost_api_key"]
+        if not key:
+            return []
+        hit = _PROFILES.get(key)
+        if hit and not fresh and time.time() - hit[0] < 300:
+            return hit[1]
+        url = f"{get_settings().uploadpost_api_url.rstrip('/')}/api/uploadposts/users"
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(url, headers=self._headers())
+        resp.raise_for_status()
+        body = resp.json() if resp.content else {}
+        out = []
+        for p in (body.get("profiles") or []) if isinstance(body, dict) else []:
+            if not isinstance(p, dict) or not p.get("username"):
+                continue
+            accounts = p.get("social_accounts") if isinstance(p.get("social_accounts"), dict) else {}
+            out.append({"username": str(p["username"]),
+                        "connected": sorted(k for k, v in accounts.items() if v),
+                        "known": sorted(accounts)})
+        _PROFILES[key] = (time.time(), out)
+        return out
+
+    async def _profile_for(self, cfg: dict, platforms: list[str]) -> tuple[str | None, dict | None]:
+        """The upload-post user to publish as: the brand's own, or else the account's profile that has
+        the most of these platforms connected (a single-profile account needs no setting at all)."""
+        try:
+            profiles = await self.profiles()
+        except Exception:  # noqa: BLE001
+            profiles = []
+        if cfg.get("user"):
+            return cfg["user"], next((p for p in profiles if p["username"] == cfg["user"]), None)
+        if not profiles:
+            return None, None
+        best = max(profiles, key=lambda p: sum(1 for x in platforms if x in p["connected"]))
+        return best["username"], best
 
     def _missing(self, platform: str, cfg: dict) -> str | None:
         """A setting the platform needs that the brand has not filled in."""
@@ -90,15 +136,23 @@ class UploadPostPublisher(Publisher):
                               error=None if ok else str(r.get("error", "failed")), response=body)
 
     async def publish(self, req: PublishRequest) -> list[PlatformResult]:
-        cfg = req.brand_config.get("uploadpost") or {}
-        if not cfg.get("user"):
-            return [PlatformResult(p, False, error="لم يُحدَّد اسم مستخدم upload-post للعلامة") for p in req.platforms]
+        cfg = dict(req.brand_config.get("uploadpost") or {})
+        user, profile = await self._profile_for(cfg, req.platforms)
+        if not user:
+            return [PlatformResult(p, False, error="لا يوجد ملف (Profile) في حساب upload-post — أنشئ ملفًا واربط "
+                                                   "حساباتك من لوحة upload-post") for p in req.platforms]
+        cfg["user"] = user
         results: list[PlatformResult] = []
         for platform in req.platforms:
             if platform not in PLATFORMS:
                 msg = ("يوتيوب يقبل الفيديو فقط، والمنشور صور" if platform == "youtube"
                        else "منصة غير مدعومة في upload-post")
                 results.append(PlatformResult(platform, False, error=msg))
+                continue
+            if profile and platform in profile["known"] and platform not in profile["connected"]:
+                results.append(PlatformResult(platform, False, error=(
+                    f"{platform} غير مربوط في ملف upload-post «{user}» — اربطه من لوحة upload-post "
+                    "أو أزله من الإعدادات ← النشر")))
                 continue
             missing = self._missing(platform, cfg)
             if missing:
