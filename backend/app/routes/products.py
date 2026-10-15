@@ -16,7 +16,17 @@ router = APIRouter(prefix="/api/products", tags=["products"], dependencies=[Requ
 
 @router.get("")
 def list_products(db: Session = Depends(get_db)):
-    return [p.to_dict() for p in db.scalars(select(Product).order_by(Product.status, Product.id.desc()))]
+    from ..db import Draft
+    out = []
+    for p in db.scalars(select(Product).order_by(Product.status, Product.id.desc())):
+        row = p.to_dict()
+        if p.draft_id:
+            # only a link to this product's own post (an old number may now belong to another post)
+            d = db.get(Draft, p.draft_id)
+            if d is None or d.origin != "product" or d.original_title != p.name:
+                row["draft_id"] = None
+        out.append(row)
+    return out
 
 
 class SyncIn(BaseModel):

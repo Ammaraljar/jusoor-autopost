@@ -112,7 +112,7 @@ def calendar(start: date | None = None, end: date | None = None, db: Session = D
                        "at": d.to_dict()["scheduled_at"] or d.to_dict()["published_at"],
                        "cover_url": d.cover_thumb_url or (d.slides[0].image_url if d.slides else None)}
     return {"start": start.isoformat(), "end": end.isoformat(), "plan": scheduling.plan_view(db),
-            "items": [i.to_dict() for i in items], "posts": list(posts.values())}
+            "items": [_item_view(db, i) for i in items], "posts": list(posts.values())}
 
 
 @router.post("/calendar")
@@ -164,12 +164,25 @@ def bulk_delete_campaigns(body: BulkIds, db: Session = Depends(get_db)):
     return {"ok": True, "done": len(rows)}
 
 
+def _own_draft(db: Session, item: CalendarItem) -> Draft | None:
+    """The item's post — only when that post really was made from this item."""
+    d = db.get(Draft, item.draft_id) if item.draft_id else None
+    return d if d is not None and d.calendar_item_id == item.id else None
+
+
+def _item_view(db: Session, item: CalendarItem) -> dict:
+    out = item.to_dict()
+    if item.draft_id and _own_draft(db, item) is None:
+        out["draft_id"] = None
+    return out
+
+
 @router.post("/calendar/{item_id}/generate")
 async def generate_item(item_id: int, background: BackgroundTasks, db: Session = Depends(get_db)):
     item = db.get(CalendarItem, item_id)
     if not item:
         raise HTTPException(404, "العنصر غير موجود")
-    if item.draft_id and db.get(Draft, item.draft_id):
+    if _own_draft(db, item):
         raise HTTPException(409, "تم توليد مسودة لهذا الموضوع مسبقًا")
     background.add_task(pipeline.draft_from_calendar, item.id)
     return {"ok": True}
