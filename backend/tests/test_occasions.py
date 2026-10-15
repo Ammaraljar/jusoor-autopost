@@ -178,3 +178,35 @@ def test_logo_for_light_prefers_dark_then_colour_then_plate():
     _Image.new("RGBA", (200, 80), (255, 255, 255, 255)).save(buf, "PNG")
     white = buf.getvalue()
     assert logo_for_light([("color", white)], white) == (white, True)
+
+
+def test_an_occasion_only_links_to_its_own_post(client):
+    """A deleted post's number is never given to a new post, and an occasion never opens another post."""
+    from app.db import Draft, Occasion, session_scope
+    from app.services import occasions as svc
+    with session_scope() as db:
+        a = Draft(origin="manual", hook="a", status="pending_review")
+        db.add(a)
+        db.flush()
+        top = a.id
+        db.delete(a)
+    with session_scope() as db:
+        b = Draft(origin="product", hook="يوم الأغذية", status="pending_review")
+        db.add(b)
+        db.flush()
+        assert b.id > top                                        # the deleted number is not reused
+        row = Occasion(source="custom", recurrence="once", key="custom:jalaa", kind="national", tone="pride",
+                       motif="flag", date=date(2026, 10, 14), year=2026, name_ar="عيد الجلاء", name_en="Evacuation Day",
+                       countries=["YE"], enabled=True, relevant=True, drafts={"2026-10-14": b.id}, edited=True)
+        db.add(row)
+        db.flush()
+        assert svc.item_view(db, row)["posts"] == [] and row.drafts == {}     # a foreign post is dropped
+        own = Draft(origin="occasion", hook="عيد جلاء سعيد", status="pending_review",
+                    ai_meta={"occasion": {"id": row.id, "key": row.key, "date": "2026-10-14"}})
+        db.add(own)
+        db.flush()
+        row.drafts = {"2026-10-14": own.id}
+        assert [p["draft_id"] for p in svc.item_view(db, row)["posts"]] == [own.id]
+        db.delete(row)
+        db.delete(own)
+        db.delete(b)
