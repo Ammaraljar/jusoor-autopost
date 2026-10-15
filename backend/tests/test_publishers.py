@@ -164,3 +164,25 @@ def test_uploadpost_all_dashboard_platforms(client, monkeypatch):
     res = asyncio.run(up_mod.UploadPostPublisher().publish(
         _req(platforms=["pinterest", "reddit", "youtube"], brand_config={"uploadpost": {"user": "jusoor"}})))
     assert not any(r.ok for r in res) and "Pinterest" in res[0].error and "يوتيوب" in res[2].error
+
+
+def test_uploadpost_picks_the_profile_by_itself(client, monkeypatch):
+    """No user set for the brand: the account's profile is used, and an unconnected platform says so."""
+    monkeypatch.setattr(get_settings(), "uploadpost_api_key", "up-auto")
+    monkeypatch.setattr(up_mod.storage, "read_bytes", lambda k: b"jpegdata")
+    up_mod._PROFILES.clear()
+    sent = []
+
+    def handler(request):
+        if request.url.path.endswith("/api/uploadposts/users"):
+            return httpx.Response(200, json={"success": True, "profiles": [
+                {"username": "jusoor", "social_accounts": {"instagram": {"display_name": "J"}, "google_business": ""}}]})
+        sent.append(request.content)
+        return httpx.Response(200, json={"success": True, "request_id": "r"})
+
+    _patch_async_client(monkeypatch, up_mod, handler)
+    res = asyncio.run(up_mod.UploadPostPublisher().publish(_req(platforms=["instagram", "google_business"])))
+    assert res[0].ok and not res[1].ok and "غير مربوط" in res[1].error
+    assert b'name="user"\r\n\r\njusoor' in sent[0] and len(sent) == 1
+    st = asyncio.run(up_mod.UploadPostPublisher().status())
+    assert st["profiles"][0]["username"] == "jusoor" and st["profiles"][0]["connected"] == ["instagram"]
