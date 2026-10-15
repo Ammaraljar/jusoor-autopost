@@ -92,6 +92,13 @@ function BrandForm({ brand, onChanged }) {
     refreshPreview();
   }, t('saved'));
 
+  const [upProfiles, setUpProfiles] = useState(null);
+  const loadUpProfiles = () => run('up', async () => {
+    const st = await api.get('/api/providers/uploadpost/status');
+    if (!st.configured) throw new Error(`upload-post: ${t('not_configured')}`);
+    if (st.error) throw new Error(st.error);
+    setUpProfiles(st.profiles || []);
+  });
   const loadChannels = () => run('channels', async () => {
     const st = await api.get('/api/providers/buffer/status');
     if (!st.configured) throw new Error(`Buffer: ${t('not_configured')}`);
@@ -265,9 +272,24 @@ function BrandForm({ brand, onChanged }) {
             <Field label={t('meta_ig')}><input className="input code" value={f.publish_config.meta?.ig_user_id || ''} onChange={(e) => setPub('meta', 'ig_user_id', e.target.value.trim())} /></Field>
           </div>
           <div className="divider" />
-          <b className="small">upload-post.com</b>
+          <div className="field-head">
+            <b className="small">upload-post.com</b>
+            <Button size="sm" icon={RefreshCw} busy={busy === 'up'} onClick={loadUpProfiles}>{t('up_load_profiles')}</Button>
+          </div>
+          {upProfiles && (upProfiles.length ? (
+            <div className="stack" style={{ gap: 6 }}>
+              {upProfiles.map((p) => (
+                <label key={p.username} className="check small">
+                  <input type="radio" name="up-user" checked={(f.publish_config.uploadpost?.user || '') === p.username}
+                    onChange={() => setPub('uploadpost', 'user', p.username)} />
+                  <b className="ltr">{p.username}</b>
+                  <span className="xs muted">{p.connected.length ? p.connected.join(' · ') : t('up_no_accounts')}</span>
+                </label>
+              ))}
+            </div>
+          ) : <div className="banner warn small" style={{ margin: 0 }}>{t('up_no_profiles')}</div>)}
           <div className="grid grid-2">
-            <Field label={t('up_user')}><input className="input code" value={f.publish_config.uploadpost?.user || ''} onChange={(e) => setPub('uploadpost', 'user', e.target.value.trim())} /></Field>
+            <Field label={t('up_user')} hint={t('up_user_auto')}><input className="input code" value={f.publish_config.uploadpost?.user || ''} onChange={(e) => setPub('uploadpost', 'user', e.target.value.trim())} /></Field>
             <Field label={t('up_fb')}><input className="input code" value={f.publish_config.uploadpost?.facebook_page_id || ''} onChange={(e) => setPub('uploadpost', 'facebook_page_id', e.target.value.trim())} /></Field>
             {[['linkedin_page_id', 'up_linkedin'], ['pinterest_board_id', 'up_pinterest'], ['subreddit', 'up_reddit'], ['gbp_location_id', 'up_gbp']].map(([k, label]) => (
               <Field key={k} label={t(label)}><input className="input code" value={f.publish_config.uploadpost?.[k] || ''} onChange={(e) => setPub('uploadpost', k, e.target.value.trim())} /></Field>
