@@ -208,6 +208,14 @@ def schedule(db: Session, draft: Draft, when: datetime | None = None, targets: l
     wanted = targets or draft.publish_targets or default_targets(db)
     if not any(t.get("platforms") for t in wanted):
         raise ValueError("لا توجد منصات نشر افتراضية — حدّدها من الإعدادات ← النشر")
+    if draft.origin == "occasion":
+        # a greeting goes out on its own day (in the morning), outside the regular plan and limits
+        from . import occasions
+        when = when or occasions.morning_of(db, draft)
+        draft.publish_targets = wanted
+        draft.status, draft.scheduled_at, draft.error = "scheduled", when, None
+        db.flush()
+        return when
     if when is None:
         # the next free slot where at least one of the post's platforms still has room in its quota
         after, kept = None, []

@@ -575,6 +575,26 @@ def _local_dt(db: Session, on: date, hm: str) -> datetime:
     return datetime.combine(on, _hm(hm), tzinfo=tz).astimezone(timezone.utc)
 
 
+def morning_of(db: Session, d: Draft, on: date | None = None) -> datetime:
+    """When an occasion post goes out: the morning of its own day (the occasion's time, else the
+    occasions setting, else 08:00). On the day itself after that time: in five minutes."""
+    occ = (d.ai_meta or {}).get("occasion") or {}
+    if on is None:
+        try:
+            on = date.fromisoformat(occ.get("date") or "")
+        except ValueError as exc:
+            raise ValueError("لا يُعرف تاريخ هذه المناسبة") from exc
+    row = db.get(Occasion, occ.get("id")) if occ.get("id") else None
+    hm = (row.post_time if row and row.post_time else None) or settings(db).get("post_time") or "08:00"
+    at = _local_dt(db, on, hm)
+    now = datetime.now(timezone.utc)
+    if at < now:
+        if _local_dt(db, on, "23:00") < now:
+            raise ValueError(f"انتهى يوم المناسبة ({on.isoformat()}) — اختر وقتًا يدويًا")
+        at = now + timedelta(minutes=5)
+    return at
+
+
 def schedule_post(db: Session, draft_id: int) -> datetime | None:
     """Put an occasion post on its own day, in the morning, on every platform the company publishes on.
 
@@ -585,15 +605,10 @@ def schedule_post(db: Session, draft_id: int) -> datetime | None:
     occ = (d.ai_meta or {}).get("occasion") if d else None
     if not d or not occ or d.status not in ("pending_review", "approved"):
         return None
-    row = db.get(Occasion, occ.get("id")) if occ.get("id") else None
-    on = date.fromisoformat(occ["date"])
-    hm = (row.post_time if row and row.post_time else None) or settings(db).get("post_time") or "08:00"
-    at = _local_dt(db, on, hm)
-    now = datetime.now(timezone.utc)
-    if at < now:
-        if _local_dt(db, on, "23:00") < now:
-            return None                                   # the day is over
-        at = now + timedelta(minutes=5)                   # made on the day itself: as soon as possible
+    try:
+        at = morning_of(db, d)
+    except ValueError:
+        return None                                       # the day is over
     report = qa.run_qa(d, d.slides, app_settings.get_section(db, "generation").get("credit_source", True))
     if not report["passed"]:
         pipeline._fail_soft(draft_id, "لم تُجدول التهنئة: فشل فحص الجودة")
