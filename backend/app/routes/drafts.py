@@ -47,6 +47,17 @@ def _summary(d: Draft) -> dict[str, Any]:
             "original_published_at": _iso(d.original_published_at), "created_at": _iso(d.created_at)}
 
 
+def _occasion_at(db: Session, d: Draft) -> str | None:
+    """For a greeting: when it should go out (the morning of the occasion's day)."""
+    if d.origin != "occasion":
+        return None
+    from ..services import occasions
+    try:
+        return _iso(occasions.morning_of(db, d))
+    except (ValueError, KeyError):
+        return None
+
+
 def _full(db: Session, d: Draft) -> dict[str, Any]:
     gen = app_settings.get_section(db, "generation")
     logs = db.scalars(select(PublishLog).where(PublishLog.draft_id == d.id).order_by(PublishLog.id.desc()))
@@ -56,6 +67,7 @@ def _full(db: Session, d: Draft) -> dict[str, Any]:
             "variants": d.variants or (variants.finalize(d, variants.fallback_texts(d), gen.get("credit_source", True))
                                        if d.slides else {}),
             "variants_generated": bool(d.variants),
+            "occasion_at": _occasion_at(db, d),
             "logs": [l.to_dict() for l in logs]}
 
 
@@ -294,7 +306,14 @@ def schedule_draft(draft_id: int, body: ScheduleBody, db: Session = Depends(get_
             day = date_cls.fromisoformat(body.date)
         except ValueError as exc:
             raise HTTPException(400, "تاريخ غير صالح") from exc
-        when = scheduling.next_free_slot(db, draft_id=d.id, only_day=day)
+        if d.origin == "occasion":                     # a greeting: the morning of that day
+            from ..services import occasions
+            try:
+                when = occasions.morning_of(db, d, day)
+            except ValueError as exc:
+                raise HTTPException(409, str(exc)) from exc
+        else:
+            when = scheduling.next_free_slot(db, draft_id=d.id, only_day=day)
         if when is None:
             raise HTTPException(409, f"لا يوجد موعد فارغ يوم {body.date} — اختر يومًا آخر أو ارفع عدد المنشورات اليومي")
     if when and when <= utcnow():
@@ -618,7 +637,7 @@ async def publish(draft_id: int, body: PublishBody, background: BackgroundTasks,
     if when and when.tzinfo is None:
         when = when.replace(tzinfo=timezone.utc)
     if when and when > utcnow():
-        problem = scheduling.check(db, when, d.id)
+        problem = scheduling.check(db, when, d.id) if d.origin != "occasion" else None
         if problem:
             raise HTTPException(409, problem)
         d.status, d.scheduled_at = "scheduled", when
