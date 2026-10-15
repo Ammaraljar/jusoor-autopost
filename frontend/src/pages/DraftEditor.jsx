@@ -446,12 +446,13 @@ function PlatformPosts({ draft, locked, onChange }) {
 }
 
 function PublishModal({ draft, onClose, onDone }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const status = useLoad(() => api.get('/api/status'), []);
   const settings = useLoad(() => api.get('/api/settings'), []);
   const [targets, setTargets] = useState({});
-  const [mode, setMode] = useState('now');
-  const [when, setWhen] = useState(() => toLocalInput(new Date(Date.now() + 3600000)));
+  const [mode, setMode] = useState(draft.occasion_at ? 'later' : 'now');
+  // a greeting goes out on the morning of its occasion: that is the suggested time
+  const [when, setWhen] = useState(() => toLocalInput(draft.occasion_at ? new Date(draft.occasion_at) : new Date(Date.now() + 3600000)));
   const [busy, run] = useAction();
 
   useEffect(() => {
@@ -544,7 +545,7 @@ function PublishModal({ draft, onClose, onDone }) {
                 onDone(await api.post(`/api/drafts/${draft.id}/schedule`, { targets: chosen }));
                 onClose();
               }, t('saved'))}>
-              {t('next_free_slot')}
+              {draft.occasion_at ? `${t('occ_on_its_day')} · ${fmtDateTime(draft.occasion_at, lang)}` : t('next_free_slot')}
             </Button>
           )}
           {mode === 'later' && (
