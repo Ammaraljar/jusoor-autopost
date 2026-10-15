@@ -12,7 +12,7 @@ from contextvars import ContextVar
 from datetime import date, datetime, timezone
 from typing import Any, Iterator, Optional
 
-from sqlalchemy import (JSON, Boolean, Date, DateTime, ForeignKey, Integer, String, Text,
+from sqlalchemy import (JSON, event, Boolean, Date, DateTime, ForeignKey, Integer, String, Text,
                         UniqueConstraint, create_engine)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 
@@ -498,6 +498,20 @@ _ADDED_COLUMNS = [
     ("brands", "logo_backdrop", "VARCHAR(20)"),
     ("brands", "contact", "JSON"),
 ]
+
+
+@event.listens_for(Draft, "before_insert")
+def _never_reuse_draft_ids(mapper, connection, target) -> None:  # noqa: ANN001
+    """SQLite gives a deleted post's number to the next new post; links kept elsewhere (an occasion's
+    posts, a product's post, a calendar item) would then open the wrong post. Numbers only go up."""
+    if target.id is not None or connection.dialect.name != "sqlite":
+        return
+    connection.exec_driver_sql("CREATE TABLE IF NOT EXISTS id_sequence (name TEXT PRIMARY KEY, value INTEGER NOT NULL)")
+    last = connection.exec_driver_sql("SELECT value FROM id_sequence WHERE name = 'drafts'").scalar() or 0
+    top = connection.exec_driver_sql("SELECT COALESCE(MAX(id), 0) FROM drafts").scalar() or 0
+    target.id = max(int(last), int(top)) + 1
+    connection.exec_driver_sql("INSERT INTO id_sequence (name, value) VALUES ('drafts', ?) "
+                               "ON CONFLICT(name) DO UPDATE SET value = excluded.value", (target.id,))
 
 
 def _migrate() -> None:
