@@ -97,3 +97,29 @@ def test_occasion_greetings_live_outside_the_plan(client):
         assert at not in scheduling._busy_times(db, start, start + timedelta(days=3))
         assert scheduling.usage(db, "instagram", at, "day") == 0
     client.post("/api/drafts/bulk", json={"ids": [gid], "action": "delete"})
+
+
+def test_scheduling_a_greeting_by_hand_keeps_its_own_day(client):
+    """Editing a greeting and pressing "schedule" puts it on the occasion's morning, not the next free slot."""
+    client.put("/api/settings/publishing", json={"posts_per_day": 3, "day_start": "09:00", "day_end": "21:00",
+                                                 "min_gap_hours": 2, "default_platforms": ["instagram"]})
+    day = date.today() + timedelta(days=9)
+    gid = _ready_draft()
+    with session_scope() as db:
+        g = db.get(Draft, gid)
+        g.origin, g.content_type, g.hashtags = "occasion", "occasion", "#عيد #تهنئة #جسور #سفر"
+        g.ai_meta = {"occasion": {"date": day.isoformat(), "key": "world:x", "kind": "international", "tone": "festive"}}
+    full = client.get(f"/api/drafts/{gid}").json()
+    assert full["occasion_at"]
+    r = client.post(f"/api/drafts/{gid}/schedule", json={"targets": [{"provider": "buffer", "platforms": ["instagram"]}]})
+    assert r.status_code == 200, r.text
+    with session_scope() as db:
+        tz = scheduling.config(db)["tz"]
+    at = datetime.fromisoformat(r.json()["scheduled_at"]).astimezone(tz)
+    assert at.date() == day and at.hour < 12
+    # bulk "auto schedule" does the same
+    client.post("/api/drafts/bulk", json={"ids": [gid], "action": "unschedule"})
+    client.post("/api/drafts/bulk", json={"ids": [gid], "action": "auto_schedule"})
+    with session_scope() as db:
+        assert db.get(Draft, gid).scheduled_at.replace(tzinfo=timezone.utc).astimezone(tz).date() == day
+    client.post("/api/drafts/bulk", json={"ids": [gid], "action": "delete"})
