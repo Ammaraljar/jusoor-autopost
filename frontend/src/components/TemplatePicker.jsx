@@ -15,7 +15,8 @@ export default function TemplatePicker({ brand, value, onChange, classic, onUseT
   const [view, setView] = useState('all');
   const items = list.data || [];
   const kept = value.length ? value : items.map((i) => i.id);
-  const shown = items.filter((i) => view === 'all' || (view === 'fx' ? i.finish : !i.finish));
+  const inView = (i, v) => v === 'all' || i.group === v;
+  const shown = items.filter((i) => inView(i, view));
   const toggle = (id) => {
     const next = kept.includes(id) ? kept.filter((x) => x !== id) : [...kept, id];
     if (!next.length) return;
@@ -53,23 +54,23 @@ export default function TemplatePicker({ brand, value, onChange, classic, onUseT
       )}
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
         <div className="seg" role="tablist">
-          {['all', 'base', 'fx'].map((v) => (
+          {['all', 'signature', 'classic'].map((v) => (
             <button key={v} type="button" className={`seg-item ${view === v ? 'on' : ''}`} onClick={() => setView(v)}>
-              {t(`templates_view_${v}`)} ({items.filter((i) => v === 'all' || (v === 'fx' ? i.finish : !i.finish)).length})
+              {t(`templates_view_${v}`)} ({items.filter((i) => inView(i, v)).length})
             </button>
           ))}
         </div>
         <span className="spacer" />
         <Button size="sm" icon={CheckSquare} onClick={() => onChange([])}>{t('select_all')}</Button>
-        <Button size="sm" onClick={() => keepOnly(items.filter((i) => !i.finish).map((i) => i.id))}>{t('templates_only_base')}</Button>
-        <Button size="sm" onClick={() => keepOnly(items.filter((i) => i.finish).map((i) => i.id))}>{t('templates_only_fx')}</Button>
+        <Button size="sm" onClick={() => keepOnly(items.filter((i) => i.group === 'signature').map((i) => i.id))}>{t('templates_only_signature')}</Button>
+        <Button size="sm" onClick={() => keepOnly(items.filter((i) => i.group === 'classic').map((i) => i.id))}>{t('templates_only_classic')}</Button>
       </div>
       <div className="tpl-grid">
         {shown.map((it) => {
           const on = kept.includes(it.id);
           return (
             <button type="button" key={it.id} className={`tpl-item ${on ? 'on' : ''}`} aria-pressed={on} onClick={() => toggle(it.id)}>
-              <div className="tpl-thumb">{thumbs[it.id] ? <img src={thumbs[it.id]} alt="" /> : <LayoutTemplate size={22} />}</div>
+              <div className="tpl-thumb">{it.group === 'signature' && <span className="tpl-new">★</span>}{thumbs[it.id] ? <img src={thumbs[it.id]} alt="" /> : <LayoutTemplate size={22} />}</div>
               <span>{on ? <CheckSquare size={14} /> : <Square size={14} />} {it[lang] || it.en}</span>
             </button>
           );
