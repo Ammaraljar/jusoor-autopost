@@ -84,7 +84,29 @@ def test_photo_sources_follow_the_settings(monkeypatch):
     out = images.collect_backgrounds("https://site.test/a.jpg", "kl", "auto", 3,
                                      library=[{"url": "https://lib.test/1.jpg", "credit": "", "match": True}],
                                      sources=["library", "unsplash"])
-    assert [o["url"] for o in out] == ["https://lib.test/1.jpg", "https://unsplash.test/0.jpg", "https://unsplash.test/1.jpg"]
+    urls = [o["url"] for o in out]
+    # the company's own photo first; then the most eye-catching of the stock photos
+    assert urls[0] == "https://lib.test/1.jpg" and len(urls) == 3 and all(u.startswith("https://unsplash.test/") for u in urls[1:])
     assert calls == ["unsplash"]                                       # the article photo and other libraries are off
     assert images.sources_of({"image_source": "source"}) == ["article", "library"]
     assert images.sources_of({"image_sources": ["wikimedia", "bogus"]}) == ["wikimedia"]
+
+
+def test_photos_are_ranked_and_enhanced():
+    """A colourful, sharp photo beats a grey, flat one; every photo is given livelier colour."""
+    import io
+    from PIL import Image, ImageDraw
+    from app.services import images
+    grey = Image.new("RGB", (800, 1000), (128, 128, 128))
+    vivid = Image.new("RGB", (800, 1000), (20, 120, 220))
+    d = ImageDraw.Draw(vivid)
+    for i in range(0, 800, 40):
+        d.rectangle([i, 0, i + 20, 1000], fill=(240, 80, 30))
+    def jpg(im):
+        b = io.BytesIO(); im.save(b, "JPEG"); return b.getvalue()
+    assert images.quality(jpg(vivid)) > images.quality(jpg(grey))
+    dull = Image.new("RGB", (400, 400), (150, 130, 110))
+    out = Image.open(io.BytesIO(images.enhance(jpg(dull))))
+    h, s, v = out.convert("HSV").getpixel((200, 200))
+    h0, s0, v0 = dull.convert("HSV").getpixel((200, 200))
+    assert s > s0                                                       # more colour after enhancing

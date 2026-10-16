@@ -183,7 +183,7 @@ def test_redesign_walks_through_every_template():
     seen = [palette.design(i, seed=21, family="travel")["template"] for i in range(n)]
     assert len(set(seen)) == n
     # the company keeps only some templates: the rotation uses just those
-    kept = ["magazine", "ticket", "glass"]
+    kept = ["tailfin", "ticket", "glass"]
     picked = {palette.design(i, seed=21, family="travel", enabled=kept)["template"] for i in range(9)}
     assert picked == set(kept)
     assert all(a != b for a, b in zip(seen, seen[1:]))

@@ -167,27 +167,53 @@ def test_brand_colour_roles_follow_main_colours_and_exact_mode():
     # brand mode: the identity's colours exactly, and the template still rotates
     a = P.design(0, family="government", exact=new)
     b = P.design(1, family="government", exact=new)
-    assert a["navy"] == "#5a1e1e" and a["gold"] == "#b8963e" and a["cardBgHex"] == new["surface"]
+    assert a["navy"] == "#5a1e1e" and a["cardBgHex"] == new["surface"]
+    # the accent keeps its hue but is never dusty (posts must not look washed out)
+    h0, _l0, _s0 = P._hls_of("#b8963e")
+    h1, _l1, s1 = P._hls_of(a["gold"])
+    assert abs(h0 - h1) < 0.02 and s1 >= 0.6
     assert a["template"] != b["template"]
 
 
-def test_every_field_has_forty_designs_of_its_own():
-    from app.services import cards
+def test_every_field_has_forty_distinct_designs_of_its_own():
+    from app.services import cards, signature
     from app.services import palette as p
     for fam in p.FAMILIES:
         designs = p.family_templates(fam)
         assert len(designs) >= 40 and len(set(designs)) == len(designs), fam
+        assert not any("~" in t for t in designs), fam               # no near-copies (template + finish)
+        assert sum(1 for t in designs if t in signature.LAYOUTS) >= 22, fam
+        assert designs[0] in signature.FIELD_FIRST[fam]                 # the field's own signature first
         for t in designs:
-            base, fx = p.split_template(t)
-            assert base in cards.TEMPLATE_SPEC and (fx == "" or fx in p.FAMILY_FINISHES[fam]), (fam, t)
+            assert t in cards.TEMPLATE_SPEC or t in signature.LAYOUTS, (fam, t)
             assert t in p.TEMPLATES
-    assert set(p.family_templates("news")) != set(p.family_templates("food"))         # field-specific
-    combo = next(t for t in p.family_templates("food") if "~" in t)
-    opts = cards.template_options("food", [combo])
-    assert len(opts) >= 40 and any(o["finish"] for o in opts)
-    assert [o["id"] for o in opts if o["enabled"]] == [combo] and "·" in next(o["ar"] for o in opts if o["id"] == combo)
+    assert p.family_templates("travel")[:4] != p.family_templates("food")[:4]        # field-specific
+    assert "menu_board" in p.family_templates("food") and "menu_board" not in p.family_templates("tech")
+    opts = cards.template_options("food", ["menu_board"])
+    assert len(opts) >= 40 and {o["group"] for o in opts} == {"signature", "classic"}
+    assert [o["id"] for o in opts if o["enabled"]] == ["menu_board"]
     # only the kept designs rotate
-    assert {p.design(i, family="food", enabled=[combo, "menu"])["template"] for i in range(6)} == {combo, "menu"}
+    assert {p.design(i, family="food", enabled=["menu_board", "menu"])["template"] for i in range(6)} == {"menu_board", "menu"}
+    # an older choice of template~finish still renders (it is no longer offered)
+    assert "glass~glow" in p.TEMPLATES or any("~" in t for t in p.TEMPLATES)
+
+
+def test_signature_designs_render_every_kind_with_one_logo():
+    from app.services import palette as p, signature
+    from app.services.renderer import BrandStyle, SlideSpec, build_html
+    for t in signature.LAYOUTS:
+        brand = BrandStyle(name="J T", colors={"navy": "#252531", "gold": "#D6BE66"}, language="ar", family="travel")
+        brand.palette = p.design(0, "#252531", "#D6BE66", 0, "travel", None, t)
+        for kind in ("cover", "content", "cta"):
+            html = build_html(SlideSpec(kind=kind, heading="عنوان", body="نص", position=1, total=5,
+                                        background=p.sample_background("content"), badge="guide"), brand)
+            body = html.split("<body", 1)[1]
+            assert f"sg-L-{t}" in body and body.count('class="logo') == 1, (t, kind)
+    # vivid colours: a dusty gold accent becomes a rich one
+    c = signature.colours({"navy": "#252531", "gold": "#D6BE66", "source": "design"}, "travel", 0, False)
+    import colorsys
+    r, g, b = signature._rgb(c["acc"])
+    assert colorsys.rgb_to_hls(r, g, b)[2] >= 0.66 and c["pop"] in signature.FIELD_POPS["travel"]
 
 
 def test_a_finish_is_drawn_on_the_slide():
