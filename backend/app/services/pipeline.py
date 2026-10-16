@@ -818,7 +818,8 @@ async def render_draft(draft_id: int, positions: list[int] | None = None, refres
             if bg is None and bg_url:
                 # keep the slide's own photo (e.g. one the user uploaded)
                 data = await asyncio.to_thread(images.download_image, bg_url)
-                bg = {"url": bg_url, "bytes": data, "hash": hashlib.sha1(data).hexdigest()} if data else None
+                bg = ({"url": bg_url, "bytes": await asyncio.to_thread(images.enhance, data),
+                       "hash": hashlib.sha1(data).hexdigest()} if data else None)
             # the logo version that reads best on this photo (white / dark / colour)
             fl_spec = None
             if flyer_data and kind == "cover":

@@ -86,8 +86,9 @@ SAVE_ICONS = {
 
 
 def css() -> str:
-    # the file is written with doubled braces like the template; it is inserted as a value here
-    return (RENDER_DIR / "photo.css").read_text(encoding="utf-8").replace("{{", "{").replace("}}", "}")
+    # photo.css is written with doubled braces like the template; signature.css is plain CSS
+    return ((RENDER_DIR / "photo.css").read_text(encoding="utf-8").replace("{{", "{").replace("}}", "}")
+            + "\n" + (RENDER_DIR / "signature.css").read_text(encoding="utf-8"))
 
 
 def _esc(text: str) -> str:
@@ -154,7 +155,10 @@ def _template(pal: dict) -> str:
 
 def _template_fx(pal: dict) -> tuple[str, str]:
     from .palette import split_template
+    from . import signature
     base, fx = split_template(pal.get("template") or pal.get("layout"))
+    if base in signature.LAYOUTS:
+        return base, ""
     return (base if base in TEMPLATE_SPEC else "magazine"), fx
 
 
@@ -196,6 +200,14 @@ def build(spec, brand, lang: str, logo_html: str, logo_plate_html: str, bg: str,
     if family not in _P:
         family = "general"
     tpl, fx = _template_fx(pal)
+    lang = lang if lang in SWIPE else "en"
+    from . import signature
+    if tpl in signature.LAYOUTS:
+        from .palette import logo_tone
+        badge = BADGES[lang].get(spec.badge or "", "") if spec.badge else ""
+        return signature.build(spec, brand, lang, logo_html, family, tpl, _highlight, _icon(family),
+                               badge or FAMILY_KICKER[lang][family], SWIPE_LONG[lang], ACTIONS[lang], SAVE_ICONS,
+                               logo_tone(spec.logo) if spec.logo else "color")
     light, foot_on_card, use_pill = TEMPLATE_SPEC[tpl]
     fx_class = f" with-{fx}" if fx else ""        # body class (the decoration elements are .fx-*)
     if fx:
@@ -335,7 +347,10 @@ FINISH_LABELS: dict[str, tuple[str, str, str, str]] = {
 
 
 def template_label(t: str) -> tuple[str, str, str, str]:
+    from . import signature
     from .palette import split_template
+    if t in signature.LAYOUTS:
+        return signature.LAYOUTS[t]
     base, fx = split_template(t)
     b = TEMPLATE_LABELS.get(base, (base,) * 4)
     if not fx:
@@ -345,11 +360,12 @@ def template_label(t: str) -> tuple[str, str, str, str]:
 
 
 def template_options(family: str, enabled: list[str] | None) -> list[dict]:
-    from . import palette
+    from . import palette, signature
     kept = set(enabled or [])
     out = []
     for t in palette.family_templates(family):
         label = template_label(t)
         out.append({"id": t, "ar": label[0], "en": label[1], "ms": label[2], "fr": label[3],
+                    "group": "signature" if t in signature.LAYOUTS else "classic",
                     "finish": palette.split_template(t)[1], "enabled": not kept or t in kept})
     return out

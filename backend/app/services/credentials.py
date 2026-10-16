@@ -25,7 +25,7 @@ from ..config import get_settings
 from ..db import AppSetting, session_scope
 
 SETTINGS_KEY = "credentials"
-VERSION = "4.20-greetings-on-their-day"
+VERSION = "4.21-signature-designs-vivid"
 
 # Each engine carries what its own environment needs: suggested models, the key's format,
 # where to get the key, and request tweaks applied in generator._tune_payload().

@@ -148,6 +148,10 @@ def brand_variants(navy: str = BRAND_NAVY, gold: str = BRAND_GOLD) -> list[dict[
     """Colour sets for posts, all derived from the brand's navy and gold — no foreign colours."""
     nh, nl, ns = _hls_of(navy)
     gh, gl, gs = _hls_of(gold)
+    if gs > 0.08:                     # a pale / dusty accent is made lively (same hue)
+        gs = max(gs, 0.7)
+        gl = min(max(gl, 0.46), 0.58)
+        gold = _hex(_hsl(gh, gs, gl))
     out = []
     for vid, name, warmth, (dh, dsm, dl), (gdh, gsat, gli), (card_kind, card_l) in _VARIANTS:
         dark_h = nh + dh / 360
@@ -236,6 +240,9 @@ def exact_set(colors: dict | None) -> dict[str, Any]:
         h, l, s_ = _hls_of(text)
         text = _shift_until(h, s_, l, surface, 7.0, -0.02 if sl > 0.5 else 0.02)
     gh, gl, gs = _hls_of(gold)
+    if 0.08 < gs < 0.62:              # the identity's accent, with enough colour to stand out
+        gold = _hex(_hsl(gh, 0.68, min(max(gl, 0.46), 0.58)))
+        gh, gl, gs = _hls_of(gold)
     heading = gold if contrast(gold, surface) >= 3.0 else _shift_until(gh, max(gs, 0.55), gl, surface, 3.0, -0.02)
     r, g, b = hex_to_rgb(surface)
     return {"variant": "brand", "variant_name": "ألوان الهوية", "navy": navy, "gold": gold,
@@ -478,23 +485,27 @@ def _base_templates(family: str) -> list[str]:
     return [t for t in FIELD_TEMPLATES.get(family, []) + SHARED_TEMPLATES if t not in skip]
 
 
+# The classic templates that really look different from one another (the others were close
+# variations of the same photo + dark fade, so they are no longer offered).
+DISTINCT_SHARED = ["glass", "diagonal", "ribbon", "side", "band", "frame", "postcard", "medallion", "topbar",
+                   "polaroid", "lens", "sticker", "headline", "split"]
+FILLERS = ["wave", "stripe", "leaf", "outline", "centered"]
+
+
 def family_templates(family: str) -> list[str]:
-    """The field's designs: its templates, then the templates with the field's finishes."""
+    """The field's designs: its bold signature designs (inspired by the leaders of the field) first,
+    then its own classic templates and the distinct shared ones — every one visibly different, 40+."""
+    from . import signature
     family = family if family in FAMILIES else "general"
-    base = _base_templates(family)
-    combos: list[str] = []
-    finishes = FAMILY_FINISHES.get(family, FAMILY_FINISHES["general"])
-    for k, fx in enumerate(finishes):
-        for j in range(3):
-            combos.append(f"{base[(k * 5 + j * 9 + 1) % len(base)]}~{fx}")
-    combos = list(dict.fromkeys(combos))
-    k = 0
-    while len(base) + len(combos) < MIN_DESIGNS and k < 200:     # never fewer than 40
-        extra = f"{base[(k * 7 + 3) % len(base)]}~{finishes[k % len(finishes)]}"
-        if extra not in combos:
-            combos.append(extra)
-        k += 1
-    return base + combos
+    skip = FIELD_EXCLUDE.get(family, set())
+    classic = [t for t in FIELD_TEMPLATES.get(family, []) + DISTINCT_SHARED if t not in skip]
+    out = list(dict.fromkeys(signature.for_family(family) + classic))
+    for t in FILLERS:
+        if len(out) >= MIN_DESIGNS:
+            break
+        if t not in skip and t not in out:
+            out.append(t)
+    return out
 
 
 def split_template(t: str | None) -> tuple[str, str]:
@@ -503,8 +514,18 @@ def split_template(t: str | None) -> tuple[str, str]:
     return base, (fx if fx in FINISHES else "")
 
 
+def _legacy_combos(family: str) -> list[str]:
+    """Template~finish ids offered before (kept valid so older posts and choices still render)."""
+    base = _base_templates(family)
+    finishes = FAMILY_FINISHES.get(family, FAMILY_FINISHES["general"])
+    out = [f"{base[(k * 5 + j * 9 + 1) % len(base)]}~{fx}" for k, fx in enumerate(finishes) for j in range(3)]
+    out += [f"{base[(k * 7 + 3) % len(base)]}~{finishes[k % len(finishes)]}" for k in range(40)]
+    return out
+
+
 TEMPLATES = list(dict.fromkeys(SHARED_TEMPLATES + [t for v in FIELD_TEMPLATES.values() for t in v]
-                               + [t for f in FAMILIES for t in family_templates(f)]))
+                               + [t for f in FAMILIES for t in family_templates(f)]
+                               + [t for f in FAMILIES for t in _legacy_combos(f)]))
 DESIGN_COUNT = len(TEMPLATES)
 
 
@@ -535,7 +556,10 @@ def design(index: int, navy: str = BRAND_NAVY, gold: str = BRAND_GOLD, seed: int
     n = len(t_order)
     i = index % n
     # exact = "brand colours" mode: every post uses the identity's colours as they are
-    out = exact_set(exact) if exact is not None else dict(variants[v_order[i % 6]])
+    vi = i % 6
+    if i == n - 1 and n > 1 and vi == 0:            # the last design never repeats the first one's colours
+        vi = 3
+    out = exact_set(exact) if exact is not None else dict(variants[v_order[vi]])
     out["template"] = template if template in TEMPLATES else t_order[i]
     out["layout"] = out["template"]
     out["cover"] = out["template"]

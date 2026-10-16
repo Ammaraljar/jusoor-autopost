@@ -32,6 +32,42 @@ def normalise(data: bytes, min_width: int = MIN_WIDTH) -> bytes | None:
     return out.getvalue()
 
 
+def quality(data: bytes) -> float:
+    """How eye-catching a photo is: colourful, sharp and well exposed (higher is better)."""
+    from PIL import ImageFilter, ImageStat
+    try:
+        img = Image.open(io.BytesIO(data)).convert("RGB")
+    except Exception:  # noqa: BLE001
+        return 0.0
+    img.thumbnail((320, 320))
+    sat = ImageStat.Stat(img.convert("HSV").split()[1])
+    colourful = sat.mean[0] / 255 + sat.stddev[0] / 510
+    sharp = min(ImageStat.Stat(img.convert("L").filter(ImageFilter.FIND_EDGES)).stddev[0] / 40, 1.5)
+    bright = ImageStat.Stat(img.convert("L")).mean[0] / 255
+    exposure = 1 - min(abs(bright - 0.5) * 2, 1)               # very dark or washed-out photos lose points
+    return float(colourful * 2.0 + sharp * 0.8 + exposure * 0.6)
+
+
+def enhance(data: bytes) -> bytes:
+    """A photo at its best: levels stretched, richer (not neon) colours, a little crisper."""
+    from PIL import ImageEnhance, ImageFilter, ImageOps
+    try:
+        img = Image.open(io.BytesIO(data)).convert("RGB")
+        img = ImageOps.autocontrast(img, cutoff=0.5, preserve_tone=True)
+        hsv = img.convert("HSV")
+        sat = sum(hsv.split()[1].getdata()) / (255 * img.width * img.height)
+        boost = 1.3 if sat < 0.18 else 1.18 if sat < 0.32 else 1.07
+        img = ImageEnhance.Color(img).enhance(boost)
+        img = ImageEnhance.Contrast(img).enhance(1.06)
+        img = img.filter(ImageFilter.UnsharpMask(radius=1.6, percent=55, threshold=3))
+        out = io.BytesIO()
+        img.save(out, "JPEG", quality=92)
+        return out.getvalue()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("photo enhance failed: %s", exc)
+        return data
+
+
 def download_image(url: str) -> bytes | None:
     """Download and normalise an image to JPEG; returns None when unusable.
 
@@ -216,6 +252,7 @@ def collect_backgrounds(article_image: str | None, keywords: str, mode: str, nee
     lib_match = [c for c in library if c.get("match")]
     lib_rest = [c for c in library if not c.get("match")]
     article = [{"url": article_image, "credit": ""}] if article_image and article_image not in exclude else []
+    stock: list[dict] = []
     if mode == "source":
         candidates = article + lib_match + lib_rest
     else:
@@ -237,6 +274,8 @@ def collect_backgrounds(article_image: str | None, keywords: str, mode: str, nee
     out: list[dict] = []
     seen: set[str] = set()
     tried: set[str] = set()
+    stock_urls = {c["url"] for c in stock}
+    pool = needed + (3 if mode != "source" else 0)       # a few extra stock photos to pick the best from
     for c in candidates:
         if c["url"] in tried:
             continue
@@ -248,7 +287,16 @@ def collect_backgrounds(article_image: str | None, keywords: str, mode: str, nee
         if digest in seen:
             continue
         seen.add(digest)
-        out.append({**{k: v for k, v in c.items() if k != "match"}, "bytes": data, "hash": digest})
-        if len(out) >= needed:
+        out.append({**{k: v for k, v in c.items() if k != "match"}, "bytes": data, "hash": digest,
+                    "_stock": c["url"] in stock_urls})
+        if len(out) >= pool:
             break
-    return out
+    # the article's photo and the company's own photos keep their place; stock photos are ranked
+    # by how eye-catching they are (colour, sharpness, exposure)
+    own = [x for x in out if not x["_stock"]]
+    stock = sorted((x for x in out if x["_stock"]), key=lambda x: quality(x["bytes"]), reverse=True)
+    picked = (own + stock)[:needed]
+    for x in picked:
+        x.pop("_stock", None)
+        x["bytes"] = enhance(x["bytes"])
+    return picked
