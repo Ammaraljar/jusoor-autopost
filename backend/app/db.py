@@ -559,9 +559,26 @@ def _migrate_article_uniqueness() -> None:
             conn.execute(text("ALTER TABLE articles ADD CONSTRAINT uq_articles_org_url UNIQUE (org_id, url)"))
 
 
+def _migrate_design_choices() -> None:
+    """A design choice saved before the signature designs existed (only older templates) is reset to
+    "all designs", so every company gets the new designs; a choice that includes them is kept."""
+    import json
+    from sqlalchemy import text
+    from .services.signature import LAYOUTS
+    with engine.begin() as conn:
+        for bid, raw in conn.execute(text("SELECT id, templates FROM brands WHERE templates IS NOT NULL")).all():
+            try:
+                kept = json.loads(raw) if isinstance(raw, str) else (raw or [])
+            except ValueError:
+                continue
+            if kept and not any(t in LAYOUTS for t in kept):
+                conn.execute(text("UPDATE brands SET templates = :t WHERE id = :i"), {"t": "[]", "i": bid})
+
+
 def init_db() -> None:
     Base.metadata.create_all(engine)
     _migrate()
+    _migrate_design_choices()
 
 
 @contextmanager
